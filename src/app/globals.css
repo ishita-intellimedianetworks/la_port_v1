@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
+/* Short, wide viewports — i.e. phones, which this app forces into landscape.
+   Use `short:` to scale UI down on limited-height screens (matches the
+   existing `@media (max-height: 480px)` HUD rule below). */
+@custom-variant short (@media (max-height: 540px));
+
+/* Geist / Geist Mono / Bodoni Moda are no longer loaded (they were Google-Fonts
+   downloads that terminal/styles.css overrode to system fonts anyway).
+   Keep their variables defined as system stacks so --font-sans/--font-mono and
+   any straggler var() references still resolve. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-geist-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-geist-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-serif: Georgia, "Times New Roman", serif;
 }
 
 @theme inline {
@@ -10,17 +22,854 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
+:root {
+  --radius: 0.5rem;
+  /* base radius for Tailwind rounded-* scale (rounded-xl = 0.7rem ≈ 11px) */
+
+  /* Interior scene UI design tokens — dark glass with HIG-style blur stack.
+     Background tint is the original dark/black look; the readability win
+     comes entirely from a stronger backdrop blur + saturation + brightness
+     stack rather than from changing the colour. */
+  --ui-white-glass-bg: rgba(255, 255, 255, 0.12);
+  --ui-glass-bg: rgba(0, 0, 0, 0.4);
+  --ui-glass-bg-hover: rgba(0, 0, 0, 0.65);
+  --ui-border: rgba(255, 255, 255, 0.5);
+  --ui-glass-border: rgba(255, 255, 255, 0.22);
+  --ui-glass-border-hover: rgba(255, 255, 255, 0.34);
+  --ui-glass-border-active: rgba(255, 255, 255, 0.46);
+  --ui-text: rgba(255, 255, 255, 0.96);
+  --ui-text-muted: rgba(255, 255, 255, 0.86);
+  --ui-text-dim: rgba(255, 255, 255, 0.74);
+  --ui-text-faint: rgba(255, 255, 255, 0.6);
+  --ui-accent-cyan: rgba(34, 211, 238, 0.75);
+
+  /* ── LA2028 Wayfinding-overlay design system ──────────────────────────────
+     Ported 1:1 from the "HoloTwin LA2028 Overlays" design. Minimal monochrome
+     glass with a SINGLE blue highlight for selection / active states, brand
+     poppy reserved for the LA28 lockup only. Every overlay surface (toggle,
+     map-view brand, label panel, bottom dock, nav banner) reads these so the
+     palette stays in lockstep. */
+  --nav-accent: #0071e3;          /* solid blue — active fills (pills, CTAs) */
+  --nav-accent-bright: #2997ff;   /* bright blue — text, underline, ring */
+  --nav-brand: #fb5b2d;           /* poppy — LA28 lockup accent only */
+  /* Apple "liquid glass" surface fill (ported from the ARCHVIZ v5 glass): a faint
+     top-down white sheen layered over a dark tint. Used as a `background` value. */
+  --nav-glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%);
+  --nav-glass: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);       /* chips / dock / toggle */
+  --nav-glass-strong: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);/* label panel + nav banner */
+  /* Quiet hairline border — the lit edge comes from the specular box-shadow
+     below, so the actual border stays subtle (a hard bright line reads as an
+     "extra" double border on top of the shading). */
+  --nav-border: rgba(255, 255, 255, 0.14);
+  --nav-divider: rgba(255, 255, 255, 0.08);
+  --nav-text: #f4f6f8;            /* primary */
+  /* Every "extra" overlay label is the SAME colour now — plain white, just
+     dialled down in opacity (no grey, no blue). Titles keep --nav-text; all
+     secondary/meta text shares one soft-white value, with a fainter tier for
+     truly muted micro-text. */
+  --nav-text-2: rgba(255, 255, 255, 0.82);   /* strong secondary — soft white */
+  --nav-text-dim: rgba(255, 255, 255, 0.82); /* secondary / meta — same soft white */
+  --nav-text-faint: rgba(255, 255, 255, 0.6); /* tertiary / muted — fainter white */
+  /* Frosted blur stack. Reuse the app's PROVEN Apple-"Liquid Glass" backdrop
+     (`--ui-glass-backdrop` = blur 10px / saturate 180% / brightness 1.06,
+     auto-dropping to 5px on mobile). This is the recipe `.ui-glass` uses and the
+     one the original overlays blurred with — a heavier custom radius (16–34px)
+     over the live WebGL canvas silently fails to composite on some GPUs. */
+  /* Stronger, nav-specific backdrop blur (22px / 13px mobile) — the heavier frost
+     the ARCHVIZ v5 glass uses. Kept independent of `--ui-glass-blur` so only the
+     overlay glass changes, not the loader / other surfaces. */
+  --nav-glass-blur: 22px;
+  --nav-backdrop: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
+  --nav-backdrop-panel: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
+  /* Apple "Liquid Glass" specular edge (ported from the ARCHVIZ v5 glass):
+       1. crisp bright TOP hairline      — the edge is brightest from above
+       2. faint full inner ring          — defines the whole rounded edge
+       3. bottom-right light-catch       — the soft "lensed" specular highlight
+       4. bottom edge glow               — completes the light-catch
+       5. long soft drop                 — depth/elevation (tuned per weight)
+     The bottom-right + bottom WHITE highlights are what give the glass its lit,
+     beveled "liquid" look (the old recipe darkened the bottom instead). */
+  --nav-shadow-chip:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset -10px -8px 12px -12px rgba(255, 255, 255, 0.40),
+    inset 0 -9px 10px -10px rgba(255, 255, 255, 0.24),
+    0 8px 22px -10px rgba(0, 0, 0, 0.55);
+  --nav-shadow-panel:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset -10px -8px 12px -12px rgba(255, 255, 255, 0.40),
+    inset 0 -9px 10px -10px rgba(255, 255, 255, 0.24),
+    0 12px 36px -14px rgba(0, 0, 0, 0.62);
+  --nav-shadow-dock:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset -10px -8px 12px -12px rgba(255, 255, 255, 0.40),
+    inset 0 -9px 10px -10px rgba(255, 255, 255, 0.24),
+    0 16px 40px -12px rgba(0, 0, 0, 0.55);
+
+  /* SINGLE SOURCE OF TRUTH for the glass backdrop. Edit `--ui-glass-blur`
+     (and the saturate / brightness knobs) and every glass surface across the
+     app re-tunes in lockstep — they all read `--ui-glass-backdrop` via
+     `.ui-glass` / `.ui-white-glass` / `.ui-blur`, or inline.
+     Apple HIG "Material" / "Liquid Glass" reference values:
+       blur        — 30–40 px (browser blur is ~1/3 strength of native)
+       saturate    — 180% (the vibrancy hue boost)
+       brightness  — small positive bump so dark scenes don't read as muddy
+       inner ring  — 0.5 px white at ~0.18 opacity = the HIG hairline highlight
+       outer drop  — long-radius, low-opacity for depth
+
+     Mobile note: see the `@media (max-width: 1023px)` block below — the blur
+     radius scales down on small screens so the blur:surface ratio stays
+     constant between phone and desktop (otherwise a fixed 40 px reads ~2×
+     heavier on the smaller mobile panels). */
+  --ui-glass-blur: 10px;
+  --ui-glass-saturate: 180%;
+  --ui-glass-brightness: 1.06;
+  --ui-glass-backdrop: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+  /* Light + smooth glass shadow used by EVERY glass surface (panels, pills,
+     list rows): a very faint edge ring (barely there, so it never reads as a
+     sharp line) plus one soft, low drop. Just a hint of glass depth — not sharp,
+     not heavy. Same on phone and desktop. */
+  --ui-glass-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    0 1px 6px -5px rgba(0, 0, 0, 0.07);
+}
+
+/* Phone and desktop should LOOK the same. Mobile browsers (esp. iOS Safari)
+ * render backdrop-filter noticeably heavier than desktop at the same px, so a
+ * matching 10px reads as MORE blur on the phone. We lower the mobile radius to
+ * ~5px so the *visual* frost matches desktop's 10px — every other glass token
+ * (tint, shines, shadow, saturate, brightness) stays identical. */
+@media (max-width: 1023px) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --ui-glass-blur: 5px;
+    /* Keep the overlay frost:surface ratio matched to desktop (a fixed 22px reads
+       ~2× heavier on small panels) — same scaling the ARCHVIZ glass uses. */
+    --nav-glass-blur: 13px;
   }
 }
 
+/* Prevent text selection across the whole app (3D canvas drag triggers it).
+   Default type = Barlow (the LA2028 overlay body font), so text that doesn't
+   opt into `.nav-display` (Saira) still matches the Olympic Village overlays
+   instead of falling back to Geist. */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: var(--font-barlow), system-ui, sans-serif;
+}
+
+/* ── Interior scene UI utilities ─────────────────────────────────────────── */
+
+/* Light variant — same HIG material, light tint for use on dark backgrounds.
+ * The inner ring + drop shadow come from `--ui-glass-shadow`; no `border`
+ * property is set so children using `.ui-glass` can opt out of the hairline
+ * with `border: none` without fighting specificity. */
+.ui-white-glass {
+  background: var(--ui-white-glass-bg);
+  backdrop-filter: var(--ui-glass-backdrop);
+  -webkit-backdrop-filter: var(--ui-glass-backdrop);
+  box-shadow: var(--ui-glass-shadow);
+  isolation: isolate;
+  /* Force own compositing layer so backdrop-filter still samples the scene
+     even when an ancestor uses transform/opacity (which otherwise breaks
+     backdrop-filter in Chrome desktop — the symptom is a see-through card
+     with no blur). */
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+  font-family: var(--font-saira), system-ui, sans-serif;
+  color: rgba(20, 24, 32, 0.95);
+}
+
+/* Glass morphism — Apple HIG "Liquid Glass" style.
+ *
+ * The look is built from layered effects rather than a single tint:
+ *   • dense dark `background` so text is legible over any scene
+ *   • heavy `backdrop-filter` blur + 180% saturate (the vibrancy boost
+ *     that's characteristic of HIG materials)
+ *   • inset 0.5 px hairline highlight (via box-shadow, NOT border) so the
+ *     edge is visible without taking up box-model space — drop it locally
+ *     by setting `box-shadow: none` on a single element if needed
+ *   • soft outer drop shadow for elevation off the underlying scene
+ *
+ * `isolation: isolate` keeps the backdrop-filter compositing context clean
+ * — without it, sibling z-stacked elements can show through the panel and
+ * break the blur.
+ *
+ * Note: there is intentionally NO `border` property here. The hairline is
+ * part of `--ui-glass-shadow` so child elements (e.g. icon circles inside
+ * a glass card) can override the shadow without inheriting an outline. */
+.ui-glass {
+  background: var(--ui-glass-bg);
+  backdrop-filter: var(--ui-glass-backdrop);
+  -webkit-backdrop-filter: var(--ui-glass-backdrop);
+  box-shadow: var(--ui-glass-shadow);
+  isolation: isolate;
+  /* Force own compositing layer so backdrop-filter still samples the scene
+     even when an ancestor uses transform/opacity (which otherwise breaks
+     backdrop-filter in Chrome desktop — the symptom is a see-through card
+     with no blur). */
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+  font-family: var(--font-saira), system-ui, sans-serif;
+  color: var(--ui-text);
+}
+
+.ui-glass--borderless {
+  border: none;
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.4);
+}
+
+/* Flat glass — identical DARK-SHADED look to `.ui-glass` but WITHOUT its own
+   backdrop-filter. Use for pills/list rows nested INSIDE an already-blurred
+   glass surface (site panel, minimap) so they don't re-blur the panel behind
+   them (the muddy "double blur" stack) while keeping the same dark tint. */
+.ui-glass-flat {
+  /* Near-solid dark: these sit over the already-blurred glass panel and have NO
+     backdrop-filter of their own. At a low alpha the panel's blur reads THROUGH
+     them (the muddy "double blur" stack the user sees), so the tint is kept
+     opaque enough to stay flat-dark — the whole point of the variant. */
+  background: rgba(0, 0, 0,0.5);
+  box-shadow: var(--ui-glass-shadow);
+  font-family: var(--font-saira), system-ui, sans-serif;
+  color: var(--ui-text);
+}
+
+.ui-blur {
+  backdrop-filter: var(--ui-glass-backdrop);
+  -webkit-backdrop-filter: var(--ui-glass-backdrop);
+  isolation: isolate;
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+}
+
+/* ── LA2028 overlay helpers ───────────────────────────────────────────────
+   Font roles + the two glass surfaces used across the wayfinding overlays.
+   `.nav-display` = Saira (titles, labels, numbers, buttons), `.nav-body` =
+   Barlow (descriptions / meta). `.nav-glass` and `.nav-glass-panel` mirror the
+   design's two backdrop stacks (chip-weight vs. panel-weight). */
+.nav-display {
+  font-family: var(--font-saira), system-ui, sans-serif;
+}
+.nav-body {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+}
+
+/* These mirror `.ui-glass` exactly — the proven Apple-"Liquid Glass" recipe used
+   across this app (and the ARCHVIZ project): token backdrop + isolation +
+   own compositing layer (`will-change` + `translateZ(0)`) so the frost samples
+   the live WebGL canvas even inside transform/opacity-animated wrappers. Only
+   the tint / border / shadow differ to carry the LA2028 look. */
+.nav-glass {
+  background: var(--nav-glass);
+  backdrop-filter: var(--nav-backdrop);
+  -webkit-backdrop-filter: var(--nav-backdrop);
+  border: 1px solid var(--nav-border);
+  box-shadow: var(--nav-shadow-chip);
+  isolation: isolate;
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+}
+
+.nav-glass-panel {
+  background: var(--nav-glass-strong);
+  backdrop-filter: var(--nav-backdrop-panel);
+  -webkit-backdrop-filter: var(--nav-backdrop-panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--nav-shadow-panel);
+  isolation: isolate;
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+}
+
+/* Instructions overlay — contained panel variant.
+ * A single compact black panel with one backdrop blur, soft padding and a
+ * slow panning glow behind the cards (see InstructionsOverlay `contained`). */
+.instr-panel {
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.12),
+    0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+/* The panning glow — two soft radial blobs drifting slowly behind the cards.
+ * `screen` blend keeps it additive so it reads as a gentle light wash, never
+ * a hard shape. Sits behind the z-10 content layer. */
+.instr-panel__pan {
+  position: absolute;
+  inset: -45%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 38% at 30% 35%, rgba(15, 183, 255, 0.22), transparent 70%),
+    radial-gradient(40% 40% at 72% 68%, rgba(0, 255, 204, 0.16), transparent 72%);
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  will-change: transform;
+  animation: instr-pan 22s ease-in-out infinite alternate;
+}
+
+@keyframes instr-pan {
+  0%   { transform: translate3d(-6%, -4%, 0) scale(1.05) rotate(0deg); }
+  50%  { transform: translate3d(5%, 3%, 0) scale(1.18) rotate(8deg); }
+  100% { transform: translate3d(7%, -5%, 0) scale(1.1) rotate(-6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .instr-panel__pan { animation: none; }
+}
+
+.ui-glass[data-active="true"] {
+  border-color: var(--ui-glass-border-active);
+}
+
+.ui-glass[data-active="true"]:hover {
+  border-color: var(--ui-glass-border-active);
+}
+
+/* 10 px all-caps spaced label — font-weight set per-component */
+.ui-label {
+  font-size: 8px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .ui-label {
+    font-size: 10px;
+  }
+}
+
+.ui-heading {
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .ui-heading {
+    font-size: 14px;
+  }
+}
+
+/* Circular 48 × 48 icon button */
+.ui-icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-text-muted);
+  transition:
+    background 0.2s,
+    color 0.2s,
+    transform 0.2s,
+    border-color 0.2s;
+}
+
+.ui-icon-btn:hover {
+  color: white;
+  transform: scale(1.05);
+}
+
+/* ── layouts-info classes ─────────────────────────────────────────────── */
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+  /* margin-bottom: 1px; */
+}
+
+@media (min-width: 1024px) {
+  .meta-grid {
+    gap: 24px;
+    margin-bottom: 8px;
+  }
+}
+
+.meta-block {
+  display: flex;
+  flex-direction: column-reverse;
+  position: relative;
+  padding-left: 20px;
+  justify-content: center;
+  /* min-height: 24px; */
+}
+
+@media (min-width: 1024px) {
+  .meta-block {
+    padding-left: 44px;
+    /* min-height: 36px; */
+  }
+}
+
+.meta-block::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background-size: 8px 8px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>');
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+@media (min-width: 1024px) {
+  .meta-block::before {
+    width: 30px;
+    height: 30px;
+      background-size: 14px 14px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>');
+  }
+}
+
+/* ── Hide scrollbar cross-browser ────────────────────────────────────────── */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar only on phone (below lg = 1024px) */
+@media (max-width: 1023px) {
+  .scrollbar-none-mobile {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none-mobile::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Thin glass scrollbar ──────────────────────────────────────────────────
+ * A subtle translucent line shown only where content actually overflows.
+ * Used on the UI scroll panels (info card, side panel, minimap, carousels)
+ * so there's a visible scroll affordance instead of a hidden scrollbar. */
+.ui-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.ui-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.ui-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ui-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+.ui-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.meta-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+@media (min-width: 1024px) {
+  .meta-label {
+    font-size: 9px;
+  }
+}
+
+.meta-value,
+.meta-highlight {
+  color: white;
+  font-size: 6px;
+  font-weight: 400;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+
+@media (min-width: 1024px) {
+  .meta-value,
+  .meta-highlight {
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+}
+
+/* ── meta-block icon variants (mobile: 10×10 svg in 20×20 circle) ─────────── */
+.meta-block--area::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'); }
+.meta-block--floors::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'); }
+.meta-block--bed::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4"/><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M10 9V6"/><path d="M14 9V6"/></svg>'); }
+.meta-block--bath::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6.5 3.5a1.5 1.5 0 0 0-1-.5C4.683 3 4 3.683 4 4.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><line x1="10" y1="5" x2="8" y2="7"/><line x1="2" y1="12" x2="22" y2="12"/></svg>'); }
+.meta-block--date::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'); }
+.meta-block--car::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17H5M19 17a2 2 0 0 0 2-2v-3l-2-6H5l-2 6v3a2 2 0 0 0 2 2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>'); }
+.meta-block--price::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'); }
+.meta-block--status::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'); }
+.meta-block--box::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'); }
+.meta-block--outdoor::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>'); }
+.meta-block--star::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'); }
+.meta-block--clock::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'); }
+.meta-block--compass::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>'); }
+.meta-block--units::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>'); }
+.meta-block--retail::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>'); }
+.meta-block--stairs::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'); }
+
+/* Stairs row has no second meta-block, so let the single block span the
+   full grid width instead of being squeezed into one 2-col cell. */
+.meta-block--stairs {
+  grid-column: 1 / -1;
+}
+
+/* Any lone block (e.g. Common Space) spans the full grid width so its text
+   isn't squeezed into one 2-col cell and forced to wrap onto two lines. */
+.meta-block--full {
+  grid-column: 1 / -1;
+}
+
+/* ── meta-block icon variants (desktop: 14×14 svg in 32×32 circle) ─────────── */
+@media (min-width: 1024px) {
+  .meta-block--area::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'); }
+  .meta-block--floors::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'); }
+  .meta-block--bed::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4"/><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M10 9V6"/><path d="M14 9V6"/></svg>'); }
+  .meta-block--bath::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6.5 3.5a1.5 1.5 0 0 0-1-.5C4.683 3 4 3.683 4 4.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><line x1="10" y1="5" x2="8" y2="7"/><line x1="2" y1="12" x2="22" y2="12"/></svg>'); }
+  .meta-block--date::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'); }
+  .meta-block--car::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17H5M19 17a2 2 0 0 0 2-2v-3l-2-6H5l-2 6v3a2 2 0 0 0 2 2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>'); }
+  .meta-block--price::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'); }
+  .meta-block--status::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'); }
+  .meta-block--box::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'); }
+  .meta-block--outdoor::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>'); }
+  .meta-block--star::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'); }
+  .meta-block--clock::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'); }
+  .meta-block--compass::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>'); }
+  .meta-block--units::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>'); }
+  .meta-block--retail::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>'); }
+  .meta-block--stairs::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'); }
+}
+
+
+
+
+/* loader holotwin */
+
+/* HoloTwin Smart Loader — branded HUD overlay (V2.4) */
+
+.htl-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* content anchored to top */
+  /* Background is a DYNAMIC veil driven inline by HoloTwinHud from the shared
+     revealProgress: fully opaque while the bar fills (hides the empty scene +
+     bright sky behind), then thins once the point-cloud preview starts glowing
+     in on the canvas — so the silhouette shows through the loading screen and
+     the model "grows out of it". The old static `background: var(--htl-bg)`
+     hid the canvas for the whole load, which made the preview invisible. */
+  background: transparent;
+  color: var(--htl-color);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  overflow: hidden;
+  /* Block the canvas underneath while the loader is on screen. Released only
+     AFTER the fade-out completes (see .htl-hidden) so the user can't click
+     into the 3D scene mid-fade. */
+  pointer-events: auto;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.htl-visible {
+  opacity: 1;
+}
+.htl-hidden {
+  opacity: 0;
+  /* Discrete property — transition-delay holds pointer-events:auto until the
+     opacity fade has fully finished, then flips to none. Keeps the scene
+     untouchable for the full duration of the fade. */
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), pointer-events 0s 0.35s;
+}
+
+.htl-bg-radial {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 60% 40% at 50% 45%,
+    color-mix(in srgb, var(--htl-color) 14%, transparent) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.htl-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 100px 40px 0;
+}
+
+.htl-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--htl-color);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--htl-color) 60%, transparent);
+  animation: htl-pulse 3.2s ease-in-out infinite;
+}
+
+.htl-tagline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--htl-color) 55%, white 20%);
+  opacity: 0.78;
+}
+
+.htl-progress {
+  margin-top: 16px;
+  width: clamp(280px, 38vw, 420px);
+  display: flex;
+  flex-direction: row;
+    align-items: center;
+  gap: 12px;
+}
+
+.htl-progress-track {
+  flex: 1;
+  position: relative;
+  height: 2px;
+  background: color-mix(in srgb, var(--htl-color) 12%, transparent);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.htl-progress-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--htl-color) 0%,
+    var(--htl-accent) 100%
+  );
+  box-shadow:
+    0 0 12px var(--htl-color),
+    0 0 4px var(--htl-accent);
+  transition: width 120ms linear;
+}
+
+.htl-percent {
+  font-family: ui-monospace, monospace; font-size: 12px;
+  font-weight: 600; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--htl-color) 85%, white 15%);
+  white-space: nowrap;
+}
+
+.htl-footer {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.htl-brand {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  color: var(--htl-color);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--htl-color) 55%, transparent);
+}
+.htl-brand sup {
+  font-size: 8px;
+  vertical-align: super;
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+.htl-brand-sub {
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  opacity: 0.52;
+  color: color-mix(in srgb, var(--htl-color) 70%, white 10%);
+}
+
+.htl-error {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: #ff5566;
+  background: rgba(255, 85, 102, 0.08);
+  border: 1px solid rgba(255, 85, 102, 0.4);
+  border-radius: 3px;
+}
+
+@keyframes htl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+/* ---- canvas blur-to-clear loading transition ---- */
+
+canvas.htl-main-loading {
+  filter: blur(24px) brightness(0.55) saturate(0.85);
+  transform: scale(1.045);
+  transition:
+    filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: filter, transform;
+}
+
+/* Lighter hold-blur while the model dithers in (crossfade). Swapped in at
+   REVEAL_PEAK in place of .htl-main-loading, swapped out for .htl-main-ready
+   once the reveal fully completes — the scene stays softly veiled (and
+   non-interactive) until the correct model is fully on screen. */
+canvas.htl-main-revealing {
+  filter: blur(10px) brightness(0.8) saturate(0.95);
+  transform: scale(1.02);
+  transition:
+    filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: filter, transform;
+}
+
+canvas.htl-main-ready {
+  filter: blur(0px) brightness(1) saturate(1);
+  transform: scale(1);
+  transition:
+    filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: filter, transform;
+}
+
+@media (max-width: 640px) {
+  /* Tighten the whole HUD so it fits inside the visible viewport on phones */
+  .htl-hud {
+    padding: 22vh 16px 0;     /* center-ish via top padding, narrower side gutters */
+    gap: 6px;
+    max-width: 92vw;
+  }
+  .htl-title {
+    font-size: 13px;
+    letter-spacing: 0.24em;
+  }
+  .htl-tagline {
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    text-align: center;
+    word-break: break-word;
+  }
+  .htl-progress {
+    width: min(82vw, 360px);   /* don't blow past the screen */
+    margin-top: 12px;
+    gap: 8px;
+  }
+  .htl-percent {
+    font-size: 11px;
+  }
+  .htl-footer {
+    bottom: 6vh;               /* keep brand on screen regardless of nav-bar height */
+  }
+  .htl-brand {
+    font-size: 11px;
+    letter-spacing: 0.32em;
+  }
+  /* Lighter canvas blur on mobile — 24px blur is GPU-expensive on phones and
+     contributes to the loading-screen jank / crashes. */
+  canvas.htl-main-loading {
+    filter: blur(12px) brightness(0.6) saturate(0.9);
+    transform: scale(1.02);
+  }
+  canvas.htl-main-revealing {
+    filter: blur(6px) brightness(0.85) saturate(0.95);
+    transform: scale(1.01);
+  }
+}
+
+/* Very small landscape phones — HUD was overflowing vertically */
+@media (max-height: 480px) {
+  .htl-hud {
+    padding-top: 14vh;
+  }
+  .htl-footer {
+    bottom: 4vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .htl-title {
+    animation: none;
+  }
+  canvas.htl-main-loading,
+  canvas.htl-main-revealing,
+  canvas.htl-main-ready {
+    transition: opacity 0.4s linear;
+    filter: none;
+    transform: none;
+  }
 }

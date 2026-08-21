@@ -1,0 +1,327 @@
+{
+  "_note": "Layout cameras are poses authored in-scene against olympic-village-v3.glb, taken from the HoloTwin reference projects (see poseSource on each). Applied by scripts/author-positions.cjs. Replaced by the real authoring pass against the Everport model.",
+  "layouts": [
+    {
+      "id": "L01",
+      "name": "Main Channel / Terminal Arrival",
+      "zone": "waterside",
+      "description": "Opening overview; establish terminal context and navigation corridor.",
+      "position": [
+        -1.2215,
+        0.1399,
+        88.6571
+      ],
+      "camera": {
+        "position": [
+          0,
+          60,
+          90
+        ],
+        "target": [
+          0,
+          49.5608,
+          68.3893
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": false,
+      "hotspots": [
+        "H01",
+        "H02"
+      ],
+      "poseSource": "scenes.json · global `entry` camera",
+      "exactPose": true,
+      "purpose": "Opening overview; establish terminal context and navigation corridor."
+    },
+    {
+      "id": "L02",
+      "name": "Berth / Quay",
+      "zone": "waterside",
+      "description": "Place user at the waterside operating face; show ship-to-terminal interface.",
+      "position": [
+        34.1287,
+        0.1399,
+        -23.8662
+      ],
+      "camera": {
+        "position": [
+          33.3674,
+          0,
+          -22.4692
+        ],
+        "target": [
+          47.8919,
+          1.8208,
+          -41.5752
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H03",
+        "H04"
+      ],
+      "poseSource": "holotwin-la-v3 · restaurants/restaurant-1 (Village Restaurant)",
+      "purpose": "Place user at the waterside operating face; show ship-to-terminal interface."
+    },
+    {
+      "id": "L03",
+      "name": "Ship-to-Shore Crane Zone",
+      "zone": "waterside",
+      "description": "Show the physical crane operation and connect the asset to operational telemetry.",
+      "position": [
+        21.8922,
+        0.1399,
+        -9.9253
+      ],
+      "camera": {
+        "position": [
+          21.3311,
+          0,
+          -9.4886
+        ],
+        "target": [
+          15.3097,
+          1.8232,
+          -32.721
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H05",
+        "H06",
+        "H07"
+      ],
+      "poseSource": "holotwin-la-v3 · transport/transport-1 (Village Bus Station)",
+      "purpose": "Show the physical crane operation and connect the asset to operational telemetry."
+    },
+    {
+      "id": "L04",
+      "name": "Vessel / Berth Working Face",
+      "zone": "waterside",
+      "description": "Immersive vessel-side experience; make one container the hero asset.",
+      "position": [
+        -32.5349,
+        0.1399,
+        -8.9295
+      ],
+      "camera": {
+        "position": [
+          -33.2061,
+          0,
+          -8.6444
+        ],
+        "target": [
+          -49.7176,
+          5.1224,
+          -25.7475
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H08",
+        "H09",
+        "H10"
+      ],
+      "poseSource": "holotwin-la-v3 · wellness/wellness-1 (Wellness Centre)",
+      "purpose": "Immersive vessel-side experience; make one container the hero asset."
+    },
+    {
+      "id": "L05",
+      "name": "Northern Container Yard",
+      "zone": "yard",
+      "description": "Show grounded/wheeled container storage and yard-block intelligence.",
+      "position": [
+        35.1245,
+        0.1399,
+        2.522
+      ],
+      "camera": {
+        "position": [
+          35.5551,
+          0,
+          2.9908
+        ],
+        "target": [
+          49.3127,
+          5.0106,
+          22.397
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H11",
+        "H12",
+        "H13"
+      ],
+      "poseSource": "holotwin-la-olympics-frontend · practice/practice-1",
+      "purpose": "Show grounded/wheeled container storage and yard-block intelligence."
+    },
+    {
+      "id": "L06",
+      "name": "Central Container Yard",
+      "zone": "yard",
+      "description": "Primary Digital Twin + operations-data Layout.",
+      "position": [
+        22.6772,
+        0.1399,
+        12.9777
+      ],
+      "camera": {
+        "position": [
+          22.1736,
+          0,
+          13.0198
+        ],
+        "target": [
+          1.346,
+          1.8232,
+          24.945
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H14",
+        "H15",
+        "H16"
+      ],
+      "poseSource": "holotwin-la--full-village · monument/monument-1 (= the village start pose)",
+      "purpose": "Primary Digital Twin + operations-data Layout."
+    },
+    {
+      "id": "L07",
+      "name": "Southern Container Yard",
+      "zone": "yard",
+      "description": "Show reefer and southern-yard operations.",
+      "position": [
+        33.1329,
+        0.1399,
+        14.4713
+      ],
+      "camera": {
+        "position": [
+          33.4011,
+          0,
+          13.9222
+        ],
+        "target": [
+          56.9007,
+          2.7949,
+          18.7006
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H17",
+        "H18",
+        "H19"
+      ],
+      "poseSource": "holotwin-la-v3 · practice/practice-1 (Practice Venue)",
+      "purpose": "Show reefer and southern-yard operations."
+    },
+    {
+      "id": "L08",
+      "name": "Landside / Truck Gate",
+      "zone": "landside",
+      "description": "Demonstrate terminal-to-road interface and gate processing.",
+      "position": [
+        36.6182,
+        0.1399,
+        40.4145
+      ],
+      "camera": {
+        "position": [
+          37.0814,
+          0,
+          40.7116
+        ],
+        "target": [
+          49.5827,
+          1.8232,
+          61.1986
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H20",
+        "H21",
+        "H22"
+      ],
+      "poseSource": "holotwin-la-v3 · restaurants/cafe-1 (Village Café)",
+      "purpose": "Demonstrate terminal-to-road interface and gate processing."
+    },
+    {
+      "id": "L09",
+      "name": "TICTF / Everport Rail Interface",
+      "zone": "rail",
+      "description": "Show Everport's shared TICTF interface; do not label the shared facility as Everport-only.",
+      "position": [
+        -22.6669,
+        0.1399,
+        42.228
+      ],
+      "camera": {
+        "position": [
+          -22.7186,
+          0,
+          41.5066
+        ],
+        "target": [
+          -4.6373,
+          4.1237,
+          57.1206
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": true,
+      "hotspots": [
+        "H23",
+        "H24",
+        "H25"
+      ],
+      "poseSource": "holotwin-la-v3 · hostel/hostel-1 (Athletes' Hostel)",
+      "purpose": "Show Everport's shared TICTF interface; do not label the shared facility as Everport-only."
+    },
+    {
+      "id": "L10",
+      "name": "Executive Digital Twin Overview",
+      "zone": "executive",
+      "description": "Final elevated overview; demonstrate HoloTwin as an operational intelligence layer.",
+      "position": [
+        -1.7194,
+        0.1399,
+        89.155
+      ],
+      "camera": {
+        "position": [
+          0,
+          180,
+          320
+        ],
+        "target": [
+          0,
+          168.4938,
+          298.938
+        ]
+      },
+      "teleportEnabled": true,
+      "walkable": false,
+      "exactPose": true,
+      "hotspots": [
+        "H26",
+        "H27",
+        "H28",
+        "H29",
+        "H30"
+      ],
+      "poseSource": "scenes.json · global `dollHouseCamera`",
+      "purpose": "Final elevated overview; demonstrate HoloTwin as an operational intelligence layer."
+    }
+  ]
+}
