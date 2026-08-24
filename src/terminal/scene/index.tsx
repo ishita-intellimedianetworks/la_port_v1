@@ -1062,11 +1062,17 @@ export function SceneContent({
         </>
       )}
 
-      {/* Resource markers — the selected one, plus whatever is genuinely near
-          the player's current position (see hotspot-markers/index.tsx). Click a
-          marker to open its data card; travel is a list/map action only. */}
-      {!activeFloor?.interior && (
-        <HotspotMarkers hsSize={activeFloor?.hsSize} ctrlRef={playerControllerRef} viewMode={viewMode} />
+      {/* Resource markers — the selected resource, or the resources of the
+          layout being stood at (see hotspot-markers/index.tsx). Click one to
+          open its data card; travel is a list action only.
+
+          FIRST PERSON ONLY. In the dollhouse the camera orbits the whole
+          terminal from outside, where a marker is neither reachable nor
+          meaningful — the beads are sized and placed to be read from their
+          layout's checkpoint, so from the air they are just specks floating
+          over the model. */}
+      {!activeFloor?.interior && viewMode === "firstPerson" && (
+        <HotspotMarkers hsSize={activeFloor?.hsSize} />
       )}
 
       {/* Own Suspense boundary: the env HDR + cloud texture must NOT suspend the

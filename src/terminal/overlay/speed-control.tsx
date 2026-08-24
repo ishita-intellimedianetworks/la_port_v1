@@ -5,9 +5,9 @@ import type { RefObject } from "react";
 import type { PlayerControllerHandle } from "../scene/player";
 import { navConfig } from "../navigation-config";
 
-const SPEEDS = [1, 3, 5] as const;
+const SPEEDS = [1, 5, 10] as const;
 
-/** Walk-speed multiplier control (1× / 3× / 5×), shown while walking.
+/** Walk-speed multiplier control (1× / 5× / 10×), shown while walking.
  *
  *  The choice STICKS: it applies to the current walk and to every walk after
  *  it, until the page reloads. It is a setting, not per-walk state — dropping

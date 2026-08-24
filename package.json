@@ -7,12 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify": "node scripts/verify-data.cjs && node scripts/verify-walk.cjs",
-    "author": "node scripts/author-positions.cjs",
-    "bake": "node scripts/holotwin-bake.cjs",
-    "scenes": "node scripts/build-scenes.cjs",
-    "data": "node scripts/author-positions.cjs && node scripts/import-handoff.cjs && node scripts/build-scenes.cjs && node scripts/verify-data.cjs && node scripts/verify-walk.cjs",
-    "handoff": "node scripts/import-handoff.cjs"
+    "verify": "node scripts/verify-walk.cjs",
+    "bake": "node scripts/holotwin-bake.cjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

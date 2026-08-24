@@ -24,6 +24,12 @@ export interface CurrentDest {
 /** A clicked 3D marker — drives the centred hotspot card. */
 export interface HotspotInfo {
   destId: string;
+  /** The hotspot this card is about (H01-H30).
+   *
+   *  Carried as an ID, not just a label: the 3D marker set has to know which
+   *  disc the open card belongs to so it can take that one down, and matching
+   *  on display text would break the moment a name is reworded. */
+  hotspotId: string;
   destLabel: string;
   category: DestinationCategory;
   option?: string;

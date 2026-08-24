@@ -1,134 +1,58 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { RefObject } from "react";
-import { useFrame } from "@react-three/fiber";
-import { HOTSPOT_BY_ID, LAYOUT_BY_ID, hotspots, scene } from "@/config";
-import type { PlayerControllerHandle } from "../player";
+import { HOTSPOT_BY_ID, LAYOUT_BY_ID } from "@/config";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 import { Hotspot } from "./hotspot";
 
 interface HotspotMarkersProps {
   /** Marker disc radius in world units (FloorConfig.hsSize). */
   hsSize?: number;
-  ctrlRef: RefObject<PlayerControllerHandle | null>;
-  /** Nearby markers only make sense on foot — see below. */
-  viewMode: "dollhouse" | "firstPerson";
 }
-
-/** How often the nearby set is recomputed. Markers appear as you approach, so
- *  a few times a second is plenty — and this runs inside useFrame, where doing
- *  it every frame would be thirty distance checks at 60fps for a set that
- *  changes every few seconds. */
-const SAMPLE_MS = 250;
-
-/**
- * Hysteresis. Without it the set oscillates.
- *
- * A resource sitting exactly on the radius flickers on and off as the player
- * breathes against the boundary, and at the cap the eighth and ninth swap
- * places on every sample. Both read as blinking markers.
- *
- * Two separate thresholds fix it. A marker must come within the radius to
- * APPEAR, but has to retreat past `radius * EXIT_SLACK` before it LEAVES, so
- * the boundary is a band rather than a line. And an already-visible marker is
- * ranked as if it were `RANK_BIAS` nearer than it is, so displacing one at the
- * cap takes a competitor that is clearly closer, not one a centimetre closer.
- */
-const EXIT_SLACK = 1.3;
-const RANK_BIAS = 0.8;
 
 /**
  * The resource markers in the scene.
  *
- * Two kinds, and they are different on purpose:
+ * What is drawn follows entirely from what was picked in the Resources panel —
+ * one selected resource, or the resources belonging to the layout the player
+ * stands at. See the note over `ids` below.
  *
- *   SELECTED  the resource picked from the list — always shown, wherever the
- *             player is, and pulsing so it is findable.
- *   OWN       every resource belonging to the layout the player is standing at,
- *             regardless of distance — arriving somewhere has to show what is
- *             filed there.
- *   NEARBY    every resource within `nearbyHotspotRadius` of where the player
- *             actually stands, nearest first, capped at `nearbyHotspotMax`.
- *             First person only.
- *             Membership is NOT by layout: arriving at L06 surfaces whatever
- *             is genuinely close, including resources filed under L05 or L08,
- *             because what is in front of you is a fact about position, not
- *             about which list an ID was written on.
- *
- * Drawing all thirty at once turned the view into overlapping rings; drawing
- * only the selected one meant walking past a resource showed nothing at all.
+ * There is deliberately NO proximity rule. An earlier version also surfaced
+ * whatever fell within a radius of the player, re-ranked four times a second
+ * with hysteresis to stop the set flickering. It meant arriving at one layout
+ * showed a neighbour's discs, and what a viewer saw depended on where they
+ * happened to be standing rather than on what they had asked for.
  */
-export function HotspotMarkers({ hsSize, ctrlRef, viewMode }: HotspotMarkersProps) {
+export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
   const currentLayoutId = useNavUiStore((s) => s.currentDest?.id ?? null);
+  // The hotspot whose data card is currently open, if any.
+  const openHotspotId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
 
-  const [nearbyIds, setNearbyIds] = useState<string[]>([]);
-  const sinceSample = useRef(0);
-  // The last set, as a joined key. State is written ONLY when the set actually
-  // changes — a new array every sample would re-render the scene four times a
-  // second for a list that is usually identical.
-  const lastKey = useRef("");
-  // What is on screen right now, so the next sample can favour keeping it.
-  const shown = useRef<Set<string>>(new Set());
-
-  useFrame((_, delta) => {
-    sinceSample.current += delta * 1000;
-    if (sinceSample.current < SAMPLE_MS) return;
-    sinceSample.current = 0;
-
-    // In the dollhouse the camera orbits the model while the player body stays
-    // parked wherever it was left, so "near the player" describes nothing the
-    // viewer can see. Only the selected marker shows from the air.
-    if (viewMode !== "firstPerson") {
-      if (lastKey.current !== "") {
-        lastKey.current = "";
-        shown.current = new Set();
-        setNearbyIds([]);
-      }
-      return;
-    }
-
-    const controller = ctrlRef.current;
-    if (!controller) return;
-    const { x, z } = controller.getPosition();
-    const { nearbyHotspotRadius: radius, nearbyHotspotMax: max } = scene.world;
-
-    const showing = shown.current;
-    const ids = hotspots
-      .map((h) => {
-        const d = Math.hypot(h.position[0] - x, h.position[2] - z);
-        const visible = showing.has(h.id);
-        // Already on screen: stays until it retreats past the wider band, and
-        // holds its place at the cap against all but a clearly nearer rival.
-        return { id: h.id, keep: d <= (visible ? radius * EXIT_SLACK : radius), rank: visible ? d * RANK_BIAS : d };
-      })
-      .filter((e) => e.keep)
-      .sort((a, b) => a.rank - b.rank)
-      .slice(0, max)
-      .map((e) => e.id);
-
-    shown.current = new Set(ids);
-
-    const key = ids.join(",");
-    if (key === lastKey.current) return;
-    lastKey.current = key;
-    setNearbyIds(ids);
-  });
-
-  // Order matters, and so does de-duplication: the same resource can qualify
-  // three ways at once and must still be exactly one disc.
+  // EITHER / OR, never both — the marker set answers "what did you ask for?"
   //
-  //   1. the selection            — always, wherever the player is
-  //   2. the current layout's own — always, even when they fall outside the
-  //      radius. Several layouts frame their resources from further than 60
-  //      units, and L10 overlooks the whole terminal from 180 up: measuring
-  //      those by distance alone would arrive at a layout and show nothing
-  //      belonging to it, which is the opposite of what travelling there is for
-  //   3. whatever else is genuinely close, nearest first
+  //   a resource was picked   exactly that one disc, nothing else. Narrowing to
+  //                           a single resource is the whole point of picking
+  //                           it; leaving its siblings up made the selection
+  //                           invisible among them.
+  //   a layout was picked     every resource filed under it, regardless of
+  //                           distance. Several layouts frame their resources
+  //                           from further than 60 units and L10 overlooks the
+  //                           terminal from 180 up, so ranking by distance
+  //                           would arrive somewhere and show nothing that
+  //                           belongs to it — the opposite of travelling there.
+  //
+  // Distance plays no part any more: proximity used to add whatever happened to
+  // be close, which meant arriving at one layout surfaced a neighbour's discs.
   const own = currentLayoutId ? (LAYOUT_BY_ID[currentLayoutId]?.hotspots ?? []) : [];
-  const ids = [...new Set([...(selectedHotspotId ? [selectedHotspotId] : []), ...own, ...nearbyIds])];
+  const picked = selectedHotspotId ? [selectedHotspotId] : own;
+
+  // A marker whose card is OPEN takes itself down. The card is the thing being
+  // read at that moment, and the disc is only ever the way in to it — leaving
+  // it lit behind the card meant a pulsing bead competing with the panel it had
+  // just opened, and on a close-framed marker it sat under the card's own
+  // glass. It comes straight back when the card closes (`setHotspotInfo(null)`).
+  const ids = openHotspotId ? picked.filter((id) => id !== openHotspotId) : picked;
 
   return (
     <>
@@ -142,7 +66,6 @@ export function HotspotMarkers({ hsSize, ctrlRef, viewMode }: HotspotMarkersProp
           <Hotspot
             key={id}
             position={hotspot.position}
-            rotation={hotspot.rotation}
             title={`${hotspot.id} · ${hotspot.name}`}
             size={hsSize ?? 0.6}
             // Every marker is white — the pulse alone marks the selection, so
@@ -151,6 +74,7 @@ export function HotspotMarkers({ hsSize, ctrlRef, viewMode }: HotspotMarkersProp
             onHotspotClick={() =>
               setHotspotInfo({
                 destId: layout.id,
+                hotspotId: hotspot.id,
                 destLabel: layout.name,
                 category: layout.zone,
                 hotspotLabel: `${hotspot.id} · ${hotspot.name}`,

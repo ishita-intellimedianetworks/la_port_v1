@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { useEffect } from "react";
 import {
-  badgeFor,
   HOTSPOT_BY_ID,
   LAYOUT_BY_ID,
   toneFor,
   ui as uiCopy,
 } from "@/config";
-import type { HotspotConfig, HotspotField, Tone } from "@/config/schema";
+import type { HotspotField, Tone } from "@/config/schema";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 import { PanelHeader } from "../destination-panel/panel-header";
 
@@ -18,9 +16,6 @@ const TONE_COLOR: Record<Tone, string> = {
   warn: "var(--tone-warn, #ffb020)",
   alert: "var(--tone-alert, #ff5c5c)",
 };
-
-/** How long the "Copied" toast stays up. */
-const TOAST_MS = 1000;
 
 // ── Value formatting ──────────────────────────────────────────────────────────
 
@@ -38,12 +33,6 @@ function formatValue(field: HotspotField): string {
     text = String(value);
   }
   return unit ? `${text} ${unit}` : text;
-}
-
-/** Every field as `Label: value`, for the clipboard. */
-function asPlainText(hotspot: HotspotConfig): string {
-  const header = `${hotspot.id} — ${hotspot.popupTitle}`;
-  return [header, ...hotspot.fields.map((f) => `${f.label}: ${formatValue(f)}`)].join("\n");
 }
 
 /**
@@ -99,33 +88,6 @@ function Field({ field }: { field: HotspotField }) {
   );
 }
 
-/** Chip action, at the reference's pill weight. */
-function ChipButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="nav-body flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors hover:bg-white/[0.12] disabled:opacity-50 short:text-[10.5px]"
-      style={{
-        background: "rgba(255,255,255,0.06)",
-        border: "1.5px solid rgba(255,255,255,0.16)",
-        color: "var(--nav-text-2)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 interface HotspotDataCardProps {
   /** Destination id — which is the layout id (L01-L10). */
   destId: string;
@@ -136,7 +98,7 @@ interface HotspotDataCardProps {
 
 /**
  * The hotspot readout: all 30 hotspots render through this one component,
- * driven purely by their `fields` dictionary in `src/data/hotspots.json` — the
+ * driven purely by their `fields` dictionary in `site.json` › `hotspots[]` — the
  * handoff's consistency requirement, and the reason a new hotspot needs no new
  * UI code.
  *
@@ -144,21 +106,13 @@ interface HotspotDataCardProps {
  * a destination IS a layout and its markers are that layout's `hotspots[]` in
  * order, that pair resolves straight back to a hotspot id.
  *
- * The card is the reference's panel; only the row treatment (small label above
- * a larger value, closed by a line) and Copy Data come from the admin app.
+ * The card is the reference's panel; only the row treatment — a small label
+ * above a larger value, closed by a line — comes from the admin app.
  */
 export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps) {
-  const [copied, setCopied] = useState(false);
-
   const layout = LAYOUT_BY_ID[destId];
   const hotspotId = layout?.hotspots[index - 1];
   const hotspot = hotspotId ? HOTSPOT_BY_ID[hotspotId] : undefined;
-
-  useEffect(() => {
-    if (!copied) return;
-    const t = window.setTimeout(() => setCopied(false), TOAST_MS);
-    return () => window.clearTimeout(t);
-  }, [copied]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -170,17 +124,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
 
   if (!hotspot) return null;
 
-  const isDemo = hotspot.dataSource === "demo";
-
-  const copy = () => {
-    // clipboard.writeText needs a secure context; if it is refused the toast
-    // simply does not fire rather than throwing into the console.
-    navigator.clipboard?.writeText(asPlainText(hotspot)).then(
-      () => setCopied(true),
-      () => {},
-    );
-  };
-
   return (
     <div className="pointer-events-none fixed inset-0 z-[130] flex items-center justify-center">
       {/* Click-outside target. The scene behind is left undimmed, as the
@@ -190,16 +133,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
         onClick={onClose}
         className="pointer-events-auto absolute inset-0 cursor-default"
       />
-
-      {copied && (
-        <div
-          className="nav-body pointer-events-none fixed left-1/2 top-6 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] font-medium"
-          style={{ ...NAV_GLASS_PANEL, color: "var(--nav-text)" }}
-        >
-          <Check size={14} color={TONE_COLOR.ok} />
-          {uiCopy.popup.copiedLabel}
-        </div>
-      )}
 
       <div
         role="dialog"
@@ -214,37 +147,15 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
           onClose={onClose}
         />
 
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 short:mt-2">
-          <span
-            className="nav-body rounded-full px-2.5 py-1 text-[11.5px] font-medium short:text-[10.5px]"
-            style={{
-              background: isDemo ? "rgba(255,176,32,0.12)" : "rgba(255,255,255,0.06)",
-              border: `1.5px solid ${isDemo ? "rgba(255,176,32,0.3)" : "rgba(255,255,255,0.16)"}`,
-              color: isDemo ? TONE_COLOR.warn : "var(--nav-text-2)",
-            }}
-          >
-            {badgeFor(hotspot.dataSource)}
-          </span>
-
-          <ChipButton onClick={copy} disabled={copied}>
-            {uiCopy.popup.copyLabel}
-          </ChipButton>
-        </div>
-
-        {/* The handoff's Expected Interaction for this hotspot — what the demo
-            is meant to do here, in the doc's own words. */}
-        {hotspot.interaction && (
-          <p
-            className="nav-body mt-3 text-[12.5px] font-normal leading-relaxed short:mt-2 short:text-[11.5px]"
-            style={{ color: "var(--nav-text-dim)" }}
-          >
-            {hotspot.interaction}
-          </p>
-        )}
+        {/* The handoff's Expected Interaction line is deliberately NOT shown.
+            It is a build instruction — "Click → vessel-traffic popup" — written
+            for whoever implements the hotspot, and printing it to the operator
+            told them to do the thing they had just done. It stays in the config
+            as spec provenance. */}
 
         {/* Body scrolls if the card would outgrow the viewport — the width does
             the spreading, the height stays capped. */}
-        <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="ui-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden short:mt-2">
           {hotspot.journey && (
             <div
               className="mt-4 border-t pt-2 short:mt-3"

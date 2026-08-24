@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useShortViewport } from "@/shared/responsive";
 import { NAV_GLASS_PANEL } from "../glass-theme";
@@ -18,6 +18,12 @@ interface EdgeFlapProps {
   onOpenChange: (open: boolean) => void;
   /** Set while a detail view is showing — renders the header's back arrow. */
   onBack?: () => void;
+  /**
+   * Pinned above the scrolling body — a search field, a filter row. It stays
+   * put while the list scrolls under it, which is the whole point: a search box
+   * that scrolls away is one you have to hunt for after every result.
+   */
+  toolbar?: ReactNode;
   disabled?: boolean;
   /** Tuck the whole flap off its edge — while walking, and while a
    *  full-screen card owns the view. */
@@ -36,8 +42,13 @@ interface EdgeFlapProps {
  *
  * The panel is a FIXED height with its body scrolling inside. Letting it grow
  * with its content meant a thirty-row list ran off the top and bottom of a
- * laptop screen; a fixed frame keeps the header and the close button reachable
- * no matter how long the list is.
+ * laptop screen; a fixed frame keeps the header and the list reachable no
+ * matter how long the list is.
+ *
+ * There is no close button: the flap's own tab toggles it, a click anywhere
+ * outside dismisses it, and Escape closes it. A dedicated X on top of those
+ * three was a fourth way to do the same thing, eating header room the panel
+ * needs for its back arrow.
  */
 export function EdgeFlap({
   side,
@@ -47,11 +58,38 @@ export function EdgeFlap({
   open,
   onOpenChange,
   onBack,
+  toolbar,
   disabled,
   tucked,
   children,
 }: EdgeFlapProps) {
   const short = useShortViewport();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape close. Bound only while actually open, so the
+  // listeners are not sitting on the document for the whole session.
+  useEffect(() => {
+    if (!open || disabled) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      // The tab lives inside `rootRef` too, so its own toggle still works
+      // instead of being closed here and reopened by its click handler.
+      if (target && rootRef.current?.contains(target)) return;
+      onOpenChange(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, disabled, onOpenChange]);
+
   // The flap must stay shorter than the viewport on a landscape phone, so the
   // stacked letters shrink rather than overflow.
   const dim = short
@@ -59,9 +97,11 @@ export function EdgeFlap({
     : { w: 52, h: Math.min(260, label.length * 30), r: 12 };
 
   const offEdge = side === "left" ? "-110%" : "110%";
+  const hasHeader = !!onBack || !!title;
 
   return (
     <div
+      ref={rootRef}
       className="fixed top-1/2 z-[220] flex transition-[opacity,transform] duration-[600ms] ease-out"
       style={{
         [side]: 0,
@@ -100,10 +140,22 @@ export function EdgeFlap({
           height: `min(560px, calc(100dvh - 128px))`,
         }}
       >
-        <div className="shrink-0 px-4 pt-5 sm:px-5 sm:pt-6">
-          <PanelHeader title={title} subtitle={subtitle} onBack={onBack} onClose={() => onOpenChange(false)} />
-        </div>
-        <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+        {hasHeader && (
+          <div className="shrink-0 px-4 pt-5 sm:px-5 sm:pt-6">
+            <PanelHeader title={title} subtitle={subtitle} onBack={onBack} />
+          </div>
+        )}
+        {toolbar && (
+          <div className={cn("shrink-0 px-4 sm:px-5", hasHeader ? "pt-3" : "pt-4 sm:pt-5")}>
+            {toolbar}
+          </div>
+        )}
+        <div
+          className={cn(
+            "ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 sm:px-5 sm:pb-5",
+            hasHeader || toolbar ? "pt-3" : "pt-4 sm:pt-5",
+          )}
+        >
           {children}
         </div>
       </div>

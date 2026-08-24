@@ -16,49 +16,41 @@ export type LayoutCamera = {
   target: Vec3;
 };
 
-// ── scene.json ────────────────────────────────────────────────────────────────
+// ── site.json › the site record ───────────────────────────────────────────────
 
 export type SceneConfig = {
   meta: {
     id: string;
     label: string;
-    subtitle: string;
-    brand: string;
-    version: string;
-    /** "placeholder" while we stand on the LA Olympics model. */
-    modelStatus: string;
   };
   assets: {
     modelUrl: string;
     navmeshUrl: string;
     previewUrl: string;
-    floorplanUrl: string;
     envFile: string;
   };
   world: {
     eyeHeight: number;
-    walkSpeed: number;
-    speedMultipliers: number[];
-    defaultSpeedMultiplier: number;
     /**
-     * How far from the player a resource marker still shows, in world units,
-     * and how many of those NEARBY markers may show at once.
-     *
-     * The cap bounds the proximity set only — the layout the player is standing
-     * at always shows all of its own resources on top, however far they are
-     * framed from. The cap is the meaningful limiter of the two: a radius is
-     * tied to the model's scale, and these poses move to the Everport terminal.
+     * Vertical field of view in degrees, applied to EVERY camera in the scene
+     * — the Canvas creates its camera with it and the camera store re-asserts
+     * it on whatever camera the scene registers. The one knob for how wide the
+     * view reads; lower is more telephoto, higher is more fish-eye.
      */
-    nearbyHotspotRadius: number;
-    nearbyHotspotMax: number;
+    fov: number;
     shadows: boolean;
-    background: string;
-    fog: { enabled: boolean; color: string; near: number; far: number };
   };
   cameras: {
-    entry: CameraPose;
+    /**
+     * The dollhouse orbit pose — the ONE camera no layout owns, which is why
+     * it is the only one stored here.
+     *
+     * Where the experience starts is `site.startLayoutId` instead: a start pose
+     * is not a camera someone authors separately, it is one of the checkpoints
+     * already authored as a layout, named. `cameras.entry` used to hold a
+     * byte-for-byte copy of L01's camera position for exactly that reason.
+     */
     dollhouse: CameraPose;
-    start: CameraPose;
   };
   lights: {
     ambientIntensity: number;
@@ -73,67 +65,56 @@ export type SceneConfig = {
     shadowNormalBias: number;
   };
   globals: {
-    /** The container the whole H09 -> H14 -> H24 -> H30 story follows. */
+    /** The container the whole H09 -> H14 -> H24 -> H30 story follows. Every
+     *  field marked `ref: "hero"` is asserted equal to it at load. */
     heroContainerId: string;
-    vessel: { name: string; imo: string };
-    terminal: Record<string, string | number | boolean>;
-    /** Canonical ids for every asset named by more than one hotspot. */
-    assets: Record<string, string>;
   };
 };
 
-// ── ui.json ───────────────────────────────────────────────────────────────────
+// ── site.json › presentation ──────────────────────────────────────────────────
+
+export interface InstructionItemCopy {
+  icon: string;
+  text: string;
+}
+
+/** A titled block of instruction tiles (e.g. "While walking"). */
+export interface InstructionGroupCopy {
+  label: string;
+  items: InstructionItemCopy[];
+}
 
 export interface InstructionsCopy {
   title: string;
+  /** Optional line under the title. */
+  subtitle?: string;
   actionLabel: string;
-  items: { icon: string; text: string }[];
+  /** Tiles per row on a normal viewport. Defaults to 2. */
+  columns?: number;
+  /**
+   * Either a flat list (short cards, e.g. the dollhouse) or grouped blocks
+   * (the first-person card, which walks through every icon and bar on screen
+   * and needs headings to stay readable). Exactly one of the two is set.
+   */
+  items?: InstructionItemCopy[];
+  groups?: InstructionGroupCopy[];
 }
 
 export type UiConfig = {
-  theme: { color: string; accent: string; background: string };
-  loading: { title: string; tagline: string; brand: string };
   /** One card per view — each teaches only the controls of that view. */
   instructions: Record<"dollhouse" | "firstPerson", InstructionsCopy>;
-  sidebar: Record<"map" | "layouts" | "hotspots" | "dollhouse", string>;
   panels: {
-    layoutsTitle: string;
-    layoutsSubtitle: string;
-    hotspotsTitle: string;
-    hotspotsSubtitle: string;
-    mapTitle: string;
-    goToTitle: string;
-    /** Letters stacked down each edge tab. */
+    /** Letters stacked down the edge tab. */
     hotspotsFlapLabel: string;
-    layoutsFlapLabel: string;
   };
-  /** The destination view shown before travelling. */
-  travel: Record<
-    | "overviewTitle" | "walkLabel" | "teleportLabel" | "reachedLabel" | "reachedHint"
-    | "instantLabel" | "instantHint" | "measuringHint" | "onFoot",
-    string
-  >;
   zones: Record<ZoneKey, { label: string; color: string }>;
   popup: {
-    demoBadge: string;
-    staticBadge: string;
-    liveBadge: string;
-    closeLabel: string;
     journeyTitle: string;
-    goToLabel: string;
-    copyLabel: string;
-    copiedLabel: string;
-  };
-  hud: {
-    stopLabel: string;
-    speedLabel: string;
-    walkingLabel: string;
-    placeholderNotice: string;
   };
   tones: Record<Tone, string[]>;
 };
 
-// ── layouts.json ──────────────────────────────────────────────────────────────
+// ── site.json › layouts table ─────────────────────────────────────────────────
 
 export type ZoneKey = "waterside" | "yard" | "landside" | "rail" | "executive";
 
@@ -142,24 +123,31 @@ export type LayoutConfig = {
   name: string;
   zone: ZoneKey;
   /** The handoff's Purpose line for this layout, verbatim. */
-  purpose: string;
-  /** Same text; kept as the field the UI reads. */
   description: string;
   position: Vec3;
   /** The viewpoint for this layout AND for every one of its hotspots. */
   camera: LayoutCamera;
-  teleportEnabled: boolean;
   /** false = an aerial/overview pose. Not a valid first-person entry point,
    *  and walking is disabled while standing in it. */
   walkable: boolean;
-  /** Provenance of the authored camera pose — see scripts/author-positions.cjs. */
-  poseSource?: string;
   /** Keep the authored Y instead of snapping to the navmesh (elevated views). */
   exactPose?: boolean;
+  /**
+   * The ids of this layout's hotspots, in table order. DERIVED at load from
+   * `hotspots[].layoutId` — it is not a column in `site.json`.
+   *
+   * Parentage is stated once, on the child, exactly as a foreign key would
+   * state it. It used to be stated twice (here and on the hotspot) and the
+   * load-time validator existed largely to catch the two disagreeing; a fact
+   * that cannot be written twice cannot drift.
+   */
   hotspots: string[];
 };
 
-// ── hotspots.json ─────────────────────────────────────────────────────────────
+/** A layout row as `site.json` stores it — no derived `hotspots` list. */
+export type LayoutRow = Omit<LayoutConfig, "hotspots">;
+
+// ── site.json › hotspots table ────────────────────────────────────────────────
 
 export type FieldType =
   | "string"
@@ -232,24 +220,65 @@ export type HotspotConfig = {
   name: string;
   popupTitle: string;
   icon: HotspotIcon;
-  dataSource: DataSource;
-  linkedAssetId: string | null;
-  /** The handoff's summary of what this popup shows, e.g.
-   *  "crane ID, status, assigned vessel, ...". */
-  dataFields: string;
-  /** The handoff's Expected Interaction, e.g.
-   *  "Click → crane asset popup; highlight crane in 3D". */
-  interaction: string;
-  /**
-   * The marker — a hotspot is a POINT, not a viewpoint. Per handoff §4 it has
-   * no camera of its own: it is seen from its parent layout's camera, which
-   * every marker in that layout shares.
-   */
+  /** Where the marker itself sits in the world. */
   position: Vec3;
-  /** Marker disc orientation; -PI/2 about X lies it flat on the ground. */
+  /** Authored marker orientation, as a three XYZ euler. Data only — the bead
+   *  is a sphere, so nothing renders with it. */
   rotation: Vec3;
+  /**
+   * This hotspot's OWN viewpoint — the pose travelling to it lands on.
+   *
+   * The handoff's §4 model gave a camera only to the Layout and had every
+   * marker under it share that one pose. Keeping it here lets a hotspot be
+   * framed on its own; set it equal to the layout's camera (as L01's pair are)
+   * and the two journeys are identical.
+   *
+   * Optional: an unauthored hotspot falls back to its layout's camera.
+   */
+  camera?: LayoutCamera;
   journey?: JourneyStep[];
   fields: HotspotField[];
+};
+
+// ── site.json › the document ──────────────────────────────────────────────────
+
+/**
+ * The one config file, shaped as DB tables.
+ *
+ * `layouts` and `hotspots` are SIBLING arrays joined by `hotspots[].layoutId`,
+ * not a tree — that is the shape a database will hand back, and keeping the
+ * file in it means the eventual migration is a load, not a rewrite. The nested
+ * view the Resources panel renders is rebuilt at import (see `config/index.ts`).
+ *
+ * `SceneConfig` and `UiConfig` are VIEWS over this document, not separate
+ * files: `config/index.ts` slices them out so every existing `scene.*` /
+ * `ui.*` reader keeps working untouched.
+ */
+export type SiteConfig = {
+  /** Authoring note — data, not config. */
+  _note?: string;
+  meta: SceneConfig["meta"];
+  /**
+   * FOREIGN KEY into `layouts` — the layout whose camera the experience opens
+   * on. Its pose is the Canvas camera, the first-person start, and the fallback
+   * for anything not yet authored (`startPose` in config/index.ts).
+   */
+  startLayoutId: string;
+  assets: SceneConfig["assets"];
+  world: SceneConfig["world"];
+  cameras: SceneConfig["cameras"];
+  lights: SceneConfig["lights"];
+  globals: SceneConfig["globals"];
+  zones: UiConfig["zones"];
+  tones: UiConfig["tones"];
+  /** Everything the UI puts on screen in words. */
+  copy: {
+    instructions: UiConfig["instructions"];
+    panels: UiConfig["panels"];
+    popup: UiConfig["popup"];
+  };
+  layouts: LayoutRow[];
+  hotspots: HotspotConfig[];
 };
 
 // ── Runtime ───────────────────────────────────────────────────────────────────

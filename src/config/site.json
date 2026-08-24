@@ -1,0 +1,436 @@
+{
+  "_note": "SINGLE SOURCE OF TRUTH for the whole site — the only data file in the app. Shaped as DB TABLES, not as a tree: `layouts` and `hotspots` are sibling arrays and a hotspot names its parent with `layoutId` (the foreign key). The nesting the Resources panel shows is rebuilt at load by src/config/index.ts, and the engine's scene/destination structure is projected at import by src/shared/scene-data/adapter.ts — nothing is generated to disk, so no value exists here twice. Each top-level key maps to one table or one settings row: meta/assets/world/cameras/lights/globals are the site record, zones/tones/copy are its presentation, layouts and hotspots are the two content tables.",
+  "meta": {
+    "id": "everport-la",
+    "label": "Everport Container Terminal"
+  },
+  "startLayoutId": "L01",
+  "assets": {
+    "modelUrl": "/models/la-port-zone-c5-25-compressed.glb",
+    "navmeshUrl": "/models/navmesh/la-port-zone-c5-navmesh-v1.glb",
+    "previewUrl": "/models/la-port-zone-c5-25-compressed.preview.bin",
+    "envFile": "/env.hdr"
+  },
+  "world": {
+    "eyeHeight": 1.8288,
+    "fov": 35,
+    "shadows": true
+  },
+  "cameras": {
+    "dollhouse": {
+      "position": [
+        -669.1815,
+        430.9473,
+        667.9736
+      ],
+      "rotation": [
+        -0.4594,
+        0.611,
+        0
+      ]
+    }
+  },
+  "lights": {
+    "ambientIntensity": 0.8,
+    "ambientColor": "#ffffff",
+    "envIntensity": 0.65,
+    "sunIntensity": 7.9,
+    "sunColor": "#ffffff",
+    "sunDirection": [
+      -1.5,
+      5.9,
+      -2.6
+    ],
+    "shadowMapSize": 1024,
+    "shadowRadius": 0.5,
+    "shadowBias": -0.0005,
+    "shadowNormalBias": 0.55
+  },
+  "globals": {
+    "heroContainerId": "EGHU4829136"
+  },
+  "zones": {
+    "waterside": {
+      "label": "Waterside",
+      "color": "#2ea8ff"
+    },
+    "yard": {
+      "label": "Container Yard",
+      "color": "#ffb020"
+    },
+    "landside": {
+      "label": "Landside",
+      "color": "#7c6cff"
+    },
+    "rail": {
+      "label": "Rail",
+      "color": "#31c48d"
+    },
+    "executive": {
+      "label": "Executive",
+      "color": "#ff6b6b"
+    }
+  },
+  "tones": {
+    "ok": [
+      "NORMAL",
+      "OPERATIONAL",
+      "PASSED",
+      "APPROVED",
+      "CLEARED",
+      "CONNECTED",
+      "ACTIVE",
+      "AVAILABLE",
+      "LOW",
+      "WITHIN TARGET",
+      "CLEAR"
+    ],
+    "warn": [
+      "MODERATE",
+      "SCHEDULED",
+      "PENDING",
+      "MEDIUM",
+      "DEGRADED"
+    ],
+    "alert": [
+      "RESTRICTED",
+      "HIGH",
+      "ALARM",
+      "CRITICAL",
+      "BLOCKED",
+      "FAULT"
+    ]
+  },
+  "copy": {
+    "instructions": {
+      "dollhouse": {
+        "title": "Doll House View Instructions",
+        "actionLabel": "Enter Doll House View",
+        "items": [
+          {
+            "icon": "rotate",
+            "text": "Rotate Around to look at the model from different angles"
+          },
+          {
+            "icon": "pointer",
+            "text": "Double Click on the Model to go to First Person View"
+          }
+        ]
+      },
+      "firstPerson": {
+        "title": "First Person View Instructions",
+        "subtitle": "What every control on screen does",
+        "actionLabel": "Start Exploring",
+        "columns": 3,
+        "groups": [
+          {
+            "label": "Looking around",
+            "items": [
+              {
+                "icon": "moveHorizontal",
+                "text": "Drag left / right to turn and look around"
+              },
+              {
+                "icon": "moveVertical",
+                "text": "Drag up / down to look above and below the horizon"
+              },
+              {
+                "icon": "pointer",
+                "text": "Double-click the ground to walk to that spot"
+              }
+            ]
+          },
+          {
+            "label": "In the scene",
+            "items": [
+              {
+                "icon": "marker",
+                "text": "Click a glowing disc to open that resource’s data card"
+              },
+              {
+                "icon": "resources",
+                "text": "RESOURCES tab on the left edge lists every layout and its hotspots"
+              },
+              {
+                "icon": "walk",
+                "text": "Walk or Teleport in a destination card — travel on foot, or jump straight there"
+              }
+            ]
+          },
+          {
+            "label": "While walking",
+            "items": [
+              {
+                "icon": "stop",
+                "text": "Stop ends the walk wherever you are"
+              },
+              {
+                "icon": "speed",
+                "text": "1× / 5× / 10× sets how fast you walk"
+              },
+              {
+                "icon": "turn",
+                "text": "The turn banner shows the next turn, the distance to it and your arrival time"
+              }
+            ]
+          },
+          {
+            "label": "Bottom bar",
+            "items": [
+              {
+                "icon": "home",
+                "text": "Home returns you to the village start point"
+              },
+              {
+                "icon": "dollhouse",
+                "text": "Dollhouse zooms back out to the overview"
+              },
+              {
+                "icon": "info",
+                "text": "Instructions reopens this guide at any time"
+              },
+              {
+                "icon": "map",
+                "text": "Map opens the terminal map — travel anywhere from it"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "panels": {
+      "hotspotsFlapLabel": "RESOURCES"
+    },
+    "popup": {
+      "journeyTitle": "Cargo Journey"
+    }
+  },
+  "layouts": [
+    {
+      "id": "L01",
+      "name": "Main Channel / Terminal Arrival",
+      "zone": "waterside",
+      "description": "Opening overview; establish terminal context and navigation corridor.",
+      "position": [
+        -1368.0081,
+        0.1599,
+        131.453
+      ],
+      "camera": {
+        "position": [
+          -1548.0729,
+          381.0544,
+          45.4372
+        ],
+        "target": [
+          -1227.0184,
+          60.0,
+          45.4373
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    }
+  ],
+  "hotspots": [
+    {
+      "id": "H01",
+      "layoutId": "L01",
+      "name": "Main Channel",
+      "popupTitle": "Main Channel / Vessel Traffic",
+      "icon": "vessel",
+      "position": [
+        -1262.7102,
+        60.0,
+        -103.9347
+      ],
+      "rotation": [
+        1.5708,
+        0.0,
+        -1.0647
+      ],
+      "fields": [
+        {
+          "name": "vessel_name",
+          "label": "Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "imo_number",
+          "label": "IMO",
+          "type": "string",
+          "value": "9876543"
+        },
+        {
+          "name": "vessel_status",
+          "label": "Status",
+          "type": "enum",
+          "value": "APPROACHING"
+        },
+        {
+          "name": "direction",
+          "label": "Direction",
+          "type": "enum",
+          "value": "INBOUND"
+        },
+        {
+          "name": "speed_knots",
+          "label": "Speed",
+          "type": "decimal",
+          "value": 8.4,
+          "unit": "kn"
+        },
+        {
+          "name": "eta",
+          "label": "ETA",
+          "type": "datetime",
+          "value": "2026-08-21 11:40 PDT"
+        },
+        {
+          "name": "etd",
+          "label": "ETD",
+          "type": "datetime",
+          "value": "2026-08-21 23:30 PDT"
+        },
+        {
+          "name": "destination_berth",
+          "label": "Destination Berth",
+          "type": "string",
+          "value": "Berth 226"
+        },
+        {
+          "name": "distance_to_berth_nm",
+          "label": "Distance to Berth",
+          "type": "decimal",
+          "value": 1.8,
+          "unit": "nm"
+        },
+        {
+          "name": "traffic_condition",
+          "label": "Traffic",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ],
+      "camera": {
+        "position": [
+          -1548.0729,
+          381.0544,
+          45.4372
+        ],
+        "target": [
+          -1227.0184,
+          60.0,
+          45.4373
+        ]
+      }
+    },
+    {
+      "id": "H02",
+      "layoutId": "L01",
+      "name": "Terminal Overview",
+      "popupTitle": "Everport Terminal Overview",
+      "icon": "kpi",
+      "position": [
+        -1357.2612,
+        60.0,
+        66.64
+      ],
+      "rotation": [
+        1.5708,
+        0.0,
+        -1.0647
+      ],
+      "fields": [
+        {
+          "name": "terminal_name",
+          "label": "Terminal",
+          "type": "string",
+          "value": "Everport Container Terminal"
+        },
+        {
+          "name": "operator",
+          "label": "Operator",
+          "type": "string",
+          "value": "Everport Terminal Services"
+        },
+        {
+          "name": "berths",
+          "label": "Berths",
+          "type": "string",
+          "value": "226-236"
+        },
+        {
+          "name": "terminal_area_acres",
+          "label": "Area",
+          "type": "integer",
+          "value": 205,
+          "unit": "acres"
+        },
+        {
+          "name": "total_berth_length_ft",
+          "label": "Berth Length",
+          "type": "integer",
+          "value": 5800,
+          "unit": "ft"
+        },
+        {
+          "name": "number_of_berths",
+          "label": "Berth Count",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "water_depth_ft",
+          "label": "Water Depth",
+          "type": "integer",
+          "value": 47,
+          "unit": "ft"
+        },
+        {
+          "name": "post_panamax_cranes",
+          "label": "Post-Panamax Cranes",
+          "type": "integer",
+          "value": 8
+        },
+        {
+          "name": "reefer_plugs",
+          "label": "Reefer Plugs",
+          "type": "integer",
+          "value": 560
+        },
+        {
+          "name": "on_dock_rail",
+          "label": "On-Dock Rail",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "amp_available",
+          "label": "Shore Power (AMP)",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "operating_mode",
+          "label": "Operating Mode",
+          "type": "string",
+          "value": "Containerized cargo"
+        }
+      ],
+      "camera": {
+        "position": [
+          -1548.0729,
+          381.0544,
+          45.4372
+        ],
+        "target": [
+          -1227.0184,
+          60.0,
+          45.4373
+        ]
+      }
+    }
+  ]
+}

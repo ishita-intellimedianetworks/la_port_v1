@@ -6,29 +6,29 @@ interface TravelRowProps {
   /** L01 / H01 — the stable identifier from the handoff. */
   code: string;
   name: string;
-  /** Currently standing at / selected. */
-  active: boolean;
   onSelect: () => void;
+  /** Trailing affordance. Off wherever a LEADING expand chevron already sits
+   *  beside the row — two arrows on one line read as two separate controls. */
+  showChevron?: boolean;
 }
 
 /**
- * One row of a travel list, shared by the layouts and resources flaps so the
- * two lists cannot drift apart.
+ * One row of the Resources tree — a layout or one of its hotspots.
  *
- * The row SELECTS rather than travels: it opens the destination view, where
- * the overview, the distance and the walking time are read before committing.
- * The earlier version travelled on tap with a separate walk button beside it,
- * which made the choice before showing what it cost.
+ * Tapping it TRAVELS. Every row looks the same whatever the player is standing
+ * on: there is no "you are here" or "currently selected" treatment, because a
+ * highlight that marks where you already are is the one row you will never need
+ * to press, and it competed with hover for the eye.
  */
-export function TravelRow({ code, name, active, onSelect }: TravelRowProps) {
+export function TravelRow({ code, name, onSelect, showChevron = true }: TravelRowProps) {
   return (
     <button
       type="button"
       onClick={onSelect}
       className="flex w-full items-center gap-2.5 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.09] sm:p-3.5"
       style={{
-        background: active ? "rgba(43,124,255,0.16)" : "rgba(255,255,255,0.05)",
-        border: active ? "1.5px solid var(--nav-accent)" : "1.5px solid rgba(255,255,255,0.12)",
+        background: "rgba(255,255,255,0.05)",
+        border: "1.5px solid rgba(255,255,255,0.12)",
       }}
     >
       <span
@@ -43,12 +43,14 @@ export function TravelRow({ code, name, active, onSelect }: TravelRowProps) {
       >
         {name}
       </span>
-      <ChevronRight
-        size={15}
-        strokeWidth={2}
-        className="shrink-0"
-        style={{ color: "var(--nav-text-faint)" }}
-      />
+      {showChevron && (
+        <ChevronRight
+          size={15}
+          strokeWidth={2}
+          className="shrink-0"
+          style={{ color: "var(--nav-text-faint)" }}
+        />
+      )}
     </button>
   );
 }

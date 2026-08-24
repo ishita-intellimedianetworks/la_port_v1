@@ -108,7 +108,7 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
       }
 
       const meters = total * mpu;
-      // The speed multiplier (1×/2×/3×/5×) makes the player arrive faster, so the
+      // The speed multiplier (1×/5×/10×) makes the player arrive faster, so the
       // remaining TIME shrinks by the same factor (distance is unchanged).
       const mult = ctrl.getSpeedMultiplier?.() ?? 1;
       const etaSec = etaSeconds(total, mpu) / mult;

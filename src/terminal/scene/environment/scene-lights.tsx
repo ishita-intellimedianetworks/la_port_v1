@@ -9,7 +9,7 @@ import { useLightsStore } from '@/shared/stores/lights-store';
 import type { LightsConfig, ResolvedLights } from '@/shared/types';
 
 // Shared lighting + shadow defaults — dialled in via the Leva panel and baked
-// here. Any per-venue `lights` block in scenes.json overrides these field by
+// here. Any `lights` block in site.json overrides these field by
 // field; whatever a venue omits falls back to the value below.
 const DEFAULT_LIGHTS = {
   ambientIntensity: 0.8,

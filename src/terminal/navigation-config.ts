@@ -59,21 +59,24 @@ export const navConfig = {
     // ALL readouts (destination cards AND the turn HUD) recompute. Nothing else to edit.
     // ════════════════════════════════════════════════════════════════════
     /** Whole-site size: the model's longest extent presented as this many
-     *  metres. 1_000 ≈ a 1 km village footprint — realistic distances + walk
-     *  times at human pace (10 km made every walk a ~45-min crawl). Bump to
-     *  1_500 / 2_000 for a larger venue. This is THE knob for site size. */
-    siteSpanMeters: 1_000,
+     *  metres. The Everport zone-C5 model is authored 1:1 in metres — its
+     *  navmesh spans ~990 units and the terminal really is ~1 km end to end —
+     *  so this matches siteSpanUnits and every readout is life-size. This is
+     *  THE knob for site size. */
+    siteSpanMeters: 990,
     /** Walking speed in metres/second (constant pace → realistic ETA).
      *  6 km/h = 6000 / 3600 ≈ 1.667 m/s (average human walking speed). */
     walkMps: 6000 / 3600,
     /** Walk-speed multiplier the speed UI defaults to / each walk starts at.
-     *  The speed control offers 1× / 3× / 5×, starting on 5×. */
+     *  The speed control offers 1× / 5× / 10×, starting on 5×. */
     defaultSpeedMult: 5,
 
     // ── Fixed model fact (not a tuning knob) ──
-    /** The model's longest extent in WORLD UNITS, measured from its bounding
-     *  box. Only change this if the 3D model itself changes. */
-    siteSpanUnits: 530,
+    /** The walkable site's longest extent in WORLD UNITS, measured from the
+     *  navmesh bounding box (X 840, Z 990 for zone C5 — the MODEL box is far
+     *  larger, but it carries the surrounding harbour and city, which nobody
+     *  walks). Only change this if the 3D model itself changes. */
+    siteSpanUnits: 990,
     /** Derived metres-per-world-unit used for every distance/ETA readout.
      *  Independent of the controller's getMetersPerUnit() (eye-height ratio),
      *  which must stay as-is because it sizes the 3D route line / pin. */

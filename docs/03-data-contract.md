@@ -1,16 +1,31 @@
 # 03 — Data Contract
 
-Config is split across four files under `src/data/`, each with one job. Nothing
-else in the app imports them directly — everything goes through
-`src/data/config.ts`, which types them, derives the lookup maps, and validates
-them at load.
+All config lives in ONE file — `src/config/site.json`. Nothing else in the app
+imports it directly: everything goes through `src/config/index.ts`, which types
+the document, slices it into the views the app reads, rebuilds the layout →
+hotspot nesting, derives the lookup maps, and validates it at load.
 
-| File | Owns |
+### Shaped as tables, not as a tree
+
+`site.json` is written the way a database will hand it back, so the eventual
+migration is a load rather than a rewrite:
+
+| Key | Becomes |
 |---|---|
-| `scene.json` | Model / navmesh / preview / floorplan / HDRI URLs, world params, cameras, lights, terminal facts |
-| `ui.json` | Every piece of on-screen copy, the theme, zone colours, enum tone keywords |
-| `layouts.json` | L01-L10 |
-| `hotspots.json` | H01-H30 and their popup field dictionaries |
+| `meta`, `assets`, `world`, `cameras`, `lights`, `globals` | the **site record** — exported as `scene` |
+| `theme`, `zones`, `tones`, `copy` | its **presentation** — exported as `ui` |
+| `layouts[]` | the **layouts table** — PK `id` (`L01`–`L10`) |
+| `hotspots[]` | the **hotspots table** — PK `id` (`H01`–`H30`), FK `layoutId` |
+
+`layouts` and `hotspots` are SIBLING arrays. A hotspot names its parent with
+`layoutId` and that is the only place parentage is written; the nested list the
+Resources panel shows (`layout.hotspots`, `RESOURCE_TREE`) is rebuilt at import.
+The layout row used to carry its own `hotspots: []` id list as well, and the
+load-time validator existed largely to catch the two disagreeing — a fact that
+cannot be written twice cannot drift.
+
+`index.ts` runs the checks a database would enforce with constraints: PK format,
+PK uniqueness, FK integrity, and the hero-container invariant.
 
 The handoff's §4 recommended data model and the data-points doc's "Recommended
 API Shape" are both honoured: stable IDs, snake_case field names, and a
@@ -18,14 +33,14 @@ API Shape" are both honoured: stable IDs, snake_case field names, and a
 hotspot-specific hard-coded UI.
 
 > **Coordinates are placeholders.** Every `position`, `rotation` and
-> `camera` in `layouts.json` / `hotspots.json` is `[0,0,0]` until they are
+> `camera` in the `layouts` / `hotspots` tables is `[0,0,0]` until it is
 > authored against the real Everport model. The runtime handles this itself:
 > `isPlaceholder()` makes layout navigation fall back to `scene.cameras.start`,
 > and suppresses 3D markers that would otherwise pile up on the world origin.
 > Both behaviours disappear on their own the moment real values land — there is
 > no flag to remember to flip.
 
-## scene.json
+## site.json › the site record (`scene`)
 
 ```jsonc
 {
@@ -82,7 +97,7 @@ hotspot-specific hard-coded UI.
 }
 ```
 
-## ui.json
+## site.json › presentation (`ui`)
 
 Every string the user sees lives here — loader copy, the instructions card,
 sidebar and panel labels, badge text, zone labels and colours, and the keyword
@@ -103,7 +118,7 @@ accent colours never means touching a component.
 }
 ```
 
-## layouts.json — layout object
+## site.json › `layouts[]` — one row
 
 Mirrors the handoff §4 recommendation, camelCased for TS ergonomics; the
 snake_case names survive on the wire fields where the doc specifies them.
@@ -121,12 +136,15 @@ snake_case names survive on the wire fields where the doc specifies them.
   },
   "teleportEnabled": true,
   "walkable": true,                // false = overview-only, teleport lands exactly at this pose
-  "exactPose": false,              // true = keep authored Y instead of snapping to navmesh
-  "hotspots": ["H05", "H06", "H07"] // ordered - drives the Hotspots panel for this layout
+  "exactPose": false               // true = keep authored Y instead of snapping to navmesh
 }
 ```
 
-## hotspots.json — hotspot object
+There is deliberately **no** `hotspots: []` column. The children are joined off
+`hotspots[].layoutId` at import, in table order, and handed back as
+`layout.hotspots` — so every existing reader is unchanged.
+
+## site.json › `hotspots[]` — one row
 
 ```jsonc
 {

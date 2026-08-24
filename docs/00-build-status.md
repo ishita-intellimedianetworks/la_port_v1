@@ -17,10 +17,11 @@ not work in the app. Vendoring removes the class of bug entirely.
 ```
 src/app/                    Next.js shell — routes, fonts, global styles
 src/config/                 OUR data: the four JSONs + schema + validation
-  scene.json                model/navmesh URLs, cameras, lights, world params
-  layouts.json              L01-L10
-  hotspots.json             H01-H30
-  ui.json                   every on-screen string
+  site.json                 THE config file — one document, table-shaped:
+                              meta/assets/world/cameras/lights/globals  site record
+                              theme/zones/tones/copy                    presentation
+                              layouts[]                                 L01-L10  (PK id)
+                              hotspots[]                                H01-H30  (PK id, FK layoutId)
   schema.ts  index.ts       types + the single typed entry point
 
 src/terminal/               the digital-twin experience  [VENDORED engine]
@@ -257,7 +258,7 @@ away from its source and defeat the point of vendoring, so those rules are
 ## Placeholders, by design
 
 - **Model** — the LA Olympics village GLB stands in for Everport. The swap is
-  the five `assets.*` URLs in `scene.json`.
+  the five `assets.*` URLs in `site.json`.
 - **Layout cameras** — real, but borrowed: poses authored in-scene against this
   exact village GLB in the HoloTwin reference projects (6 POI cameras, the
   monument/start pose, plus the registered `entry` and `dollHouseCamera`). Each
@@ -275,9 +276,9 @@ Nothing structural. Only coordinates and asset URLs:
 
 | File | What changes |
 |---|---|
-| `scene.json` | the five `assets.*` URLs, `cameras.entry` / `dollhouse` / `start`, `world.eyeHeight`, `meta.modelStatus` |
-| `layouts.json` | `position`, `camera.position`, `camera.target` × 10 |
-| `hotspots.json` | `position` and `rotation` × 30 markers |
+| `site.json` › `assets` / `cameras` / `world` / `meta` | the five `assets.*` URLs, `cameras.entry` / `dollhouse` / `start`, `world.eyeHeight`, `meta.modelStatus` |
+| `site.json` › `layouts[]` | `position`, `camera.position`, `camera.target` × 10 |
+| `site.json` › `hotspots[]` | `position` and `rotation` × 30 markers |
 
 Every field value, popup title, icon, zone, data source, asset link, journey
 step and piece of UI copy stays as it is. `scripts/author-positions.cjs` is the

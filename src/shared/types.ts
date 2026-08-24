@@ -41,7 +41,7 @@ export type DestinationCategory =
   | "infra"
   // ── HoloTwin LA Port zones ────────────────────────────────────────────────
   // The terminal's five operating areas. Each groups the layouts (L01-L10)
-  // that sit in it; see scripts/build-scenes.cjs.
+  // that sit in it; see src/shared/scene-data/adapter.ts.
   | "waterside"
   | "yard"
   | "landside"
@@ -108,7 +108,7 @@ export type Destination = {
   }[];
   /** Render this destination's hotspots as 3D in-scene markers too (disc +
    *  ring + hover name). Off by default — hotspots then only appear as map
-   *  pins. Set per destination in scenes.json. */
+   *  pins. Set per destination by the site adapter. */
   showHsIn3d?: boolean;
   /** Explicitly teleport-only, BOTH directions: no walk/route TO this spot,
    *  and while standing AT it every other destination is teleport-only too.
@@ -177,7 +177,7 @@ export type TransportDestination = {
   accessible?: boolean;
 };
 
-/** destinations grouped by category label, as authored in scenes.json. */
+/** destinations grouped by category label, projected from `site.json` › `zones`. */
 export type DestinationsByCategory = Partial<Record<DestinationCategory, Destination[]>>;
 
 /** Event-day update feed item (closures, alerts, schedule changes, info). Not a
@@ -254,7 +254,7 @@ export type FloorTransition = {
  * Per-venue lighting setup. Every field is optional — anything omitted falls
  * back to the shared defaults baked into `SceneLights`. Lets each scene/venue
  * (village, stadium, hotel room, …) dial in its own sun/ambient/shadow look
- * straight from `scenes.json` without touching component code.
+ * straight from `site.json` without touching component code.
  */
 export type LightsConfig = {
   /** Ambient fill intensity. Default 0.8. */

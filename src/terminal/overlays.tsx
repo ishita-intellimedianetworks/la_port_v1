@@ -18,7 +18,6 @@ import { NavHud } from "./overlay/nav-hud";
 import { PanelHeader } from "./overlay/destination-panel/panel-header";
 import { DEST_CATEGORIES } from "./overlay/destination-panel/category-meta";
 import { HotspotsFlap } from "./overlay/hotspots-flap";
-import { LayoutsFlap } from "./overlay/layouts-flap";
 import { BottomBar } from "./overlay/bottom-bar";
 import { SpeedControl } from "./overlay/speed-control";
 import { useTerminalUi } from "./context/ui-context";
@@ -96,10 +95,9 @@ export default function Overlays() {
   // with the left-side panels: opening a left panel — or walking — closes it,
   // and opening it closes the left panels.
   const [venuesOpen, setVenuesOpen] = useState(false);
-  // The two edge flaps are mutually exclusive with each other and with the map,
-  // so only one panel ever covers the scene.
+  // The one edge flap ("Resources": layouts + their hotspots), mutually
+  // exclusive with the map.
   const [hotspotsFlapOpen, setHotspotsFlapOpen] = useState(false);
-  const [layoutsFlapOpen, setLayoutsFlapOpen] = useState(false);
   // The at-home accommodation/hostel cards auto-open at home; this lets the user
   // dismiss them with the corner close button. Reset when leaving home (below) so
   // the card returns on the next arrival.
@@ -242,6 +240,37 @@ export default function Overlays() {
     }
   }, [currentDest?.id]);
 
+  /**
+   * EXACTLY ONE overlay at a time.
+   *
+   * Resources, the map, the instructions card and a hotspot's data card each
+   * own the screen while they are up, so opening any of them closes the rest.
+   * This used to be a handful of `setThisFalse()` calls copied into each
+   * button, and they had drifted: the map closed Resources but not the
+   * instructions, nothing at all closed the data card, and clicking a bead
+   * left the Resources panel sitting on top of the card it had just opened.
+   *
+   * One function, every caller naming what it is KEEPING, so a new overlay is
+   * one more line here rather than an edit to every other button.
+   */
+  const closeOverlays = useCallback(
+    (keep?: "resources" | "map" | "instructions" | "data") => {
+      if (keep !== "resources") setHotspotsFlapOpen(false);
+      if (keep !== "map") setMapExpanded(false);
+      if (keep !== "instructions") setInstructionsOpen(false);
+      if (keep !== "data") useNavUiStore.getState().setHotspotInfo(null);
+    },
+    [setMapExpanded],
+  );
+
+  // Clicking a bead in the 3D scene opens its data card from inside the canvas,
+  // which never touches these panels — so the card is the one overlay that has
+  // to clear the others from here rather than at its own call site.
+  const dataCardOpen = !!hotspotInfo;
+  useEffect(() => {
+    if (dataCardOpen) closeOverlays("data");
+  }, [dataCardOpen, closeOverlays]);
+
   // "Explore the accommodation" — the floor authored as a transition. Used only
   // to label the accommodation overlay now that the enter-interior action is off.
   const exploreT = activeFloor?.transitions?.[0];
@@ -274,10 +303,10 @@ export default function Overlays() {
   // selection / "currently at", clear the preview, return to the start view
   // (mark at-home optimistically).
   const handleHome = useCallback(() => {
-    // Leaving for home also closes the map window (so it doesn't linger open,
-    // just swapping its radio, while the player teleports behind it) and the
-    // right-edge venues panel (so the home overlay isn't hidden behind it).
-    setMapExpanded(false);
+    // Going home is an arrival, so nothing that was open belongs to where the
+    // player is about to be — the map would linger over the teleport, and a
+    // panel would hide the home overlay behind it.
+    closeOverlays();
     setVenuesOpen(false);
     // Clicking Home only ever (re)opens the at-home card — re-clicking never
     // closes it; only the card's X does.
@@ -295,7 +324,7 @@ export default function Overlays() {
       ctrl?.teleportTo([p[0], surfaceY, p[2]], r);
     });
     setAtHome(true);
-  }, [goHome, playerControllerRef, activeFloor, startPosition, startRotation, setAtHome, setMapExpanded, triggerFloorTransition]);
+  }, [goHome, playerControllerRef, activeFloor, startPosition, startRotation, setAtHome, closeOverlays, triggerFloorTransition]);
 
   // Hide the standing-at destination from its own list (re-appears once it un-latches).
 
@@ -553,34 +582,16 @@ export default function Overlays() {
       )}
 
 
-      {/* Left edge: every resource, as a travel list. Tucked away while the
-          instructions card is up — the card is what the viewer is meant to be
-          reading, and chrome sliding in behind it competes for attention. */}
+      {/* Left edge: the single "Resources" panel — layouts, each expandable
+          to its child hotspots. Tucked away while the instructions card is
+          up — the card is what the viewer is meant to be reading, and chrome
+          sliding in behind it competes for attention. */}
       {phase === "firstPerson" && (
         <HotspotsFlap
           open={hotspotsFlapOpen}
           onOpenChange={(next) => {
+            if (next) closeOverlays("resources");
             setHotspotsFlapOpen(next);
-            if (next) {
-              setLayoutsFlapOpen(false);
-              setMapExpanded(false);
-            }
-          }}
-          disabled={fadeVisible}
-          tucked={isMoving || instructionsOpen}
-        />
-      )}
-
-      {/* Right edge: L01-L10. */}
-      {phase === "firstPerson" && (
-        <LayoutsFlap
-          open={layoutsFlapOpen}
-          onOpenChange={(next) => {
-            setLayoutsFlapOpen(next);
-            if (next) {
-              setHotspotsFlapOpen(false);
-              setMapExpanded(false);
-            }
           }}
           disabled={fadeVisible}
           tucked={isMoving || instructionsOpen}
@@ -593,20 +604,18 @@ export default function Overlays() {
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen}
           mapOpen={mapExpanded}
           onOpenMap={() => {
-            setHotspotsFlapOpen(false);
-            setLayoutsFlapOpen(false);
-            setMapExpanded(!mapExpanded);
+            // Read the toggle BEFORE closeOverlays sets it false, or the map
+            // could never be opened — only closed and immediately reopened.
+            const next = !mapExpanded;
+            closeOverlays("map");
+            setMapExpanded(next);
           }}
           onDollhouse={() => {
-            setHotspotsFlapOpen(false);
-            setLayoutsFlapOpen(false);
-            setMapExpanded(false);
+            closeOverlays();
             triggerFloorTransition(() => setPhase("dollhouse"));
           }}
           onInstructions={() => {
-            setHotspotsFlapOpen(false);
-            setLayoutsFlapOpen(false);
-            setMapExpanded(false);
+            closeOverlays("instructions");
             setInstructionsOpen(true);
           }}
           onHome={handleHome}

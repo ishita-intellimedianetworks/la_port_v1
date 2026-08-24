@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import type { ComponentType } from "react";
 import { Home, Info, Map as MapIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 
 interface BottomBarProps {
@@ -19,8 +20,13 @@ interface BottomBarProps {
  *
  * These are the four actions that work from anywhere, which is why they live
  * here rather than in either edge flap — those are scoped to a layout and its
- * hotspots. Icons only, with the name on hover, so the dock stays the same
- * compact size on a phone as on a desktop.
+ * hotspots.
+ *
+ * Four FREE-STANDING circles, not a pill with buttons inside it: the enclosing
+ * dock plus a ring per icon meant two nested glass surfaces reading as one
+ * heavy slab. Icons only, no hover label — the tooltip floating above the bar
+ * was more chrome than four self-evident glyphs need. `aria-label` still names
+ * each one for screen readers.
  */
 export function BottomBar({
   visible,
@@ -39,14 +45,11 @@ export function BottomBar({
         pointerEvents: visible ? undefined : "none",
       }}
     >
-      <div
-        className="flex items-center gap-2 rounded-full p-2 sm:gap-2.5 sm:p-2.5"
-        style={{ ...NAV_GLASS_PANEL, border: "1.5px solid var(--nav-border)" }}
-      >
-        <BarButton icon={DollhouseGlyph} label="Dollhouse" onClick={onDollhouse} />
-        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} />
-        <BarButton icon={Info} label="Instructions" onClick={onInstructions} />
+      <div className="flex items-center gap-3">
         <BarButton icon={Home} label="Home" onClick={onHome} />
+        <BarButton icon={DollhouseGlyph} label="Dollhouse" onClick={onDollhouse} />
+        <BarButton icon={Info} label="Instructions" onClick={onInstructions} />
+        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} />
       </div>
     </div>
   );
@@ -66,48 +69,37 @@ function BarButton({
   onClick: () => void;
   active?: boolean;
 }) {
-  // Hover state drives the label rather than `title`, so it appears instantly
-  // and matches the rest of the UI instead of the OS tooltip.
-  const [hovered, setHovered] = useState(false);
-
+  // The hover, lifted from the ARCHVIZ dock: the circle grows a bare 5% and its
+  // icon warms from 86%-white to pure white over 200ms on the default `ease`.
+  // Small on purpose — at 1.1 the circles start colliding with their 12px gaps,
+  // and the dock reads as jumping rather than responding. The press is a 1px
+  // nudge DOWN with no scale-down, so the button never fights its own hover.
+  //
+  // Rest colour is a class, not an inline style, so `hover:text-white` can win;
+  // the active state is the one case that sets colour inline.
   return (
-    <span className="relative flex">
-      {/* The label floats ABOVE the dock so showing it never changes the dock's
-          size — a bar that grows under the cursor is hard to aim at. */}
-      <span
-        aria-hidden
-        className="nav-body pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity duration-150"
-        style={{
-          ...NAV_GLASS_PANEL,
-          border: "1.5px solid var(--nav-border)",
-          color: "var(--nav-text)",
-          opacity: hovered ? 1 : 0,
-        }}
-      >
-        {label}
-      </span>
-
-      <button
-        type="button"
-        onClick={onClick}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        onFocus={() => setHovered(true)}
-        onBlur={() => setHovered(false)}
-        aria-label={label}
-        aria-pressed={active}
-        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-white/[0.14] sm:h-12 sm:w-12"
-        style={{
-          background: active ? "var(--nav-accent)" : "rgba(255,255,255,0.05)",
-          // Every icon carries its own ring, so each reads as a distinct target
-          // rather than a glyph floating on the dock.
-          border: active ? "1.5px solid rgba(255,255,255,0.5)" : "1.5px solid rgba(255,255,255,0.18)",
-          color: active ? "#ffffff" : "var(--nav-text)",
-        }}
-      >
-        <Icon size={19} strokeWidth={2} color="currentColor" />
-      </button>
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "flex h-12 w-12 cursor-pointer items-center justify-center rounded-full",
+        "transition-[scale,translate,color,background-color,border-color] duration-200",
+        "hover:scale-105 active:translate-y-px",
+        !active && "text-[rgba(255,255,255,0.86)] hover:text-white",
+      )}
+      style={{
+        ...NAV_GLASS_PANEL,
+        // The circle IS the surface now, so it carries the glass and the ring
+        // the dock used to carry.
+        background: active ? "var(--nav-accent)" : "var(--nav-glass-strong)",
+        border: active ? "1.5px solid rgba(255,255,255,0.5)" : "1.5px solid var(--nav-border)",
+        ...(active ? { color: "#ffffff" } : null),
+      }}
+    >
+      <Icon size={20} strokeWidth={1.9} color="currentColor" />
+    </button>
   );
 }
 

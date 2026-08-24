@@ -16,8 +16,9 @@ const THREE = require("three");
 const { Pathfinding } = require("three-pathfinding");
 
 const ROOT = path.join(__dirname, "..");
-const scene = JSON.parse(fs.readFileSync(path.join(ROOT, "src/config/scene.json"), "utf8"));
-const layouts = JSON.parse(fs.readFileSync(path.join(ROOT, "src/config/layouts.json"), "utf8")).layouts;
+const site = JSON.parse(fs.readFileSync(path.join(ROOT, "src/config/site.json"), "utf8"));
+const scene = site;          // meta / assets / world / cameras / lights / globals
+const layouts = site.layouts;
 
 function parseGLB(buf) {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);

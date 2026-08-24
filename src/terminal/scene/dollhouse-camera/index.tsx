@@ -125,7 +125,7 @@ export default function DollhouseCamera({
 
   // ── Authoring aid ─────────────────────────────────────────────────────────
   // After every orbit/zoom interaction, once the damping settles, log the live
-  // camera pose in scenes.json `dollHouseCamera` format (rotation as YXZ
+  // camera pose in `site.json` › `cameras.dollhouse` format (rotation as YXZ
   // euler — the order seatAtHome applies) so a good framing can be copied
   // straight into the config.
   const poseDirty = useRef(false);
@@ -492,7 +492,7 @@ export default function DollhouseCamera({
     camera.lookAt(orbitCenter.current);
 
     // Log the pose once the damped orbit has settled after an interaction —
-    // the printed line is paste-ready for scenes.json.
+    // the printed line is paste-ready for site.json.
     if (
       poseDirty.current &&
       !isDragging.current &&

@@ -5,9 +5,15 @@ import React, { useEffect, useState } from "react";
 /**
  * InstructionsOverlay — full-screen welcome / instructions panel.
  *
- * Shared by interior (dollhouse) and exterior. Renders a centred title, a
- * row of glass cards each pairing an icon with a short instruction, and a
- * single CTA button.
+ * Shared by interior (dollhouse) and exterior. Renders a centred title, the
+ * instruction tiles (each pairing an icon with a short line), and a single CTA
+ * button.
+ *
+ * Tiles arrive either as one flat list — the dollhouse card, which teaches two
+ * gestures — or as labelled GROUPS. The first-person card documents every icon
+ * and every bar on screen, and a dozen unlabelled tiles in one slab is a wall:
+ * the headings ("Looking around", "While walking", "Bottom bar") are what let a
+ * viewer find the one control they are looking at.
  *
  * The overlay fades its opacity 1 → 0 over `FADE_MS` when `visible` flips
  * false, then unmounts. The on-screen fade is what masks the moment the
@@ -19,10 +25,22 @@ export interface InstructionItem {
   text: string;
 }
 
+export interface InstructionGroup {
+  label: string;
+  items: InstructionItem[];
+}
+
 export interface InstructionsOverlayProps {
   visible: boolean;
   title: string;
-  instructions: InstructionItem[];
+  /** Optional line under the title. */
+  subtitle?: string;
+  /** Flat tile list. Ignored when `groups` is given. */
+  instructions?: InstructionItem[];
+  /** Labelled blocks of tiles — used by the long first-person card. */
+  groups?: InstructionGroup[];
+  /** Tiles per row on a normal viewport (2 or 3). Defaults to 2. */
+  columns?: number;
   actionLabel: string;
   onAction: () => void;
   /**
@@ -71,10 +89,20 @@ const GLASS_BLUR: React.CSSProperties = {
   WebkitBackdropFilter: "var(--ui-glass-backdrop)",
 };
 
+// Tailwind needs whole class names in the source to emit them, so the column
+// count maps to a literal rather than being interpolated.
+const GRID_COLS: Record<number, string> = {
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+};
+
 export function InstructionsOverlay({
   visible,
   title,
+  subtitle,
   instructions,
+  groups,
+  columns = 2,
   actionLabel,
   onAction,
   backdropClassName = "bg-black/30",
@@ -83,6 +111,7 @@ export function InstructionsOverlay({
 }: InstructionsOverlayProps) {
   const surfaceClass = cardVariant === "dark" ? "ui-glass" : "ui-white-glass";
   const buttonHoverClass = cardVariant === "dark" ? "hover:bg-white/10" : "hover:bg-white/30";
+  const gridClass = GRID_COLS[columns] ?? GRID_COLS[2];
   const [shouldRender, setShouldRender] = useState(visible);
   useEffect(() => {
     if (visible) {
@@ -96,33 +125,70 @@ export function InstructionsOverlay({
 
   if (!shouldRender) return null;
 
+  const tile = (item: InstructionItem, i: number) => (
+    <div
+      key={i}
+      className={`${surfaceClass} flex items-center gap-4 short:gap-2.5 px-4 short:px-3 py-3 short:py-2 rounded-2xl short:rounded-xl`}
+      style={GLASS_BLUR}
+    >
+      <div
+        className={`${surfaceClass} ui-glass--borderless w-10 h-10 short:w-7 short:h-7 flex items-center justify-center rounded-full shrink-0`}
+        style={GLASS_BLUR}
+      >
+        {item.icon}
+      </div>
+      <p
+        className="text-[12.5px] short:text-[10px] font-semibold tracking-wide leading-snug"
+        style={WHITE_TEXT}
+      >
+        {item.text}
+      </p>
+    </div>
+  );
+
+  // Groups scroll as one body: on a laptop in landscape the full first-person
+  // card is taller than the viewport, and a cropped last row hides the very
+  // controls it is describing.
+  const body = groups?.length ? (
+    // Width budget: the panel caps at 100vw-48px and adds px-10 (short: px-5)
+    // of its own padding, so the body must stay inside 100vw-128px (short:
+    // 100vw-88px) or the panel's overflow-hidden clips the right-hand column.
+    <div className="ui-scrollbar flex w-[min(920px,calc(100vw-128px))] short:w-[min(760px,calc(100vw-88px))] max-h-[62dvh] short:max-h-[58dvh] flex-col gap-4 short:gap-2 overflow-y-auto px-1">
+      {groups.map((group) => (
+        <div key={group.label} className="flex flex-col gap-2 short:gap-1.5">
+          <p
+            className="text-[11px] short:text-[9px] font-semibold uppercase tracking-[0.16em] opacity-70"
+            style={WHITE_TEXT}
+          >
+            {group.label}
+          </p>
+          <div className={`grid ${gridClass} gap-3 short:gap-2`}>{group.items.map(tile)}</div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className={`grid ${gridClass} gap-4 short:gap-2 max-w-3xl px-6 short:px-2 w-full`}>
+      {(instructions ?? []).map(tile)}
+    </div>
+  );
+
   const content = (
     <>
-      <p className="text-white text-[20px] short:text-[14px] font-semibold tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
-        {title}
-      </p>
-      <div className="grid grid-cols-2 gap-4 short:gap-2 max-w-3xl px-6 short:px-2 w-full">
-        {instructions.map((item, i) => (
-          <div
-            key={i}
-            className={`${surfaceClass} flex items-center gap-5 short:gap-2.5 px-5 short:px-3 py-3.5 short:py-2 rounded-2xl short:rounded-xl`}
-            style={GLASS_BLUR}
+      <div className="flex flex-col items-center gap-1">
+        <p className="text-white text-[20px] short:text-[14px] font-semibold tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+          {title}
+        </p>
+        {subtitle && (
+          <p
+            className="text-[12px] short:text-[10px] font-medium tracking-wide opacity-70"
+            style={WHITE_TEXT}
           >
-            <div
-              className={`${surfaceClass} ui-glass--borderless w-10 h-10 short:w-7 short:h-7 flex items-center justify-center rounded-full shrink-0`}
-              style={GLASS_BLUR}
-            >
-              {item.icon}
-            </div>
-            <p
-              className="text-[13px] short:text-[10px] font-semibold tracking-wider leading-tight"
-              style={WHITE_TEXT}
-            >
-              {item.text}
-            </p>
-          </div>
-        ))}
+            {subtitle}
+          </p>
+        )}
       </div>
+
+      {body}
 
       <button
         onClick={onAction}
@@ -145,7 +211,7 @@ export function InstructionsOverlay({
     >
       {contained ? (
         <div
-          className="instr-panel relative overflow-hidden rounded-3xl px-10 py-9 short:px-5 short:py-4 short:rounded-2xl flex flex-col items-center gap-5 short:gap-3 max-w-fit"
+          className="instr-panel relative overflow-hidden rounded-3xl px-10 py-9 short:px-5 short:py-4 short:rounded-2xl flex flex-col items-center gap-5 short:gap-3 max-w-[min(1000px,calc(100vw-48px))]"
           style={{ ...GLASS_BLUR, ...innerExitStyle(visible) }}
         >
           <div className="instr-panel__pan" aria-hidden />

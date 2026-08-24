@@ -56,7 +56,7 @@ interface Props {
    *  first person. Interior floors always enter first person directly. */
   dollhouseFirstVisit?: boolean;
   /** Per-venue floor overrides, keyed by floor id and merged field-by-field
-   *  over the shared scenes.json config. Lets a route swap a venue's model /
+   *  over the shared site config. Lets a route swap a venue's model /
    *  camera without touching the config every other route reads (the /lighting
    *  route uses this for the SoFi stadium delivery). Pass a module-level
    *  constant — identity feeds the floors memo. Default: none (/ unchanged). */
