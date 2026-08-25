@@ -63,11 +63,19 @@ export type StreamConfig = {
   };
   /** Distance fog, which is what lets `tiers.far.distance` be small: chunks
    *  dissolve into the backdrop before the unload boundary instead of being
-   *  cut off at it. The colour is not authored — it tracks the live scene
-   *  background, which crossfades with the view. `start` is where the fade
-   *  begins ("near"|"mid"|"midfar"|"far" = that band edge, or a number = that
-   *  fraction of the unload radius); it always ENDS at the unload radius. */
-  fog: { enabled: boolean; start: number | "near" | "mid" | "midfar" | "far" };
+   *  cut off at it. Fog is the cheap substitute for loaded megabytes. */
+  fog: {
+    enabled: boolean;
+    /** Where the fade BEGINS. A band name retunes itself when the bands move
+     *  ("midfar" is halfway between the mid and far edges); a number is that
+     *  fraction of the fade's end. It always ENDS just inside the unload
+     *  radius, so there is nothing to keep in sync. */
+    start: number | "near" | "mid" | "midfar" | "far";
+    /** Normally omitted: the fog then tracks the live scene background, which
+     *  is what keeps it the same colour as the sky it dissolves into while
+     *  that sky is crossfading. Set a hex only to pin it. */
+    color?: string;
+  };
 };
 
 // ── site.json › the site record ───────────────────────────────────────────────

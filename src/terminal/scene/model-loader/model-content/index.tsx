@@ -6,7 +6,7 @@ import { useGLTF, useAnimations, Bvh } from "@react-three/drei";
 import * as THREE from "three";
 import { patchMeshForReveal } from "@/shared/ui/screens/loading-screen/reveal";
 import type { SharedUniforms } from "@/shared/ui/screens/loading-screen/reveal";
-import { acquireGLTF, releaseGLTF } from "@/shared/runtime";
+import isLowPower, { acquireGLTF, releaseGLTF } from "@/shared/runtime";
 import { softenModelEdges } from "../edge-feather";
 
 export interface SingleModelProps {
@@ -54,6 +54,15 @@ export function SingleModelContent({
         await gl.compileAsync(scene, camera, rootScene);
         if (cancelled) return;
         // Textures still upload lazily on first draw — push them now too.
+        //
+        // DESKTOP ONLY. Uploading a whole venue's texture set in one burst is a
+        // VRAM spike, and a phone answers a spike it cannot fit by dropping the
+        // WebGL context — which here is fatal rather than recoverable, because
+        // the close() below throws away the only CPU copy the texture could be
+        // re-uploaded from. On a phone, lazy per-draw upload spreads the same
+        // work over the first few frames and never asks for it all at once; the
+        // hitch it costs is the trade that keeps the context alive.
+        if (isLowPower()) return;
         scene.traverse((obj: THREE.Object3D) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh || !mesh.material) return;

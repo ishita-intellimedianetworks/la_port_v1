@@ -25,20 +25,23 @@ export function TravelRow({ code, name, onSelect, showChevron = true }: TravelRo
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center gap-2.5 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.09] sm:p-3.5"
+      // `short:` trims the row to ~36px so a landscape phone shows a list
+      // rather than three rows and a scrollbar. Still a comfortable tap target
+      // at that height, and the type only drops half a point.
+      className="flex w-full items-center gap-2.5 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.09] sm:p-3.5 short:gap-2 short:rounded-xl short:p-2"
       style={{
         background: "rgba(255,255,255,0.05)",
         border: "1.5px solid rgba(255,255,255,0.12)",
       }}
     >
       <span
-        className="nav-display shrink-0 text-[11px] font-semibold tabular-nums"
+        className="nav-display shrink-0 text-[11px] font-semibold tabular-nums short:text-[10px]"
         style={{ color: "var(--nav-text)" }}
       >
         {code}
       </span>
       <span
-        className="nav-display min-w-0 flex-1 truncate text-[13px] font-semibold uppercase tracking-[0.03em] sm:text-[13.5px]"
+        className="nav-display min-w-0 flex-1 truncate text-[13px] font-semibold uppercase tracking-[0.03em] sm:text-[13.5px] short:text-[12px]"
         style={{ color: "var(--nav-text)" }}
       >
         {name}

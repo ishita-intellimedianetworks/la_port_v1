@@ -32,7 +32,7 @@ export function PanelSearch({
 }: PanelSearchProps) {
   return (
     <div
-      className="flex h-9 items-center gap-2 rounded-[10px] px-2.5"
+      className="flex h-9 items-center gap-2 rounded-[10px] px-2.5 short:h-8 short:gap-1.5 short:px-2"
       style={{
         background: "rgba(255,255,255,0.06)",
         border: "1.5px solid var(--nav-border)",
@@ -55,7 +55,7 @@ export function PanelSearch({
             onChange("");
           }
         }}
-        className="nav-body min-w-0 flex-1 bg-transparent text-[13px] font-normal outline-none placeholder:opacity-60"
+        className="nav-body min-w-0 flex-1 bg-transparent text-[13px] font-normal outline-none placeholder:opacity-60 short:text-[12px]"
         style={{ color: "var(--nav-text)", userSelect: "text" }}
       />
       {value && (

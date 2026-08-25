@@ -1,36 +1,41 @@
 "use client";
 import { useEffect } from "react";
 import { useOrientation } from "@/shared/stores/use-orientation";
-import { usePhonePortrait, useMediaQuery } from "@/shared/responsive";
+import { usePortrait } from "@/shared/responsive";
 
 /**
- * The rotate-your-device guard.
+ * The rotate-your-device guard. THE APP IS LANDSCAPE ONLY.
  *
- * It asks a NARROWER question than "is this window taller than it is wide?":
- * the walk-through needs a wide viewport, but only a PHONE can fix that by
- * turning. A tablet in portrait has room for the whole UI, and a desktop
- * browser in a tall window cannot rotate anything — telling either of them to
- * "rotate your phone" is a dead end that hides a perfectly usable app. So the
- * prompt is gated on `PHONE_PORTRAIT_MEDIA_QUERY` (portrait AND phone-width
- * AND a coarse pointer); every other shape renders the experience.
+ * The question is just "is this viewport taller than it is wide?", and it is
+ * asked of every device — matching ARCHVIZ_WITH_EXTERIOR, whose guard is a
+ * bare `innerWidth > innerHeight`. A portrait window gets the rotate screen
+ * whatever it is running on.
  *
- * `isLandscape` is still published to the shared store for anything that wants
- * the raw orientation, and it stays the raw orientation — not this guard's
- * verdict.
+ * That is a deliberate widening. This used to gate on portrait AND phone-width
+ * AND a coarse pointer, so that a tablet held upright — which has room for the
+ * whole UI — and a desktop browser in a tall window, which cannot rotate
+ * anything, both got the app instead of a dead end. Landscape-only is the
+ * product decision, so those cases now see the prompt too; a desktop user
+ * widens the window rather than turning anything.
+ *
+ * `isLandscape` is published to the shared store for anything that wants the
+ * raw orientation.
  */
 const ForceLandscape = () => {
-  // Selectors, not the whole store: a no-selector subscription re-renders on
+  // A selector, not the whole store: a no-selector subscription re-renders on
   // every write because zustand's set() always makes a new state object.
   const setLandscape = useOrientation((s) => s.setLandscape);
-  const landscape = useMediaQuery("(orientation: landscape)");
-  const phonePortrait = usePhonePortrait();
+  // Asked as PORTRAIT so SSR's "false for everything" means "don't show the
+  // guard" — see PORTRAIT_MEDIA_QUERY. Negating a landscape query instead
+  // would put the rotate screen in the server HTML.
+  const portrait = usePortrait();
 
   // Mirror the live orientation into the shared store for other consumers.
   useEffect(() => {
-    setLandscape(landscape);
-  }, [landscape, setLandscape]);
+    setLandscape(!portrait);
+  }, [portrait, setLandscape]);
 
-  if (!phonePortrait) return null;
+  if (!portrait) return null;
   return (
     // `inset-0` + `100dvh`, not `h-screen w-screen`: `100vh` on a mobile
     // browser is the tall viewport WITH the address bar rolled away, so the

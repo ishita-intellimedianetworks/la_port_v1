@@ -7,6 +7,14 @@ import { NAV_GLASS_PANEL } from "../glass-theme";
 
 interface BottomBarProps {
   visible: boolean;
+  /**
+   * Slide the whole dock off the bottom edge — set while the Resources panel
+   * is open. On a landscape phone that panel is nearly full-height, and the
+   * four circles sat right under its bottom-left corner; dropping them out of
+   * the way leaves the list the only thing being pressed at. Distinct from
+   * `visible`, which is the ordinary fade: this one clears the edge entirely.
+   */
+  tucked?: boolean;
   mapOpen: boolean;
   onOpenMap: () => void;
   onDollhouse: () => void;
@@ -30,19 +38,28 @@ interface BottomBarProps {
  */
 export function BottomBar({
   visible,
+  tucked,
   mapOpen,
   onOpenMap,
   onDollhouse,
   onInstructions,
   onHome,
 }: BottomBarProps) {
+  const shown = visible && !tucked;
   return (
     <div
       className="fixed bottom-4 left-1/2 z-[210] transition-[opacity,transform] duration-[600ms] ease-out sm:bottom-5 short:bottom-2"
       style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translate(-50%, 0)" : "translate(-50%, 12px)",
-        pointerEvents: visible ? undefined : "none",
+        opacity: shown ? 1 : 0,
+        // Tucked travels past the screen edge (its own height plus the bottom
+        // margin); the plain hidden state only nudges down 12px, because there
+        // it is the fade doing the work and a long slide reads as a glitch.
+        transform: shown
+          ? "translate(-50%, 0)"
+          : tucked
+            ? "translate(-50%, calc(100% + 24px))"
+            : "translate(-50%, 12px)",
+        pointerEvents: shown ? undefined : "none",
       }}
     >
       <div className="flex items-center gap-3 short:gap-2">

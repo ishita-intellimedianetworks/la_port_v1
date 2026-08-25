@@ -33,29 +33,23 @@ export const SHORT_BREAKPOINT_PX = 540;
 export const SHORT_MEDIA_QUERY = `(max-height: ${SHORT_BREAKPOINT_PX}px)`;
 
 /**
- * The largest SHORT EDGE we still call a phone.
+ * "The viewport is taller than it is wide."
  *
- * 767 rather than 1023: in portrait the short edge IS the width, so this keeps
- * every phone (≤ 430 px on the widest current handset) on the phone side while
- * letting a 768 px iPad — and every larger tablet — through. It exists so the
- * landscape guard can nag a phone without also nagging a tablet or a tall
- * desktop window.
- */
-export const PHONE_MAX_EDGE_PX = 767;
-
-/**
- * "A phone being held upright."
+ * This is the whole landscape gate, and it is deliberately device-blind — the
+ * app is landscape-only, so a portrait viewport of ANY kind gets the rotate
+ * screen, exactly as ARCHVIZ_WITH_EXTERIOR does it (`innerWidth >
+ * innerHeight`). The CSS keyword agrees with that comparison down to the
+ * degenerate case: `portrait` is height >= width, so a square viewport is
+ * portrait in both, and only width > height counts as landscape.
  *
- * THREE conditions, all required — dropping any one of them mis-fires:
- *   • `orientation: portrait` — the thing we actually want to correct.
- *   • `max-width` — in portrait the width is the short edge, so this admits
- *     phones and excludes tablets. Without it an iPad in portrait, which has
- *     plenty of room for the UI, gets told to rotate.
- *   • `pointer: coarse` — the primary input is a finger. Without it a desktop
- *     browser in a tall, narrow window gets told to "rotate your phone".
+ * It is written as the PORTRAIT question rather than the landscape one on
+ * purpose. `getServerSnapshot` answers false for every query, so asking
+ * "portrait?" makes SSR and the first client render answer "no" — the guard
+ * stays out of the tree until matchMedia is real. Asking "landscape?" and
+ * negating would render the rotate screen into the server HTML and flash it on
+ * every desktop load before hydration corrected it.
  */
-export const PHONE_PORTRAIT_MEDIA_QUERY =
-  `(orientation: portrait) and (max-width: ${PHONE_MAX_EDGE_PX}px) and (pointer: coarse)`;
+export const PORTRAIT_MEDIA_QUERY = "(orientation: portrait)";
 
 /**
  * Reactive `matchMedia` binding.
@@ -82,9 +76,10 @@ export function useIsMobile(): boolean {
   return useMediaQuery(MOBILE_MEDIA_QUERY);
 }
 
-/** Reactive hook: `true` on a phone held in portrait. See the query above. */
-export function usePhonePortrait(): boolean {
-  return useMediaQuery(PHONE_PORTRAIT_MEDIA_QUERY);
+/** Reactive hook: `true` when the viewport is taller than it is wide. See the
+ *  query above for why it is asked this way round. */
+export function usePortrait(): boolean {
+  return useMediaQuery(PORTRAIT_MEDIA_QUERY);
 }
 
 // `useSyncExternalStore` compares the subscribe/getSnapshot identities, so a

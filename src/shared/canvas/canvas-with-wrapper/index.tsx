@@ -72,6 +72,25 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             toneMapping: THREE.NeutralToneMapping
           }}
           id="canvas-wrapper"
+          onCreated={({ gl }) => {
+            // A lost context is the one failure mode that looks like nothing at
+            // all: the render loop simply stops, so the progress bar — which is
+            // written from inside that loop — freezes wherever it was and the
+            // loading screen never lifts. three re-creates the renderer state on
+            // restore, but says nothing on the way down. Say it, so a phone that
+            // runs out of VRAM reports that rather than just hanging.
+            const canvas = gl.domElement;
+            const onLost = (e: Event) => {
+              console.error(
+                "[canvas] WebGL context LOST — the render loop has stopped. " +
+                  "On a phone this is usually VRAM: the model's textures did not fit.",
+                e,
+              );
+            };
+            const onRestored = () => console.warn("[canvas] WebGL context restored");
+            canvas.addEventListener("webglcontextlost", onLost);
+            canvas.addEventListener("webglcontextrestored", onRestored);
+          }}
         >
           <Suspense fallback={null}>
             <group name="dollhouse-model">{children}</group>

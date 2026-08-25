@@ -63,10 +63,11 @@ export interface StreamingConfig {
   cullGraceTicks: number;
   /** Distance fog. The reason the download radius can be small: geometry fades
    *  into the backdrop before the unload boundary instead of vanishing at it.
-   *  No colour here — SceneFog reads the LIVE `scene.background`, which this
-   *  app crossfades between the dollhouse black and the first-person sky, so
-   *  the fog can never disagree with the backdrop it dissolves into. */
-  fog: { enabled: boolean; start: FogStart };
+   *  `color` is normally UNSET, in which case StreamFog tracks the live
+   *  `scene.background` — this app crossfades that between the dollhouse black
+   *  and the first-person sky, so the fog can never disagree with the backdrop
+   *  it dissolves into, not even mid-fade. Set it to pin a fixed hex. */
+  fog: { enabled: boolean; start: FogStart; color?: string };
 }
 
 // Base URL for the baked assets; the slug appends `<slug>/assets/`. Set
@@ -183,19 +184,38 @@ export function resolveStreamConfig(profile?: "mobile" | "desktop"): StreamingCo
   return (profile ?? detectProfile()) === "mobile" ? mobileProfile(GROUND) : GROUND;
 }
 
-/** Where the fog fade starts and ends, in metres, for a resolved config. The
- *  fade always ends at the unload radius, so it retunes itself when the bands
- *  move. Returns null when this config has fog switched off. */
+/**
+ * Where the fog fade starts and ends, in metres. Ported from LA_PORT_ADAPTIVE's
+ * `SceneFog`, arithmetic unchanged.
+ *
+ * `far` lands just INSIDE the unload radius (x0.98) rather than on it, so
+ * geometry is fully faded out before it is evicted — a chunk sitting exactly on
+ * the line would otherwise flicker between visible and absent as the camera
+ * jitters across the boundary.
+ *
+ * `near` is where the fade BEGINS. Naming a band is usually what you want,
+ * because it then retunes itself whenever the bands move; a number is that
+ * fraction of `far`. Start it too close and broad surfaces wash out into the
+ * sky long before the boundary — measured on this model, a fade starting at
+ * 0.35 made the bridge DECK vanish into the haze while its thin dark cables
+ * survived, which reads as missing geometry rather than as distance.
+ *
+ * Returns null when this config has fog switched off.
+ */
 export function fogRange(c: StreamingConfig): { near: number; far: number } | null {
   if (!c.fog.enabled) return null;
+  const far = c.unloadDist * 0.98;
+  const bands: Record<string, number> = {
+    near: c.nearDist,
+    mid: c.midDist,
+    // Halfway between the mid and far edges — far enough out that everything
+    // you are meant to read stays crisp, close enough that the fade has real
+    // depth to work in and covers what the far band does at its limits.
+    midfar: (c.midDist + c.farDist) / 2,
+    far: c.farDist,
+  };
   const s = c.fog.start;
-  const start =
-    s === "near" ? c.nearDist
-    : s === "mid" ? c.midDist
-    : s === "midfar" ? (c.midDist + c.farDist) / 2
-    : s === "far" ? c.farDist
-    : s * c.unloadDist;
-  // A fade that starts at or past the boundary is not a fade — clamp it to
-  // something with depth rather than letting the geometry pop again.
-  return { near: Math.min(start, c.unloadDist * 0.95), far: c.unloadDist };
+  const start = typeof s === "number" ? far * s : bands[s] ?? c.farDist;
+  // near must sit at least a metre inside far, and never below 1.
+  return { near: Math.max(1, Math.min(start, far - 1)), far };
 }

@@ -133,27 +133,43 @@ export function EdgeFlap({
         style={{
           ...NAV_GLASS_PANEL,
           border: "1.5px solid var(--nav-border)",
-          [side]: dim.w + 10,
-          // Never wider than the space left beside the flap on a phone.
-          width: `min(340px, calc(100vw - ${dim.w + 26}px))`,
+          [side]: dim.w + (short ? 6 : 10),
+          // Never wider than the space left beside the flap on a phone. Capped
+          // narrower on a landscape phone: 340px is nearly half of a 740px-wide
+          // screen, and the rows are two short strings, not paragraphs.
+          width: `min(${short ? 290 : 340}px, calc(100vw - ${dim.w + (short ? 18 : 26)}px))`,
           // A FIXED frame — the body below scrolls inside it.
-          height: `min(560px, calc(100dvh - 128px))`,
+          //
+          // The 128px of breathing room is what the bottom dock and the top
+          // chrome need on a laptop. A landscape phone has ~360px of height in
+          // total, and giving 128 of it away left room for barely three rows.
+          //
+          // 96px there instead, and the panel is centred, so it clears the
+          // top-left Exit tab (8px in, 36px tall) by a hair at the top and the
+          // interior Home button at the bottom — the dock proper tucks itself
+          // away while this is open, which is what buys the rest.
+          height: short ? `calc(100dvh - 96px)` : `min(560px, calc(100dvh - 128px))`,
         }}
       >
         {hasHeader && (
-          <div className="shrink-0 px-4 pt-5 sm:px-5 sm:pt-6">
+          <div className="shrink-0 px-4 pt-5 sm:px-5 sm:pt-6 short:px-3 short:pt-3">
             <PanelHeader title={title} subtitle={subtitle} onBack={onBack} />
           </div>
         )}
         {toolbar && (
-          <div className={cn("shrink-0 px-4 sm:px-5", hasHeader ? "pt-3" : "pt-4 sm:pt-5")}>
+          <div
+            className={cn(
+              "shrink-0 px-4 sm:px-5 short:px-3",
+              hasHeader ? "pt-3 short:pt-2" : "pt-4 sm:pt-5 short:pt-3",
+            )}
+          >
             {toolbar}
           </div>
         )}
         <div
           className={cn(
-            "ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 sm:px-5 sm:pb-5",
-            hasHeader || toolbar ? "pt-3" : "pt-4 sm:pt-5",
+            "ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 sm:px-5 sm:pb-5 short:px-3 short:pb-3",
+            hasHeader || toolbar ? "pt-3 short:pt-2" : "pt-4 sm:pt-5 short:pt-3",
           )}
         >
           {children}

@@ -602,6 +602,10 @@ export default function Overlays() {
       {phase === "firstPerson" && (
         <BottomBar
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen}
+          // Resources is open: drop the dock off the bottom edge. The panel is
+          // the tallest overlay on the screen and, on a landscape phone, ends
+          // within a thumb's width of these circles.
+          tucked={hotspotsFlapOpen}
           mapOpen={mapExpanded}
           onOpenMap={() => {
             // Read the toggle BEFORE closeOverlays sets it false, or the map

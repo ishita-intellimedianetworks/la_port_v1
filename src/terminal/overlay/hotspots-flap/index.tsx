@@ -7,6 +7,7 @@ import { EdgeFlap } from "../edge-flap";
 import { PanelSearch } from "../panel-search";
 import { TravelRow } from "../travel-row";
 import { useLayoutNavigation } from "../use-layout-navigation";
+import { useShortViewport } from "@/shared/responsive";
 
 interface HotspotsFlapProps {
   open: boolean;
@@ -46,6 +47,9 @@ const EMPTY_OVERRIDES: Record<string, boolean> = {};
  */
 export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsFlapProps) {
   const { goToHotspot, goToLayout } = useLayoutNavigation();
+  // The chevron is drawn by an SVG component, not a class, so the short
+  // viewport has to be read in JS to shrink it alongside its button.
+  const chevronSize = useShortViewport() ? 15 : 18;
 
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -130,10 +134,10 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
           by a fixed step and otherwise styled exactly like their parent; no
           connector rails. Depth is carried by the indent and the chevron alone,
           the way the admin tool draws its Resources tree. */}
-      <ul className="flex list-none flex-col gap-1.5">
+      <ul className="flex list-none flex-col gap-1.5 short:gap-1">
         {rows.length === 0 && (
           <li
-            className="nav-body px-1 py-6 text-center text-[13px] font-normal"
+            className="nav-body px-1 py-6 text-center text-[13px] font-normal short:py-4 short:text-[12px]"
             style={{ color: "var(--nav-text-dim)" }}
           >
             No resources match &ldquo;{query.trim()}&rdquo;
@@ -144,8 +148,8 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
           // The override wins where it exists; otherwise the search decides.
           const isOpen = overrides[layout.id] ?? autoOpen;
           return (
-            <li key={layout.id} className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5">
+            <li key={layout.id} className="flex flex-col gap-1.5 short:gap-1">
+              <div className="flex items-center gap-1.5 short:gap-1">
                 {/* Leaves keep the same empty slot rather than sliding left,
                     so every row at one depth starts on the same line. */}
                 {hasChildren ? (
@@ -154,16 +158,20 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                     aria-label={isOpen ? `Collapse ${layout.name}` : `Expand ${layout.name}`}
                     aria-expanded={isOpen}
                     onClick={() => toggleExpanded(layout.id, autoOpen)}
-                    className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/[0.08]"
+                    className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/[0.08] short:h-7 short:w-7"
                   >
                     {isOpen ? (
-                      <ChevronDown size={18} strokeWidth={2.2} style={{ color: "var(--nav-text)" }} />
+                      <ChevronDown size={chevronSize} strokeWidth={2.2} style={{ color: "var(--nav-text)" }} />
                     ) : (
-                      <ChevronRight size={18} strokeWidth={2.2} style={{ color: "var(--nav-text-dim)" }} />
+                      <ChevronRight
+                        size={chevronSize}
+                        strokeWidth={2.2}
+                        style={{ color: "var(--nav-text-dim)" }}
+                      />
                     )}
                   </button>
                 ) : (
-                  <div className="h-8 w-8 shrink-0" />
+                  <div className="h-8 w-8 shrink-0 short:h-7 short:w-7" />
                 )}
                 <div className="min-w-0 flex-1">
                   <TravelRow
@@ -181,7 +189,7 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                 // parent rather than a continuation of the same list. The extra
                 // top/bottom margin gives the unfolded group air, so a long
                 // list does not run together into one column of chips.
-                <ul className="mb-1 ml-[52px] mt-0.5 flex list-none flex-col gap-1.5">
+                <ul className="mb-1 ml-[52px] mt-0.5 flex list-none flex-col gap-1.5 short:mb-0.5 short:ml-[38px] short:gap-1">
                   {children.map((hp) => (
                     <li key={hp.id}>
                       <TravelRow
