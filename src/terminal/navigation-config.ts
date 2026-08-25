@@ -68,8 +68,11 @@ export const navConfig = {
      *  6 km/h = 6000 / 3600 ≈ 1.667 m/s (average human walking speed). */
     walkMps: 6000 / 3600,
     /** Walk-speed multiplier the speed UI defaults to / each walk starts at.
-     *  The speed control offers 1× / 5× / 10×, starting on 5×. */
-    defaultSpeedMult: 5,
+     *  The speed control offers 1× / 5× / 10×, starting on 10×: the terminal is
+     *  ~1 km end to end, so a real 6 km/h pace makes crossing it a several-
+     *  minute walk. Read by BOTH the control and the player state, so this one
+     *  number is the whole default. */
+    defaultSpeedMult: 10,
 
     // ── Fixed model fact (not a tuning knob) ──
     /** The walkable site's longest extent in WORLD UNITS, measured from the

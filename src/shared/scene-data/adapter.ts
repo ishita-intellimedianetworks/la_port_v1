@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { HOTSPOT_BY_ID, layouts, scene, startPose, ui } from "@/config";
+import { STREAM_ASSET_BASE } from "@/streaming/config";
 import type { DestinationsByCategory } from "../types";
 
 /**
@@ -99,12 +100,24 @@ const floors = [
     id: "terminal",
     label: scene.meta.label,
     modelUrl: scene.assets.modelUrl,
-    navmeshUrl: scene.assets.navmeshUrl,
+    // The WALKING view streams as distance-tiered chunks whenever site.json
+    // authors a `stream` block. The dollhouse never does — it draws
+    // `assets.modelUrl` as one decimated GLB, which is what `modelUrl` is for
+    // now. Everything about HOW it streams lives in that block.
+    streamed: !!scene.stream,
+    // The navmesh travels WITH the chunks: the bake emits it next to them, so
+    // it follows NEXT_PUBLIC_ASSET_BASE to a CDN and there is no second copy in
+    // public/ to keep in step. It is the same 3,988 triangles as the raw export,
+    // Draco-compressed — 8 KB against 305. `assets.navmeshUrl` is the fallback
+    // for a site that authors no stream block.
+    navmeshUrl: scene.stream ? `${STREAM_ASSET_BASE}navmesh.glb` : scene.assets.navmeshUrl!,
     floorPlanUrl: null,
-    // Where first person begins — the start LAYOUT's camera, not a camera of
-    // its own (site.json › startLayoutId).
-    startPosition: v3(startPose.position),
-    startRotation: v3(startPose.rotation),
+    // Where first person begins. Authored as `cameras.spawn`, NOT derived from
+    // the start layout: every layout here is an aerial framing (walkable:
+    // false), and deriving it anyway put the walking start 381 m up and off the
+    // navmesh entirely. See the `_note` on that block.
+    startPosition: v3(scene.cameras.spawn.position),
+    startRotation: v3(scene.cameras.spawn.rotation),
     clickSnapToNav: true,
     routeSanitize: ROUTE_SANITIZE,
     dests,
@@ -129,7 +142,13 @@ export const nodes: any[] = [
       position: v3(scene.cameras.dollhouse.position),
       rotation: v3(scene.cameras.dollhouse.rotation),
     },
-    // The point-cloud sidecar shown behind the loading HUD while the GLB streams.
+    // The dollhouse draws the single decimated GLB — the walking view is the
+    // half that streams. Naming it explicitly here (rather than falling through
+    // to the floor's modelUrl) is what lets the two diverge: point
+    // `assets.modelUrl` at a purpose-built low-poly overview mesh and only the
+    // dollhouse changes.
+    dollHouseModelUrl: scene.assets.modelUrl,
+    // The point-cloud sidecar shown behind the loading HUD while that GLB loads.
     dollHousePreviewUrl: scene.assets.previewUrl,
     startPosition: floors[0].startPosition,
     startRotation: floors[0].startRotation,
@@ -140,10 +159,10 @@ export const nodes: any[] = [
 export const defaultSiteId: string = SITE_ID;
 
 /**
- * Initial pose the shared Canvas camera is created at, before the player /
- * dollhouse camera takes over — the same start-layout pose the player begins
- * at, so the two cannot disagree. (`cameras.entry` used to hold a second copy
- * of that camera's position, hand-kept in step.)
+ * Initial pose the shared Canvas camera is created at, for the frames before
+ * DollhouseCamera seats itself at `cameras.dollhouse`. It is the start LAYOUT's
+ * camera — an overview framing, which is the right thing to open on, and NOT
+ * where the player begins: that is `cameras.spawn`, on the ground.
  */
 export const entry = {
   position: v3(startPose.position),

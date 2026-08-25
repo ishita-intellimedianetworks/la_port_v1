@@ -214,13 +214,43 @@ export default function TerminalProvider({
     activeFloorIdRef.current = activeFloor?.id;
   }, [activeFloor?.id]);
 
+  /**
+   * Fired by DollhouseCamera during the last ~240 ms of its fly-in, so the
+   * blackout finishes going opaque exactly as the camera lands. The swap
+   * itself happens in handleEnterFirstPerson below, behind it.
+   */
+  const handleTransitionCue = useCallback(() => { fade.raise(); }, [fade]);
+
+  /**
+   * Dollhouse -> first person.
+   *
+   * This used to be a bare `setPhase`, and could be: both views drew the SAME
+   * GLB, so the fly-in landed on the player's eye pose and the handoff was
+   * seamless. They no longer do. The dollhouse draws one decimated GLB and the
+   * walking view streams chunks, so the swap tears the whole model down and
+   * builds a different one — which has to happen behind black, and the black
+   * has to stay up until the streamer has actually filled in around the
+   * landing point. Otherwise the fade lifts onto an empty zone.
+   *
+   * The blackout is already opaque here (raised by the fly-in's cue); the fade
+   * hook re-asserts it, runs the swap at peak, then polls `waitUntil` before
+   * lowering — capped internally at MAX_BLACKOUT_WAIT_MS, so a cold or broken
+   * load lands the user in a half-built scene rather than trapping them in the
+   * dark. `streamProgress` is reset by StreamedModel on mount, so every entry
+   * waits for its own fill.
+   */
   const handleEnterFirstPerson = useCallback(
     (position: [number, number, number], rotation: [number, number, number]) => {
       if (activeFloorIdRef.current) exploredFloorsRef.current.add(activeFloorIdRef.current);
-      setFirstPersonStart({ position, rotation });
-      setPhase("firstPerson");
+      fade.transition(
+        () => {
+          setFirstPersonStart({ position, rotation });
+          setPhase("firstPerson");
+        },
+        () => useProgressStore.getState().streamProgress >= 1,
+      );
     },
-    [],
+    [fade],
   );
 
   const handleRevealStart = useCallback(() => { setHudFading(true); }, []);
@@ -555,7 +585,7 @@ export default function TerminalProvider({
       floors, furniture, speed, cameraHeight, startPosition, startRotation,
       dollHouseCamera, dollHouseModelUrl, dollHousePreviewUrl,
       firstPersonStart, cinematicActive,
-      handleEnterFirstPerson,
+      handleEnterFirstPerson, handleTransitionCue,
       setCinematicActive, setIsModelLoaded,
       handleModelLoaded, handleRevealStart, handleRevealDone,
       sharedUniforms, debug, inlineMode: !!inlineMode,
@@ -564,7 +594,8 @@ export default function TerminalProvider({
       floors, furniture, speed, cameraHeight, startPosition, startRotation,
       dollHouseCamera, dollHouseModelUrl, dollHousePreviewUrl,
       firstPersonStart, cinematicActive,
-      handleEnterFirstPerson, handleModelLoaded, handleRevealStart, handleRevealDone,
+      handleEnterFirstPerson, handleTransitionCue,
+      handleModelLoaded, handleRevealStart, handleRevealDone,
       sharedUniforms, debug, inlineMode,
     ],
   );

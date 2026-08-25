@@ -18,6 +18,19 @@ export type ProgressState = {
   revealProgress: number;
   /** Byte-accurate warm of the secondary assets, 0..1. */
   prefetchProgress: number;
+  /**
+   * The adaptive chunk streamer's fill for the CURRENT mount, 0..1 — the share
+   * of the chunks queued for the landing view that are actually on screen.
+   *
+   * It exists because drei's `useProgress` cannot see this work: the streamer
+   * drives its own `GLTFLoader`, so from drei's point of view the whole
+   * terminal is one already-finished file. The entry blackout holds on it,
+   * which is why it is the one value here that is NOT monotonic across the
+   * session: `resetStreamProgress` puts it back to 0 each time the streamer
+   * mounts, so the second walk-in waits for its own fill and not the first
+   * one's. It stays monotonic WITHIN a mount.
+   */
+  streamProgress: number;
   assetsWarmed: boolean;
   isLoaded: boolean;
   isRevealed: boolean;
@@ -25,6 +38,9 @@ export type ProgressState = {
   setProgress: (value: number) => void;
   setRevealProgress: (value: number) => void;
   setPrefetchProgress: (value: number) => void;
+  setStreamProgress: (value: number) => void;
+  /** Back to 0 for a fresh streamer mount. See `streamProgress`. */
+  resetStreamProgress: () => void;
   setAssetsWarmed: (value: boolean) => void;
   setLoaded: (value: boolean) => void;
   setRevealed: (value: boolean) => void;
@@ -36,6 +52,7 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
   progress: 0,
   revealProgress: 0,
   prefetchProgress: 0,
+  streamProgress: 0,
   assetsWarmed: false,
   isLoaded: false,
   isRevealed: false,
@@ -46,6 +63,8 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
   setProgress: (value) => set({ progress: Math.max(get().progress, value) }),
   setRevealProgress: (value) => set({ revealProgress: Math.max(get().revealProgress, value) }),
   setPrefetchProgress: (value) => set({ prefetchProgress: Math.max(get().prefetchProgress, value) }),
+  setStreamProgress: (value) => set({ streamProgress: Math.max(get().streamProgress, value) }),
+  resetStreamProgress: () => set({ streamProgress: 0 }),
 
   setAssetsWarmed: (value) => set({ assetsWarmed: value }),
   setLoaded: (value) => set({ isLoaded: value }),
@@ -53,5 +72,5 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
 
   // prefetchProgress / assetsWarmed are NOT reset: the HTTP cache stays warm for
   // the whole session, so that work is done once and must survive a scene reset.
-  reset: () => set({ progress: 0, revealProgress: 0, isLoaded: false, isRevealed: false }),
+  reset: () => set({ progress: 0, revealProgress: 0, streamProgress: 0, isLoaded: false, isRevealed: false }),
 }));

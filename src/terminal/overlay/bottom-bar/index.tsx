@@ -38,14 +38,14 @@ export function BottomBar({
 }: BottomBarProps) {
   return (
     <div
-      className="fixed bottom-4 left-1/2 z-[210] transition-[opacity,transform] duration-[600ms] ease-out sm:bottom-5"
+      className="fixed bottom-4 left-1/2 z-[210] transition-[opacity,transform] duration-[600ms] ease-out sm:bottom-5 short:bottom-2"
       style={{
         opacity: visible ? 1 : 0,
         transform: visible ? "translate(-50%, 0)" : "translate(-50%, 12px)",
         pointerEvents: visible ? undefined : "none",
       }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 short:gap-2">
         <BarButton icon={Home} label="Home" onClick={onHome} />
         <BarButton icon={DollhouseGlyph} label="Dollhouse" onClick={onDollhouse} />
         <BarButton icon={Info} label="Instructions" onClick={onInstructions} />
@@ -84,7 +84,11 @@ function BarButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex h-12 w-12 cursor-pointer items-center justify-center rounded-full",
+        // A landscape phone spends its scarce axis on height, and 48px of dock
+        // plus its margin is ~17% of a 375px-tall screen. Shrink with the rest
+        // of the `short:` chrome (the walking dock and interior Home already
+        // drop to 38px) rather than being the one bar that stays full size.
+        "flex h-12 w-12 cursor-pointer items-center justify-center rounded-full short:h-10 short:w-10",
         "transition-[scale,translate,color,background-color,border-color] duration-200",
         "hover:scale-105 active:translate-y-px",
         !active && "text-[rgba(255,255,255,0.86)] hover:text-white",

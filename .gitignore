@@ -42,3 +42,12 @@ next-env.d.ts
 
 # claude
 .claude/
+
+# ── BAKED STREAMING ASSETS ARE NEVER COMMITTED ──────────────────────────────
+# public/assets/<model>/assets/ is local staging only — hundreds of MB of chunk
+# GLBs and texture rungs per model, all regenerable from the source GLB by the
+# bake in the LA_PORT_ADAPTIVE repo (`npm run bake <model>`). Serve them by
+# pointing NEXT_PUBLIC_ASSET_BASE at an S3/CDN base, or leave it unset to serve
+# this local copy from /assets.
+/public/assets/*/assets/
+public/**/*.zip

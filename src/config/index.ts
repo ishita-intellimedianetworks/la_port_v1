@@ -38,6 +38,7 @@ export const site = siteJson as unknown as SiteConfig;
 export const scene: SceneConfig = {
   meta: site.meta,
   assets: site.assets,
+  stream: site.stream,
   world: site.world,
   cameras: site.cameras,
   lights: site.lights,

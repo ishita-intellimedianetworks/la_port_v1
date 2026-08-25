@@ -315,6 +315,13 @@ export type FloorConfig = {
   id: string;
   label: string;
   modelUrl: string;
+  /**
+   * This floor's geometry is streamed as distance-tiered chunks rather than
+   * loaded as the single GLB at `modelUrl`, which is then unused. The bands,
+   * cache limits and asset slug come from `site.json › stream` — a floor only
+   * says WHETHER it streams, never how.
+   */
+  streamed?: boolean;
   navmeshUrl: string;
   boundsUrl?: string;
   floorPlanUrl?: string | null;

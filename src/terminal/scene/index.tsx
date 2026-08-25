@@ -26,12 +26,15 @@ import { PlayerController } from "./player";
 import { NavPath3D } from "./route-line";
 import { HotspotMarkers } from "./hotspot-markers";
 import { SingleModel } from "./model-loader";
+import { StreamedModel } from "./model-loader/streamed-model";
 import {
   SingleNavmesh,
   type RoomZone,
 } from "./navmesh/geometry";
 import { zoneNameForFloor } from "./navmesh";
 import SceneEnvironment from "./environment";
+import StreamFog from "./environment/stream-fog";
+import { detectProfile, resolveStreamConfig } from "@/streaming/config";
 import DollhouseCamera from "./dollhouse-camera";
 import { PerfMeter } from "./perf-meter";
 import { useSceneLoading } from "./hooks/use-scene-loading";
@@ -45,6 +48,7 @@ import { useProgressStore } from "@/shared/stores/progress-store";
 import { useCameraStore } from "@/shared/stores/camera-store";
 import { tick } from "@/shared/runtime/diagnostics";
 import { useWorldStore } from "@/shared/stores/world-store";
+import { SHORT_MEDIA_QUERY } from "@/shared/responsive";
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -314,7 +318,10 @@ function RevealBlurFade({ sharedUniforms }: { sharedUniforms: SharedUniforms }) 
   const base = useRef({ blur: 10, bright: 0.8, scale: 1.02 });
 
   useEffect(() => {
-    if (window.matchMedia("(max-width: 640px)").matches) {
+    // Same two-axis condition as the stylesheet's phone block — a landscape
+    // handset is caught by its HEIGHT, not its width, so matching on width
+    // alone handed phones the desktop blur values mid-reveal.
+    if (window.matchMedia(`(max-width: 640px), ${SHORT_MEDIA_QUERY}`).matches) {
       base.current = { blur: 6, bright: 0.85, scale: 1.01 };
     }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -432,6 +439,10 @@ interface SceneContentProps {
     position: [number, number, number],
     rotation: [number, number, number],
   ) => void;
+  /** Fired during the last ~240 ms of the dollhouse fly-in so the blackout is
+   *  already opaque when `onEnterFirstPerson` swaps the dollhouse GLB out for
+   *  the streamer. */
+  onTransitionCue?: () => void;
   /** True while a portal-triggered floor cinematic is running. Disables
    *  PlayerController + the auto floor-detect + the auto-teleport effect so
    *  the cinematic exclusively owns the camera and the model swap. */
@@ -462,6 +473,7 @@ export function SceneContent({
   dollHousePreviewUrl,
   firstPersonStart,
   onEnterFirstPerson,
+  onTransitionCue,
   cinematicActive = false,
   setCinematicActive,
   onLoaded,
@@ -526,6 +538,21 @@ export function SceneContent({
       ? (dollHouseModelUrl ?? activeFloor?.modelUrl)
       : activeFloor?.modelUrl;
   const currentModelKey = activeFloor?.id ?? "_none";
+
+  // ── Adaptive streaming — the WALKING view only ────────────────────────────
+  // The dollhouse draws `assets.modelUrl`, one decimated whole-zone GLB, and
+  // never streams: from a fixed vantage that frames the entire zone the view
+  // cone covers everything, so the frustum cull buys nothing and the distance
+  // bands only fight the resident-byte ceiling — whose eviction drops the
+  // FURTHEST chunk first, i.e. exactly the half of the frame the shot is
+  // composed around. The streamer mounts on the way in to first person, under
+  // the entry blackout, and fills in around `cameras.spawn` before it lifts.
+  const streaming = !!activeFloor?.streamed && viewMode === "firstPerson";
+  // Desktop on the first render — which is also what SSR produces, so hydration
+  // is stable — then the real device profile once mounted.
+  const [deviceProfile, setDeviceProfile] = useState<"mobile" | "desktop">("desktop");
+  useEffect(() => setDeviceProfile(detectProfile()), []);
+  const streamConfig = useMemo(() => resolveStreamConfig(deviceProfile), [deviceProfile]);
 
   // Preview point-cloud is dollhouse-only — first-person floors no longer
   // ship a preview. Past initial load we use blackouts for swaps.
@@ -955,23 +982,47 @@ export function SceneContent({
           every frame after the first successful sweep. */}
       {sharedUniforms && <CloudSweep sharedUniforms={sharedUniforms} />}
 
-      {/* The visible model. When the active floor authors a `boundsUrl`, the
-          bbox callback is moved to the invisible bounds GLB below — same
-          callback, same key, just sourced from a cleaner mesh that omits the
-          adjacent-floor / staircase geometry that inflates the modelUrl
-          bbox on floors 2 / 3. */}
-      {currentModelUrl && (
-        <SingleModel
-          key={currentModelKey}
-          url={currentModelUrl}
-          // Apartment-interior models load clean: no reveal-dither shader patch
-          // and no diorama edge-feather — just the raw GLB, lit + shadowed. The
-          // reveal pipeline / soft edges are for the village dollhouse only.
-          sharedUniforms={activeFloor?.interior ? undefined : sharedUniforms}
-          interior={!!activeFloor?.interior}
-          onBounds={handleModelBounds}
-          onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
-        />
+      {/* The visible model — streamed, or a single GLB.
+
+          STREAMED (first person): hundreds of distance-tiered chunks driven
+          straight onto the THREE.Scene by ChunkManager, plus the distance fog
+          that lets the download radius stay small. It reports the SAME two
+          things a GLB does (world bounds, "the opening view has settled"), so
+          the navmesh, the player, the minimap and the environment are unchanged
+          by the swap. No `sharedUniforms` and no edge-feather: both patch
+          materials of a model that is fully present at mount, and a streamed
+          one never is — which is the other half of why the dollhouse keeps its
+          GLB, since the rim dissolve is a dollhouse effect.
+
+          SINGLE GLB: the dollhouse overview, apartment interiors, and any floor
+          that authors no stream block. When the active floor authors a
+          `boundsUrl`, the bbox callback is moved to the invisible bounds GLB
+          below — same callback, same key, just sourced from a cleaner mesh that
+          omits the adjacent-floor / staircase geometry that inflates the
+          modelUrl bbox. */}
+      {streaming ? (
+        <>
+          <StreamedModel
+            config={streamConfig}
+            onBounds={handleModelBounds}
+            onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
+          />
+          <StreamFog config={streamConfig} />
+        </>
+      ) : (
+        currentModelUrl && (
+          <SingleModel
+            key={currentModelKey}
+            url={currentModelUrl}
+            // Apartment-interior models load clean: no reveal-dither shader patch
+            // and no diorama edge-feather — just the raw GLB, lit + shadowed. The
+            // reveal pipeline / soft edges are for the village dollhouse only.
+            sharedUniforms={activeFloor?.interior ? undefined : sharedUniforms}
+            interior={!!activeFloor?.interior}
+            onBounds={handleModelBounds}
+            onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
+          />
+        )
       )}
 
       {/* Optional `boundsUrl` GLB for the active floor. Mounted invisibly
@@ -1027,13 +1078,15 @@ export function SceneContent({
           // dropped the camera by the difference right after handoff (the Y settle).
           cameraHeight={activeFloor?.cameraHeight ?? cameraHeight}
           onEnterFirstPerson={onEnterFirstPerson ?? (() => {})}
+          // Raises the blackout over the tail of the fly-in. The dollhouse GLB
+          // and the streamed walking model are DIFFERENT models, so the swap
+          // must not be seen; the blackout then holds until the streamer has
+          // filled in around the landing point.
+          onTransitionCue={onTransitionCue}
           // Ignore all camera input (drag / wheel / pinch / double-click) until
           // the load + reveal transition has fully finished. Inline mode has no
           // reveal pipeline, so it's interactive immediately.
           interactive={skipEffects || revealComplete}
-          // No blackout on dollhouse → first-person: the fly-in lands the camera
-          // exactly at the player's eye pose, so the handoff is seamless and a
-          // fade would only add an unnecessary black flash.
         />
       )}
 

@@ -16,6 +16,60 @@ export type LayoutCamera = {
   target: Vec3;
 };
 
+// ── site.json › stream — the adaptive chunk streamer ──────────────────────────
+
+/** One quality band. `distance` is metres from the camera to the chunk SURFACE
+ *  at which this band starts applying; `texture` is the rung its materials
+ *  sample. Bands are walked near → mid → far and the FIRST match wins, so
+ *  near.distance < mid.distance < far.distance must hold. */
+export type StreamTier = {
+  distance: number;
+  texture: { px: number; format: "auto" | "webp" | "ktx2" };
+};
+
+export type StreamConfig = {
+  /** Which baked asset set to stream. Resolves to
+   *  `${NEXT_PUBLIC_ASSET_BASE ?? "/assets"}/<slug>/assets/`. */
+  slug: string;
+  tiers: Record<"near" | "mid" | "far", StreamTier>;
+  streaming: {
+    /** `tiers.far.distance` × this = the unload radius. A 10% anti-thrash
+     *  margin so a chunk sitting exactly on the boundary does not load/unload
+     *  every tick. NOT a fourth tier. */
+    unloadBuffer: number;
+    /** How often the whole set is re-evaluated. 10 = every 100 ms. */
+    updateHz: number;
+    frustumCull: boolean;
+    /** Ticks out-of-view a mounted chunk is held before its GPU memory is
+     *  freed. At updateHz 10, 15 = 1.5 s. Stops re-upload thrash when turning. */
+    cullGraceTicks: number;
+    /** Chunks this close stay loaded 360°, so looking around is instant. */
+    alwaysLoadRadiusMetres: number;
+    frustumMarginMetres: number;
+    hysteresisMetres: number;
+    loadsPerTick: number;
+    /** > 0 biases big chunks to load earlier than their surface distance says. */
+    radiusScale: number;
+    refRadius: number;
+  };
+  cache: {
+    /** LRU ceiling on DECODED chunk groups held in the JS heap. Must exceed the
+     *  peak mounted count or the LRU finds nothing evictable — and stay under
+     *  the manifest's chunk count or it can never evict at all. */
+    limitChunks: number;
+    /** Hard ceiling on resident encoded bytes (geometry + textures). Exceed it
+     *  and the effective unload radius shrinks until it fits. 0 = off. */
+    residentBudgetMB: number;
+  };
+  /** Distance fog, which is what lets `tiers.far.distance` be small: chunks
+   *  dissolve into the backdrop before the unload boundary instead of being
+   *  cut off at it. The colour is not authored — it tracks the live scene
+   *  background, which crossfades with the view. `start` is where the fade
+   *  begins ("near"|"mid"|"midfar"|"far" = that band edge, or a number = that
+   *  fraction of the unload radius); it always ENDS at the unload radius. */
+  fog: { enabled: boolean; start: number | "near" | "mid" | "midfar" | "far" };
+};
+
 // ── site.json › the site record ───────────────────────────────────────────────
 
 export type SceneConfig = {
@@ -24,11 +78,31 @@ export type SceneConfig = {
     label: string;
   };
   assets: {
+    /**
+     * The single-GLB model — a whole-zone mesh light enough to draw in one go.
+     *
+     * With `stream` present it is the DOLLHOUSE model and nothing else: the
+     * overview is a fixed vantage looking at the entire zone from the air,
+     * which is the one shot adaptive streaming is bad at (the view cone covers
+     * everything, so the frustum cull buys nothing and the bands only fight the
+     * byte ceiling). A decimated single-draw-call mesh is simply the right
+     * answer up there, and the walking view streams instead. Point this at a
+     * purpose-built low-poly overview mesh to make the dollhouse cheaper — no
+     * other part of the app reads it.
+     *
+     * With `stream` absent it is the walking model too.
+     */
     modelUrl: string;
-    navmeshUrl: string;
+    /** Only for a site with no `stream` block. A streamed site takes the
+     *  navmesh the bake emitted next to its chunks, so there is no second copy
+     *  to keep in step and it follows the asset base to a CDN. */
+    navmeshUrl?: string;
     previewUrl: string;
     envFile: string;
   };
+  /** The adaptive chunk streamer's parameters. Present = the terminal streams
+   *  instead of loading `assets.modelUrl` as one GLB. */
+  stream: StreamConfig;
   world: {
     eyeHeight: number;
     /**
@@ -51,6 +125,20 @@ export type SceneConfig = {
      * byte-for-byte copy of L01's camera position for exactly that reason.
      */
     dollhouse: CameraPose;
+    /**
+     * Where FIRST PERSON begins — the one ground pose the walking view lands on
+     * after the dollhouse fly-in.
+     *
+     * It is authored here rather than derived from `startLayoutId` because
+     * every layout in this site is an aerial framing (`walkable: false`, which
+     * schema-wise is "not a valid first-person entry point"), so there is no
+     * walkable checkpoint to derive it from. Deriving it anyway put the walking
+     * start at L01's camera — 381 m up and 46 m outside the navmesh in X.
+     *
+     * VERIFIED ON-MESH against `assets.navmeshUrl`: the point is inside a
+     * navmesh triangle, surface Y 0.160.
+     */
+    spawn: CameraPose;
   };
   lights: {
     ambientIntensity: number;
@@ -265,6 +353,7 @@ export type SiteConfig = {
    */
   startLayoutId: string;
   assets: SceneConfig["assets"];
+  stream: SceneConfig["stream"];
   world: SceneConfig["world"];
   cameras: SceneConfig["cameras"];
   lights: SceneConfig["lights"];

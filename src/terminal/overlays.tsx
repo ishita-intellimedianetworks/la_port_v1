@@ -612,7 +612,15 @@ export default function Overlays() {
           }}
           onDollhouse={() => {
             closeOverlays();
-            triggerFloorTransition(() => setPhase("dollhouse"));
+            // The return leg of the same asymmetry the entry has: the walking
+            // view streams chunks and the dollhouse draws a single GLB, so this
+            // tears one model down and builds another. `expectedKey` holds the
+            // blackout until that GLB is actually mounted — it was released on
+            // the way in (deliberate memory policy), so it has to re-parse, and
+            // without the gate the fade lifts onto an empty scene.
+            triggerFloorTransition(() => setPhase("dollhouse"), {
+              expectedKey: activeFloor?.id,
+            });
           }}
           onInstructions={() => {
             closeOverlays("instructions");

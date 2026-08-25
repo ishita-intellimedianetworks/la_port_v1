@@ -24,6 +24,7 @@ export default function SceneGraph() {
       dollHousePreviewUrl={d.dollHousePreviewUrl}
       firstPersonStart={d.firstPersonStart}
       onEnterFirstPerson={d.handleEnterFirstPerson}
+      onTransitionCue={d.handleTransitionCue}
       cinematicActive={d.cinematicActive}
       setCinematicActive={d.setCinematicActive}
       onLoaded={() => d.setIsModelLoaded(true)}

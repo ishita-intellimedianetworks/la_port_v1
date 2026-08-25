@@ -82,10 +82,17 @@ interface SingleNavmeshProps {
   debug?: boolean;
 }
 
+// The navmesh ships inside the baked asset set, where it is Draco-compressed
+// (8 KB against the 305 KB raw export). Point drei at the decoder committed
+// under public/draco/ — its default is a gstatic CDN path, which would make an
+// otherwise self-contained app fetch a decoder from the internet to be able to
+// walk, and fail offline.
+const DRACO_PATH = "/draco/";
+
 function SingleNavmeshContent({
   floorId, url, onGeometry, onFloorBounds, onRoomZones, onLoaded, debug,
 }: SingleNavmeshProps) {
-  const { scene } = useGLTF(url);
+  const { scene } = useGLTF(url, DRACO_PATH);
   const done = useRef(false);
   const [debugGeo, setDebugGeo] = useState<THREE.BufferGeometry | null>(null);
 

@@ -36,6 +36,10 @@ export interface SceneGraphData {
     p: [number, number, number],
     r: [number, number, number],
   ) => void;
+  /** Fired during the last ~240 ms of the dollhouse fly-in, so the blackout is
+   *  fully opaque by the time the camera lands and the model swap happens
+   *  behind it. */
+  handleTransitionCue: () => void;
   setCinematicActive: (v: boolean) => void;
   setIsModelLoaded: (v: boolean) => void;
   handleModelLoaded: (key: string) => void;

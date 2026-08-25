@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, type LucideIcon } from "lucide-react";
+import { SHORT_MEDIA_QUERY } from "@/shared/responsive";
 
 export interface MapSelectItem {
   id: string | null;
@@ -46,7 +47,7 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
     // Phone (landscape): open the list BESIDE the pill, using the full screen
     // height — below-the-pill placement stacked a popover scroll on top of the
     // window/legend scrolls, and clipped the list to a couple of rows.
-    const short = window.matchMedia("(max-height: 540px)").matches;
+    const short = window.matchMedia(SHORT_MEDIA_QUERY).matches;
     if (short) {
       // Width = the longest label, MEASURED (CSS max-content collapses here —
       // the rows are w-full, which is circular inside a max-content box and

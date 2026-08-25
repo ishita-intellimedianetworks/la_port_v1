@@ -807,7 +807,15 @@ canvas.htl-main-ready {
   will-change: filter, transform;
 }
 
-@media (max-width: 640px) {
+/* Phone-sized viewports, on EITHER axis.
+   `max-width: 640px` alone was effectively dead here: this app forces phones
+   into landscape, where the narrow edge becomes the HEIGHT and the width is
+   667-932px — so the phones these rules exist for never matched them, and got
+   the desktop 24px canvas blur that the note below calls out as a jank/crash
+   source. The height clause (the `short:` breakpoint) is what actually catches
+   a landscape handset; the width clause still covers portrait, where the
+   loader can be on screen before the rotate prompt resolves. */
+@media (max-width: 640px), (max-height: 540px) {
   /* Tighten the whole HUD so it fits inside the visible viewport on phones */
   .htl-hud {
     padding: 22vh 16px 0;     /* center-ish via top padding, narrower side gutters */
@@ -851,7 +859,8 @@ canvas.htl-main-ready {
   }
 }
 
-/* Very small landscape phones — HUD was overflowing vertically */
+/* Very small landscape phones — HUD was overflowing vertically. Stacks on top
+   of the phone block above, which already matched at this height. */
 @media (max-height: 480px) {
   .htl-hud {
     padding-top: 14vh;

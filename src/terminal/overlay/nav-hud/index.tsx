@@ -81,7 +81,7 @@ export function NavHud({
   return (
     <div className="pointer-events-none fixed left-0 right-0 top-[40%] z-[200] flex justify-center px-4 short:top-[44%]">
       <div
-        className="flex h-[68px] w-[360px] items-center gap-3.5 rounded-[14px] py-2.5 pl-2.5 pr-4 transition-opacity duration-[500ms] ease-out short:h-[58px] short:w-[320px] short:gap-3 short:rounded-[10px] short:py-2 short:pr-3.5 short:scale-[0.8]"
+        className="flex h-[68px] w-[360px] max-w-full items-center gap-3.5 rounded-[14px] py-2.5 pl-2.5 pr-4 transition-opacity duration-[500ms] ease-out short:h-[58px] short:w-[320px] short:gap-3 short:rounded-[10px] short:py-2 short:pr-3.5 short:scale-[0.8]"
         style={{
           ...NAV_GLASS_PANEL,
           opacity: show ? 1 : 0,

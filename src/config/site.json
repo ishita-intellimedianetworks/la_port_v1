@@ -6,10 +6,68 @@
   },
   "startLayoutId": "L01",
   "assets": {
+    "_note": "TWO MODELS, ONE ZONE. `modelUrl` is the DOLLHOUSE model — a decimated whole-zone GLB drawn in one go, which is the right answer for a fixed vantage that frames everything at once. The walking view does not use it: it streams the chunk set in `stream` instead. `previewUrl` is the point-cloud silhouette shown behind the loading HUD and must match `modelUrl`, since it is that model dissolving in. There is no `navmeshUrl` here: the bake emits the navmesh alongside the chunks, so it travels with them (and follows NEXT_PUBLIC_ASSET_BASE to a CDN) rather than being a second copy someone has to keep in step. Set it only for a site with no `stream` block.",
     "modelUrl": "/models/la-port-zone-c5-25-compressed.glb",
-    "navmeshUrl": "/models/navmesh/la-port-zone-c5-navmesh-v1.glb",
     "previewUrl": "/models/la-port-zone-c5-25-compressed.preview.bin",
     "envFile": "/env.hdr"
+  },
+  "stream": {
+    "_note": [
+      "ADAPTIVE CHUNK STREAMING — THE WALKING VIEW ONLY. The model is cut into",
+      "560 chunks, each baked at three quality tiers plus a shared instance",
+      "palette, and the distance from the camera decides which tier a chunk is",
+      "loaded at — or whether it is loaded at all.",
+      "",
+      "  near = good · mid = medium · far = low · beyond far = not loaded",
+      "",
+      "The DOLLHOUSE does not stream: it draws `assets.modelUrl`, one decimated",
+      "whole-zone GLB. Streaming is a bad trade from a fixed vantage that frames",
+      "the entire zone — the view cone covers everything, so the frustum cull",
+      "buys nothing and the bands only fight the byte ceiling, whose eviction",
+      "drops the FURTHEST chunk first, i.e. exactly the half of the frame the",
+      "shot is composed around. The streamer mounts on the way in to first",
+      "person, under the entry blackout, and fills in around `cameras.spawn`",
+      "before the fade lifts.",
+      "",
+      "The asset set is baked in the LA_PORT_ADAPTIVE repo (`npm run bake",
+      "portla-c5-v3-inst`) and staged under public/assets/<slug>/assets/, which",
+      "is gitignored — set NEXT_PUBLIC_ASSET_BASE to serve it from a CDN.",
+      "",
+      "Only `tiers.*.distance`, `tiers.*.texture`, `streaming.*`, `cache.*` and",
+      "`fog` are read live by the browser — edit and reload. The geometry LODs,",
+      "the texture rungs and the chunking itself are baked into files and need a",
+      "re-bake over in that repo.",
+      "",
+      "MEASURED on this asset set: 560 chunks, 275 of them carrying geometry and",
+      "285 fully instanced (placements only). Per tier, all 275: near 24.1 MB /",
+      "8.96 M tris · mid 14.7 MB / 8.45 M · far 10.8 MB / 8.38 M. Plus a 1.1 MB",
+      "palette, a 1.3 MB instance buffer and a 2.5 MB animated crane rig, all",
+      "permanently resident."
+    ],
+    "slug": "portla-c5-v3-inst",
+    "tiers": {
+      "near": { "distance": 50, "texture": { "px": 512, "format": "webp" } },
+      "mid": { "distance": 150, "texture": { "px": 256, "format": "webp" } },
+      "far": { "distance": 300, "texture": { "px": 128, "format": "webp" } }
+    },
+    "streaming": {
+      "unloadBuffer": 1.1,
+      "updateHz": 10,
+      "frustumCull": true,
+      "cullGraceTicks": 15,
+      "alwaysLoadRadiusMetres": 60,
+      "frustumMarginMetres": 40,
+      "hysteresisMetres": 20,
+      "loadsPerTick": 16,
+      "radiusScale": 0,
+      "refRadius": 120
+    },
+    "cache": {
+      "limitChunks": 520,
+      "residentBudgetMB": 24,
+      "_note": "Object-mode chunking makes only 560 chunks in total, so limitChunks has to sit in a WINDOW, not merely above the peak: above the peak mounted count or the LRU finds nothing evictable, but below the 560 total or it can never evict either and the whole model's decoded geometry accumulates in the JS heap. residentBudgetMB is peak encoded x1.25."
+    },
+    "fog": { "enabled": true, "start": "far" }
   },
   "world": {
     "eyeHeight": 1.8288,
@@ -26,6 +84,19 @@
       "rotation": [
         -0.4594,
         0.611,
+        0
+      ]
+    },
+    "spawn": {
+      "_note": "WHERE FIRST PERSON BEGINS. Authored rather than derived from startLayoutId because every layout here is an aerial framing (walkable: false — schema-wise, not a valid first-person entry point), so there is no walkable checkpoint to derive it from; deriving it anyway put the walking start at L01's camera, 381 m up and 46 m outside the navmesh in X. VERIFIED against assets.navmeshUrl: this XZ is inside a navmesh triangle, surface Y 0.160. It is also the point the streamer fills in around while the entry blackout is up, so moving it changes what you land looking at AND what has finished loading when the fade lifts.",
+      "position": [
+        -1239.6,
+        0.16,
+        -118.5
+      ],
+      "rotation": [
+        0,
+        2.5108,
         0
       ]
     }

@@ -8,6 +8,7 @@ import {
   STICKER_MARGIN_PX, MOBILE_STICKER_MARGIN_PX,
   MAP_WINDOW_DEFAULT, MAP_FULL_INSET_X, MAP_FULL_CHROME_Y, SIDE_LEGEND_W,
 } from "../utils/constants";
+import { SHORT_MEDIA_QUERY } from "@/shared/responsive";
 import { pixelToWorld, worldToPixel } from "../utils/coord-utils";
 import {
   drawFloorPlan, drawPath,
@@ -453,7 +454,7 @@ export function useMinimap() {
     const targetDims = () => {
       // Landscape-phone viewport: a slimmer left rail + tighter chrome, and a
       // smaller default window so the whole thing fits on screen.
-      const short = window.matchMedia("(max-height: 540px)").matches;
+      const short = window.matchMedia(SHORT_MEDIA_QUERY).matches;
       const insetX = short ? 72 : MAP_FULL_INSET_X;   // left rail + side margins
       // List-mode (memorial) adds the selector row above the plan AND the
       // destination list below it → the chrome is taller. On phones the
