@@ -25,9 +25,20 @@ export const MAP_FULL_CHROME_Y = 150;
 // 158 → 176: the gate rows now carry the crowd "● Moderate" chip beside the
 // name, which at 158 truncated the gate names to a couple of characters.
 export const SIDE_LEGEND_W = 176;
-export const MIN_ZOOM = 1;
-export const MAX_ZOOM = 4;
 export const ZOOM_FACTOR = 1.18; // per wheel tick
+
+// Zoom is expressed in metres-per-pixel and both ends are derived at runtime
+// from the rects themselves, because "how far out is all the way out" depends
+// on how much bigger the site aerial is than the walkable zone — which is
+// authored, not fixed. These two are the only tuning left.
+
+/** How far past the zone framing you may zoom IN. 6x on an 841 x 989 m zone
+ *  puts roughly 140 m across the canvas, about one berth. */
+export const ZOOM_IN_LIMIT = 6;
+
+/** Slack at the zoomed-OUT end, so the outermost layer clears the edges
+ *  instead of sitting flush against them. */
+export const ZOOM_OUT_MARGIN = 1.08;
 
 // Sticker margin (px). Fixed pixels carved out of the existing canvas — the
 // canvas keeps the same outer dimensions as before stickers existed, and

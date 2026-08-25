@@ -43,6 +43,7 @@ export const scene: SceneConfig = {
   cameras: site.cameras,
   lights: site.lights,
   globals: site.globals,
+  map: site.map,
 };
 
 export const ui: UiConfig = {
