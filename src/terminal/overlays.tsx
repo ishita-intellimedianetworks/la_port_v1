@@ -25,6 +25,7 @@ import type { DestinationCategory, DestinationsByCategory } from "@/shared/types
 import { useNavUiStore } from "./stores/nav-ui-store";
 import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
 import { HotspotDataCard } from "./overlay/hotspot-card";
+import { SkyDebug } from "./overlay/sky-debug";
 import { tick } from "@/shared/runtime/diagnostics";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
@@ -583,9 +584,11 @@ export default function Overlays() {
 
 
       {/* Left edge: the single "Resources" panel — layouts, each expandable
-          to its child hotspots. Tucked away while the instructions card is
-          up — the card is what the viewer is meant to be reading, and chrome
-          sliding in behind it competes for attention. */}
+          to its child hotspots. Tucked away behind any overlay that owns the
+          screen — the instructions card, or a resource's data card — because
+          that overlay is what the viewer is meant to be reading and chrome
+          standing beside it competes for attention. It slides back in on its
+          own when the overlay closes, keeping whatever was unfolded. */}
       {phase === "firstPerson" && (
         <HotspotsFlap
           open={hotspotsFlapOpen}
@@ -594,19 +597,25 @@ export default function Overlays() {
             setHotspotsFlapOpen(next);
           }}
           disabled={fadeVisible}
-          tucked={isMoving || instructionsOpen}
+          tucked={isMoving || instructionsOpen || dataCardOpen}
         />
       )}
 
       {/* Bottom dock: the four actions that work from anywhere. */}
       {phase === "firstPerson" && (
         <BottomBar
-          visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen}
+          // Fades out under the same overlays the left flap tucks behind: while
+          // a card is being read the four circles are not the thing to press,
+          // and the way out of the card is the card's own close button.
+          visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen && !dataCardOpen}
           // Resources is open: drop the dock off the bottom edge. The panel is
           // the tallest overlay on the screen and, on a landscape phone, ends
           // within a thumb's width of these circles.
           tucked={hotspotsFlapOpen}
           mapOpen={mapExpanded}
+          // The map overlay is off for now — the button stays in the dock,
+          // greyed, rather than being removed, so the row does not reflow.
+          mapDisabled
           onOpenMap={() => {
             // Read the toggle BEFORE closeOverlays sets it false, or the map
             // could never be opened — only closed and immediately reopened.
@@ -727,6 +736,10 @@ export default function Overlays() {
 
 
       <FadeScreen visible={fadeVisible} />
+
+      {/* ?debug=true only — the time-of-day slider, next to PerfMeter's readout
+          so the sky's cost can be watched while it is being driven. */}
+      {ui.sceneContent.debug && <SkyDebug />}
     </>
   );
 }

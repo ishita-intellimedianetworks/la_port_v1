@@ -17,6 +17,8 @@ interface BottomBarProps {
   tucked?: boolean;
   mapOpen: boolean;
   onOpenMap: () => void;
+  /** Greys the Map circle out and stops it opening the overlay. */
+  mapDisabled?: boolean;
   onDollhouse: () => void;
   onInstructions: () => void;
   onHome: () => void;
@@ -41,6 +43,7 @@ export function BottomBar({
   tucked,
   mapOpen,
   onOpenMap,
+  mapDisabled,
   onDollhouse,
   onInstructions,
   onHome,
@@ -66,7 +69,7 @@ export function BottomBar({
         <BarButton icon={Home} label="Home" onClick={onHome} />
         <BarButton icon={DollhouseGlyph} label="Dollhouse" onClick={onDollhouse} />
         <BarButton icon={Info} label="Instructions" onClick={onInstructions} />
-        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} />
+        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} disabled={mapDisabled} />
       </div>
     </div>
   );
@@ -80,11 +83,13 @@ function BarButton({
   label,
   onClick,
   active,
+  disabled,
 }: {
   icon: BarIcon;
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
 }) {
   // The hover, lifted from the ARCHVIZ dock: the circle grows a bare 5% and its
   // icon warms from 86%-white to pure white over 200ms on the default `ease`.
@@ -98,9 +103,12 @@ function BarButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       className={cn(
+        disabled && "pointer-events-none opacity-40",
+
         // A landscape phone spends its scarce axis on height, and 48px of dock
         // plus its margin is ~17% of a 375px-tall screen. Shrink with the rest
         // of the `short:` chrome (the walking dock and interior Home already
