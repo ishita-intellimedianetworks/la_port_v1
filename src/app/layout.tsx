@@ -27,9 +27,9 @@ const barlow = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "HoloTwin — Everport Container Terminal",
+  title: "HoloTwin — Everport Terminal Services",
   description:
-    "Operational digital twin of the Everport Container Terminal, Berths 226-236, Port of Los Angeles.",
+    "Operational digital twin of Everport Terminal Services, Berths 226-236, Port of Los Angeles.",
 };
 
 export const viewport: Viewport = {

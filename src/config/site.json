@@ -2,7 +2,7 @@
   "_note": "SINGLE SOURCE OF TRUTH for the whole site — the only data file in the app. Shaped as DB TABLES, not as a tree: `layouts` and `hotspots` are sibling arrays and a hotspot names its parent with `layoutId` (the foreign key). The nesting the Resources panel shows is rebuilt at load by src/config/index.ts, and the engine's scene/destination structure is projected at import by src/shared/scene-data/adapter.ts — nothing is generated to disk, so no value exists here twice. Each top-level key maps to one table or one settings row: meta/assets/world/cameras/lights/globals are the site record, zones/tones/copy are its presentation, layouts and hotspots are the two content tables.",
   "meta": {
     "id": "everport-la",
-    "label": "Everport Container Terminal"
+    "label": "Everport Terminal Services"
   },
   "startLayoutId": "L01",
   "assets": {
@@ -872,7 +872,7 @@
           "name": "terminal_name",
           "label": "Terminal",
           "type": "string",
-          "value": "Everport Container Terminal"
+          "value": "Everport Terminal Services"
         },
         {
           "name": "operator",

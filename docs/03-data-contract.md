@@ -46,7 +46,7 @@ hotspot-specific hard-coded UI.
 {
   "meta": {
     "id": "everport-la",
-    "label": "Everport Container Terminal",
+    "label": "Everport Terminal Services",
     "subtitle": "Berths 226-236 · Terminal Island · Port of Los Angeles",
     "brand": "HOLOTWIN",
     "version": "0.1.0",
