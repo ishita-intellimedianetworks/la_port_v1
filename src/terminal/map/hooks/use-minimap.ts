@@ -15,7 +15,7 @@ import {
   type MapHotspot,
 } from "../utils/draw";
 import {
-  bakeDimmed, clampView, contains, fitMpp, fitView, hasDrifted,
+  bakeDimmed, clampPoint, clampView, contains, fitMpp, fitView, hasDrifted,
   plainRect, viewBounds, zoomAt,
   type View, type WorldRect,
 } from "../utils/view";
@@ -960,7 +960,13 @@ export function useMinimap() {
             ctx.fill();
           }
         }
-        drawPlayerFOV(ctx, pos, ctrl.getRotationY(), bounds, W, H, playerScale);
+        // The live marker is the GROUND projection of wherever the camera is —
+        // every layout here is a fly pose, so its Y is meaningless on a plan and
+        // its XZ can sit outside the zone. Pinning it to the zone keeps the dot
+        // on the drawn part of the plan instead of sliding off-canvas. The route
+        // above still uses the true position, so a walk is never distorted.
+        const marker = zr ? clampPoint(zr, pos.x, pos.z) : pos;
+        drawPlayerFOV(ctx, marker, ctrl.getRotationY(), bounds, W, H, playerScale);
         // destination hotspots for the active label (dots + name · distance).
         // `zoom` keeps them a constant screen size under the pan+zoom transform,
         // so zooming in spreads clustered dots apart instead of magnifying them.
@@ -1051,8 +1057,12 @@ export function useMinimap() {
   const recenter = useCallback(() => {
     const home = homeRef.current;
     const pos = playerControllerRef.current?.getPosition();
-    const target: View = pos
-      ? { cx: pos.x, cz: pos.z, mpp: home.mpp }
+    const zr = zoneRectRef.current;
+    // Clamped for the same reason the marker is: recentring on a fly camera
+    // would otherwise frame empty water a kilometre off the terminal.
+    const at = pos && zr ? clampPoint(zr, pos.x, pos.z) : pos;
+    const target: View = at
+      ? { cx: at.x, cz: at.z, mpp: home.mpp }
       : { ...home };
     const from = { ...viewRef.current };
     const DUR = 320;

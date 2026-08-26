@@ -64,6 +64,21 @@ export function contains(r: WorldRect, x: number, z: number): boolean {
 }
 
 /**
+ * Nearest point inside `r`.
+ *
+ * Every layout camera is authored in fly mode — hundreds of metres up and, in
+ * this site, outside the zone entirely. The map only ever reads XZ, so height is
+ * already ignored; this pins the live marker to the zone so it stays on the part
+ * of the plan that is actually drawn instead of sliding off-canvas.
+ */
+export function clampPoint(r: WorldRect, x: number, z: number): { x: number; z: number } {
+  return {
+    x: Math.min(r.maxX, Math.max(r.minX, x)),
+    z: Math.min(r.maxZ, Math.max(r.minZ, z)),
+  };
+}
+
+/**
  * Clamps the CENTRE, not the edges: zoomed out the visible area is larger than
  * the content, and clamping edges there fights the user on every drag.
  */
