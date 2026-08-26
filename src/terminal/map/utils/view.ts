@@ -111,8 +111,16 @@ export function hasDrifted(v: View, home: View): boolean {
 /**
  * Baked once, not `ctx.filter` per frame — the RAF loop runs continuously while
  * the map is open and filtering a 2K source every frame would dominate it.
+ *
+ * `grey` is separate from `brightness` because an aerial that already ships
+ * stylised — terminal lit, surroundings darkened — needs almost none of either,
+ * and greyscaling it would throw away the styling it came with.
  */
-export function bakeDimmed(img: HTMLImageElement, brightness = 0.5): HTMLCanvasElement | null {
+export function bakeDimmed(
+  img: HTMLImageElement,
+  brightness = 0.5,
+  grey = 1,
+): HTMLCanvasElement | null {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   if (!w || !h) return null;
@@ -121,7 +129,7 @@ export function bakeDimmed(img: HTMLImageElement, brightness = 0.5): HTMLCanvasE
   cv.height = h;
   const ctx = cv.getContext("2d");
   if (!ctx) return null;
-  ctx.filter = `grayscale(1) brightness(${brightness})`;
+  ctx.filter = `grayscale(${grey}) brightness(${brightness})`;
   ctx.drawImage(img, 0, 0);
   return cv;
 }
