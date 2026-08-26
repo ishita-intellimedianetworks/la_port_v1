@@ -274,12 +274,12 @@
     }
   },
   "map": {
-    "_note": "TWO RECTS: zone inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — lifted out of a dimmed surround. ONE image does both passes: `site` is a pre-graded aerial that already lights the terminal and darkens everything around it, so there is no second render layered over it to misregister against. A `plan` block may be added back (a top-down model render, its own bounds beside it) when the zone needs more resolution than the aerial carries. `site.bounds` uses the FLIPPED image convention (minX holds the world MAX) and comes out of /admin/bounds; VERIFIED by correlation — the lit terminal centres on the navmesh to within 2 m in X and 45 m in Z. `zone` is a PLAIN world rect (minX < maxX) because people author it, defaulting to the navmesh AABB.",
+    "_note": "TWO RECTS: zone inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — lifted out of a dimmed surround. ONE image does both passes: `site` is a pre-graded aerial that already lights the terminal and darkens everything around it, so there is no second render layered over it to misregister against. A `plan` block may be added back (a top-down model render, its own bounds beside it) when the zone needs more resolution than the aerial carries. `site.bounds` names the world coords of the image EDGES: minX/maxX are its left/right (X grows rightward, east), minZ/maxZ its top/bottom (Z grows UPWARD, north) — so X reads plainly and only Z is inverted. VERIFIED twice: the lit terminal centres on the navmesh to within 2 m in X and 45 m in Z, and the spawn point lands on the quay it is authored at. `zone` is a PLAIN world rect (minX < maxX) because people author it, defaulting to the navmesh AABB.",
     "site": {
       "imageUrl": "/floorplan/everport-site.jpg",
       "bounds": {
-        "minX": 1159.42,
-        "maxX": -2939.345,
+        "minX": -2939.345,
+        "maxX": 1159.42,
         "minZ": 1032.324,
         "maxZ": -1127.701
       }

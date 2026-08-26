@@ -595,7 +595,11 @@ export function drawPlayerFOV(
 
   ctx.save();
   ctx.translate(px, py);
-  ctx.rotate(Math.PI - rotY);
+  // The cone is drawn pointing up in local space. Screen X now grows with world
+  // X and screen Y against world Z, so a yaw of `rotY` (forward
+  // `(-sin, -cos)`) lands at `PI + rotY`. It was `PI - rotY` while X was
+  // flipped; leaving it there mirrors the facing.
+  ctx.rotate(Math.PI + rotY);
 
   // FOV gradient cone
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledFovLen);

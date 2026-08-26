@@ -698,10 +698,10 @@ export function useMinimap() {
       const dy = e.clientY - d.sy;
       if (!d.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) d.moved = true;
       if (!d.moved) return;
-      // Canvas X grows as world X shrinks (the +Z-up flip), so dragging right
-      // must INCREASE the world centre for the content to follow the pointer.
+      // X grows rightward, Z upward, so the centre moves against the drag on X
+      // and with it on Z for the content to follow the pointer.
       const { mpp } = viewRef.current;
-      const next = { ...viewRef.current, cx: d.cx + dx * mpp, cz: d.cz + dy * mpp };
+      const next = { ...viewRef.current, cx: d.cx - dx * mpp, cz: d.cz + dy * mpp };
       const limit = outerRectRef.current;
       viewRef.current = limit ? clampView(next, limit) : next;
     };
@@ -790,7 +790,7 @@ export function useMinimap() {
         if (Math.abs(dx) > TOUCH_PAN_THRESHOLD || Math.abs(dy) > TOUCH_PAN_THRESHOLD) {
           dragRef.current.moved = true;
           const { mpp } = viewRef.current;
-          const next = { ...viewRef.current, cx: touch.panCX + dx * mpp, cz: touch.panCZ + dy * mpp };
+          const next = { ...viewRef.current, cx: touch.panCX - dx * mpp, cz: touch.panCZ + dy * mpp };
           const limit = outerRectRef.current;
           viewRef.current = limit ? clampView(next, limit) : next;
         }

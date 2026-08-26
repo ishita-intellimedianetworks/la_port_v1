@@ -35,11 +35,18 @@ export function plainRect(b: Bounds): WorldRect {
   };
 }
 
-/** Derived so `worldToPixel(wx, wz, viewBounds(v, W, H), W, H)` gives canvas px. */
+/**
+ * Derived so `worldToPixel(wx, wz, viewBounds(v, W, H), W, H)` gives canvas px.
+ *
+ * X grows rightward and Z grows UPWARD, which for this site's axes (+X east,
+ * +Z north) is a plain north-up, east-right map. X used to be flipped like Z,
+ * which put east on the left: the aerial read correctly but the player marker
+ * appeared on the opposite side of the quay from where it stood.
+ */
 export function viewBounds(v: View, W: number, H: number): Bounds {
   return {
-    minX: v.cx + (W / 2) * v.mpp,
-    maxX: v.cx - (W / 2) * v.mpp,
+    minX: v.cx - (W / 2) * v.mpp,
+    maxX: v.cx + (W / 2) * v.mpp,
     minZ: v.cz + (H / 2) * v.mpp,
     maxZ: v.cz - (H / 2) * v.mpp,
   };
@@ -97,9 +104,9 @@ export function zoomAt(
 ): View {
   const mpp = Math.min(maxMpp, Math.max(minMpp, v.mpp * factor));
   if (mpp === v.mpp) return v;
-  const wx = v.cx - (px - W / 2) * v.mpp;
+  const wx = v.cx + (px - W / 2) * v.mpp;
   const wz = v.cz - (py - H / 2) * v.mpp;
-  return { mpp, cx: wx + (px - W / 2) * mpp, cz: wz + (py - H / 2) * mpp };
+  return { mpp, cx: wx - (px - W / 2) * mpp, cz: wz + (py - H / 2) * mpp };
 }
 
 /** Has the view moved far enough from `home` to offer a recenter? */
