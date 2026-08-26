@@ -122,6 +122,24 @@
   },
   "map": {
     "_note": "THREE NESTED RECTS: zone inside plan inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — drawn in colour, while `plan` and `site` fade out in greyscale around it as you zoom out. `plan` is a top-down render of the model and `site` the wide-area aerial; both store the image WITH the rect it was framed to, so the render can come from any GLB (the dollhouse model runs ~600 m wider than the streamed chunk set). Both use the FLIPPED image convention (minX holds the world MAX) and both come out of /admin/bounds — paste them, do not type them. `zone` is the exception: a PLAIN world rect (minX < maxX) because people author it, defaulting to the navmesh AABB.",
+    "plan": {
+      "imageUrl": "/floorplan/terminal-plan.png",
+      "bounds": {
+        "minX": -58.504,
+        "maxX": -2159.121,
+        "minZ": 969.87,
+        "maxZ": -889.443
+      }
+    },
+    "site": {
+      "imageUrl": "/floorplan/everport-site.jpg",
+      "bounds": {
+        "minX": 470.92,
+        "maxX": -3627.845,
+        "minZ": 936.224,
+        "maxZ": -1223.801
+      }
+    },
     "zone": {
       "minX": -1502.324,
       "maxX": -661.783,
