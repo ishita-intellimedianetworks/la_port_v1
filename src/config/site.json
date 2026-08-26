@@ -115,14 +115,14 @@
         "distance": 250,
         "texture": {
           "px": 256,
-          "format": "ktx2"
+          "format": "webp"
         }
       },
       "far": {
         "distance": 900,
         "texture": {
           "px": 128,
-          "format": "ktx2"
+          "format": "webp"
         }
       }
     },
@@ -140,7 +140,7 @@
     },
     "cache": {
       "limitChunks": 500,
-      "residentBudgetMB": 320,
+      "residentBudgetMB": 256,
       "_note": "REAL DECODED megabytes of GPU-resident geometry + textures, clamped further by the per-device ceiling in streaming/memory.ts (whichever is lower wins). It was 34, but that counted the manifest ENCODED sizes: at the 13.5x decode ratio measured on this bake it meant ~460 MB and the loop never fired. limitChunks is now only a secondary cap on the CPU cache, which is bounded by bytes (memory.ts > cpuMB) — a count cannot bound a set whose chunk radii span 3.6 m to 692 m, and 500 was reasoned against 816 chunks when the cache is keyed by url, of which there are 816 x 3 tiers = 2,448."
     },
     "fog": {
@@ -196,21 +196,21 @@
           "distance": 150,
           "texture": {
             "px": 256,
-            "format": "ktx2"
+            "format": "webp"
           }
         },
         "mid": {
           "distance": 800,
           "texture": {
             "px": 128,
-            "format": "ktx2"
+            "format": "webp"
           }
         },
         "far": {
           "distance": 6000,
           "texture": {
             "px": 128,
-            "format": "ktx2"
+            "format": "webp"
           }
         }
       },
@@ -222,38 +222,137 @@
       },
       "cache": {
         "limitChunks": 900,
-        "residentBudgetMB": 400
+        "residentBudgetMB": 256
       }
+    },
+    "dollhouse": {
+      "_note": [
+        "THE OVERVIEW — one fixed camera, the whole model, the coarsest tier.",
+        "",
+        "The dollhouse used to draw `assets.modelUrl`, a separate 11 MB decimated",
+        "GLB of the same zone. It now streams the SAME manifest the walking view",
+        "does, with `forceTier: far` pinning every chunk to the lowest geometry",
+        "LOD and the 128 px rung. Measured on this bake, minus the two hidden",
+        "planes: 814 chunks / 22.1 MB encoded / 10.92 M tris for the whole",
+        "district — and they are the same bytes first person wants first, so",
+        "entering it re-mounts from the decoded-chunk cache rather than parsing a",
+        "second model. One asset set now feeds both views.",
+        "",
+        "WHY A PIN AND NOT near/mid AT 0. Both flatten the tiers, but the zeros",
+        "also floor the resident-budget loop at `near x 1.5` = 0: a device short",
+        "of VRAM would shrink the unload radius to nothing and empty the overview",
+        "instead of thinning it. The distances here are the aerial ones, so under",
+        "pressure the view degrades from the outside in, from a 225 m floor.",
+        "",
+        "THE BYTES ARE REAL. 22.1 MB encoded decodes to 308 MB of geometry, held",
+        "twice (JS heap + GPU) — see streaming/memory.ts. It fits a desktop that",
+        "reports >= 8 GB (gpuMB 448); a mid desktop (288) drops the furthest ~7%,",
+        "and a phone (96-160) holds a third of it. There is no coarser tier to",
+        "fall back to: `far` IS the bottom of this asset set. If the overview has",
+        "to be complete on weak hardware, that wants a purpose-baked low-poly",
+        "mesh in `assets.modelUrl` and this block deleted.",
+        "",
+        "frustumCull is OFF and alwaysLoadRadiusMetres is 0: the shot is composed",
+        "around everything in frame, the orbit turns the camera through 360, and",
+        "a cull here would only trade the budget's furthest-first eviction for a",
+        "behind-you one. hysteresisMetres is 0 — with one tier there are no band",
+        "crossings left to damp.",
+        "",
+        "fog is off. The fade exists so a small download radius does not read as a",
+        "wall; here the radius spans the district and there is nothing beyond it",
+        "to hide.",
+        "",
+        "HIDE — the two backdrop planes, `water` and `Land_Mesh` in the source",
+        "scene. They are 15 x 10 km and 14.5 x 8.6 km against a terminal 1.6 x",
+        "1.5 km, so from up here they ARE the frame, and the orbit pivot (the",
+        "bbox centre of what is drawn) sits out at sea rather than on the",
+        "terminal. They are named by MATERIAL because the bake keeps no mesh",
+        "names — see StreamHideRule. On this manifest the rules resolve to c1",
+        "(M_Ocean_Water.001, the only chunk carrying it) and c343 (radius",
+        "8,427 m); the terminal's own pavement shares c343's material name at",
+        "radius 969 m, which is what the minRadiusMetres guard spares."
+      ],
+      "tiers": {
+        "near": {
+          "distance": 150,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        },
+        "mid": {
+          "distance": 800,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        },
+        "far": {
+          "distance": 12000,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        }
+      },
+      "forceTier": "far",
+      "streaming": {
+        "unloadBuffer": 1.05,
+        "frustumCull": false,
+        "alwaysLoadRadiusMetres": 0,
+        "hysteresisMetres": 0,
+        "loadsPerTick": 24
+      },
+      "cache": {
+        "limitChunks": 900,
+        "residentBudgetMB": 220
+      },
+      "fog": {
+        "enabled": false,
+        "start": "far"
+      },
+      "hide": [
+        {
+          "_mesh": "water",
+          "material": "M_Ocean_Water.001"
+        },
+        {
+          "_mesh": "Land_Mesh",
+          "material": "M_Ground_Pavement.001",
+          "minRadiusMetres": 2000
+        }
+      ]
     }
   },
   "world": {
     "eyeHeight": 1.8288,
-    "fov": 10,
+    "fov": 30,
     "shadows": true
   },
   "cameras": {
     "dollhouse": {
+      "_note": "FRAMED BY HAND in the running app and pasted from the pose log — drag the overview with ?debug=true and DollhouseCamera prints this exact line, the `settled` one being the pose you stopped at (rotation as the YXZ euler seatAtHome applies, NOT the XYZ order a GLB tool prints). It started from cp_dolllhouse in la-port-zone-c5-cp-dollhouse.glb and was worked from there. 1,411 m from the zone centre and aimed straight at it, which is what the orbit keeps doing anyway: once the model's world bounds are published the camera re-aims at that centre every frame, so the rotation here only holds until then while the position sets the orbit's radius and angle for good. At `world.fov` 15 that range frames about 370 m of the terminal vertically; the authoring camera carried a 32 degree yfov, so widening the site fov rather than pulling further back is the other way to open the shot.",
       "position": [
-        -669.1815,
-        430.9473,
-        667.9736
+        -2143.7272,
+        272.5268,
+        -81.0028
       ],
       "rotation": [
-        -0.4594,
-        0.611,
+        -0.1673,
+        -1.7747,
         0
       ]
     },
     "spawn": {
-      "_note": "WHERE FIRST PERSON BEGINS. Authored rather than derived from startLayoutId because every layout here is an aerial framing (walkable: false — schema-wise, not a valid first-person entry point), so there is no walkable checkpoint to derive it from; deriving it anyway put the walking start at L01's camera, 381 m up and 46 m outside the navmesh in X. It is also the point the streamer fills in around while the entry blackout is up, so moving it changes what you land looking at AND what has finished loading when the fade lifts.  MOVED FOR NAVMESH-V2, which ships with the portla-c5-v5-obj bake. The previous point [-1239.6, 0.16, -118.5] was verified on navmesh-v1, but v2 punched holes in it (3,988 -> 3,950 triangles) and one of them is exactly there — the adaptive repo's inspect reports that XZ as NOT ON THE NAVMESH. This is the centroid of the nearest triangle on the LARGEST island, 26.8 m away, so the authored view is essentially preserved; Y 0.153 is the navmesh ground height at it, not a guess. Note navmesh-v2 fragments into 55 islands where v1 was one, so a route between two points that used to connect may not any more.",
+      "_note": "WHERE FIRST PERSON BEGINS, and where the Home button returns to. Authored rather than derived from startLayoutId because every layout here is an aerial framing (walkable: false — schema-wise, not a valid first-person entry point), so there is no walkable checkpoint to derive it from. It is also the point the streamer fills in around while the entry blackout is up, so moving it changes what you land looking at AND what has finished loading when the fade lifts. TAKEN FROM cp_012 in la-port-zone-c5-cp-v3.glb, via /extract-pos. That file ships twelve cameras; cp_001..cp_010 are the layout framings and cp_012 is this one. The tool prints an XYZ euler and this block stores the YXZ one the runtime applies, so the rotation here is the reorder of [3.0925, -0.0976, 3.1368], not those numbers — re-derive it rather than pasting from the tool. NOT ON THE NAVMESH: its XZ is inside the navmesh-v2 AABB but misses every one of the 3,950 triangles, the nearest vertex being 95.3 m away at [-1227.3, 0.16, -149.4] — which is where the previous spawn sat. Home probes the floor at this XZ and teleports there regardless, so walking OUT of it depends on the snap finding an island. cp_011 in the same file IS on the mesh (surface Y 0.160) if this needs to become walkable.",
       "position": [
-        -1226.74,
-        0.153,
-        -141.98
+        -1314.8853,
+        25.5548,
+        -187.0586
       ],
       "rotation": [
-        0,
-        2.5108,
+        0.0489,
+        -3.0439,
         0
       ]
     }
@@ -294,10 +393,10 @@
     "plan": {
       "imageUrl": "/floorplan/terminal-plan.png",
       "bounds": {
-        "minX": -2282.156,
-        "maxX": 85.205,
-        "minZ": 1103.21,
-        "maxZ": -993.194
+        "minX": -1606.959,
+        "maxX": -114.854,
+        "minZ": 790.44,
+        "maxZ": -967.835
       }
     },
     "site": {
