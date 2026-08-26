@@ -105,11 +105,7 @@ export function MapDestinationControls({
             )}
           </div>
         </>
-      ) : listMode ? null : (
-        <span className="nav-display m-auto text-[11.5px] font-medium" style={{ color: "rgba(255,255,255,0.42)", letterSpacing: "0.3px" }}>
-          Select a hotspot on the plan to set a destination
-        </span>
-      )}
+      ) : null}
     </div>
   );
 }

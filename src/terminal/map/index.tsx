@@ -308,72 +308,10 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
           </div>
         )}
 
-        {/* Category radios — vertical list in the right column (CLASSIC design
-            only; list-mode uses the selector controls above the plan). On the
-            ACTIVE category, its sub-categories nest directly underneath in the
-            shared design's tree style. */}
-        {!listMode && destCats.length > 0 && (
-          <div
-            data-map-scroll
-            className="ui-scrollbar flex flex-col gap-0.5 overflow-y-auto overscroll-contain px-1.5 py-2"
-            role="radiogroup"
-            style={{ width: radioWidth, height: mapHeight, borderLeft: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            {destCats.map((c) => {
-              const on = c.key === destLabel;
-              return (
-                <div key={c.key} className="flex flex-col">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => pickDestLabel(c.key)}
-                    className="nav-display flex w-full cursor-pointer items-start gap-1.5 rounded-[8px] px-1.5 py-1.5 text-left text-[11.5px] leading-tight transition-colors hover:bg-white/[0.05]"
-                    style={{ fontWeight: on ? 600 : 500, color: on ? "#ffffff" : "var(--nav-text-2)" }}
-                  >
-                    <span
-                      className="flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full"
-                      style={{ border: `1.5px solid ${on ? "var(--nav-accent-bright)" : "var(--nav-text-dim)"}` }}
-                    >
-                      {on && <span className="h-[6px] w-[6px] rounded-full" style={{ background: "var(--nav-accent-bright)" }} />}
-                    </span>
-                    <span className="min-w-0 break-words">{c.short}</span>
-                  </button>
-
-                  {on && mapOptions.length > 1 && (
-                    <div
-                      className="mb-1 ml-[13px] flex flex-col gap-px pb-1 pl-2.5 pt-0.5"
-                      style={{ borderLeft: "1.5px solid rgba(255,255,255,0.12)" }}
-                    >
-                      {[null, ...mapOptions].map((o) => {
-                        const optOn = mapOption === o;
-                        return (
-                          <button
-                            key={o ?? "__all"}
-                            type="button"
-                            onClick={() => pickMapOption(o)}
-                            className="nav-body flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 py-[6px] text-left text-[11px] leading-tight transition-colors hover:bg-white/[0.05]"
-                            style={{
-                              fontWeight: 600,
-                              color: optOn ? "#ffffff" : "#c7c7cc",
-                              background: optOn ? "rgba(10,132,255,0.22)" : "transparent",
-                            }}
-                          >
-                            <span
-                              className="h-[6px] w-[6px] shrink-0 rounded-full"
-                              style={{ background: optOn ? "#0a84ff" : "rgba(255,255,255,0.3)" }}
-                            />
-                            <span className="min-w-0 break-words">{o ?? "All"}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* The category radio column and the hotspot pins are intentionally
+            absent: this venue's layouts are aerial framings and its hotspots
+            are authored in a different coordinate frame, so neither placed
+            meaningfully on the plan. The map is the plan plus your position. */}
       </div>
 
       {/* Action bar — selected destination + Start / Teleport / Stop. In

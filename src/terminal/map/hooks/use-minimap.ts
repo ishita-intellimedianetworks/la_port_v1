@@ -11,7 +11,7 @@ import { pixelToWorld, worldToPixel } from "../utils/coord-utils";
 import {
   drawPath,
   drawPlayerFOV, drawClickMarker,
-  drawStickers, drawHotspots,
+  drawStickers,
   type MapHotspot,
 } from "../utils/draw";
 import {
@@ -211,10 +211,6 @@ export function useMinimap() {
           (activeFloor?.dests?.layouts?.length ?? 0) > 0 ? "layouts" : destCats[0]?.key;
         const want = destLabel ?? lastLabelRef.current ?? fallback;
         if (want && destLabel !== want) toggleLabel(want);
-      } else if (!destLabel && destCats[0]) {
-        // Classic: if no category is active yet, open the first one so its
-        // hotspots are visible immediately on the map.
-        toggleLabel(destCats[0].key);
       }
     } else {
       // Closing → only drop the preview route. We deliberately DON'T clear the
@@ -546,7 +542,9 @@ export function useMinimap() {
       // Fit the widest label, but never let the column exceed ~42% of the window
       // (keeps the map readable on a narrow phone). List-mode has NO side
       // column — its categories live in the selector controls above the plan.
-      const radioW = radioKey && !listMode ? Math.min(Math.ceil(maxText) + 52, Math.round(winW * 0.42)) : 0;
+      // The classic radio column was removed from the map, so nothing is
+      // reserved for it. List-mode keeps its own selector above the plan.
+      const radioW = 0;
       return { w: Math.max(140, winW - radioW), h: winH, radioW };
     };
 
@@ -942,8 +940,6 @@ export function useMinimap() {
       const markerScale = MARKER_SCALE;
       // Taper on a small (phone) canvas, where the fixed 1.25 reads oversized.
       const playerScale = MARKER_SCALE * Math.max(0.55, Math.min(1, W / 360));
-      // Hotspot dots taper harder — clustered pins read as one blob otherwise.
-      const hotspotScale = MARKER_SCALE * Math.max(0.45, Math.min(1, W / 520));
       if (ctrl) {
         const pos = ctrl.getPosition();
         const moving = ctrl.isMoving();
@@ -988,9 +984,8 @@ export function useMinimap() {
         // destination hotspots for the active label (dots + name · distance).
         // `zoom` keeps them a constant screen size under the pan+zoom transform,
         // so zooming in spreads clustered dots apart instead of magnifying them.
-        if (destLabelRef.current && hotspotsRef.current.length) {
-          drawHotspots(ctx, hotspotsRef.current, bounds, W, H, hotspotScale, selectedDestIdRef.current, listModeRef.current, 1);
-        }
+        // Hotspot pins are not drawn: they are authored in a frame the plan
+        // does not share, so they landed off the terminal entirely.
       }
       const cm = clickMarkerRef.current;
       if (cm) {
@@ -1050,25 +1045,9 @@ export function useMinimap() {
     // are picked from the numbered list under it, never by tapping the map.
     if (listModeRef.current) return;
 
-    // When a label's hotspots are shown, a tap selects the nearest hotspot
-    // (previewing its route) instead of walking; an empty tap clears it.
-    if (destLabelRef.current) {
-      const HIT_PX = 18;
-      let best = HIT_PX;
-      let hit: MapHotspot | null = null;
-      for (const h of hotspotsRef.current) {
-        const p = worldToPixel(h.x, h.z, vb, W, H);
-        const d = Math.hypot(p.px - px, p.py - py);
-        if (d < best) { best = d; hit = h; }
-      }
-      if (hit) selectMapDestination(hit.id, hit.x, hit.z);
-      else clearDestSelection();
-      return;
-    }
-
     clickMarkerRef.current = { x: world.x, z: world.z, alpha: 1 };
     navigateFromMinimap(world.x, world.z);
-  }, [mapWidth, mapHeight, navigateFromMinimap, selectMapDestination, clearDestSelection, playerControllerRef]);
+  }, [mapWidth, mapHeight, navigateFromMinimap, playerControllerRef]);
 
   // ── Recenter ──────────────────────────────────────────────────────────────
   // Returns to the zone framing centred on the PLAYER, not a plain reset.
