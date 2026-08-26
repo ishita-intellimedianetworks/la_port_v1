@@ -229,10 +229,7 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
             style={{ width: "100%", height: "100%", cursor: listMode ? "default" : "crosshair", display: "block" }}
           />
 
-          {/* Recenter — Google-Maps "locate me", bottom-right over the plan
-              rather than in the title bar (already carrying three controls).
-              Only offered once the view has actually drifted from the zone
-              framing, so it never sits there doing nothing. */}
+          {/* Recenter - appears only once the view has drifted. */}
           <button
             onClick={recenter}
             aria-label="Recentre on your position"

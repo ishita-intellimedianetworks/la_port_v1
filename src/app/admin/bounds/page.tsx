@@ -1,19 +1,14 @@
 "use client";
 
 /**
- * /admin/bounds — render the terminal top-down, then calibrate the site aerial
- * against it.
+ * /admin/bounds — render the model top-down, then calibrate the site aerial
+ * against that render.
  *
- * Two steps, in order:
- *
- *   1. RENDER    the model through an ortho frustum locked to the bbox the
- *                RUNTIME uses (manifest.worldMin/Max). The resulting PNG is 1:1
- *                with world coordinates by construction — see render-floor.ts.
- *
- *   2. CALIBRATE the site aerial by laying that render on top of it and lining
- *                up the quay. The site image has no world coordinates of its
- *                own; the render does, so it acts as the stencil and the site
- *                bounds fall out arithmetically — see calibrate.ts.
+ *   1. RENDER    through an ortho frustum locked to the bbox, so the PNG is 1:1
+ *                with world coordinates by construction (render-floor.ts). Copy
+ *                the `map.plan` block out with it.
+ *   2. CALIBRATE by laying the render over the aerial and lining up the quay
+ *                (calibrate.ts).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,18 +19,14 @@ import {
   type Bbox, type RenderMode, type WorldBbox,
 } from "./render-floor";
 import {
-  calibrate, initialPlacement, scalePlacement, toJson, type Placement,
+  calibrate, initialPlacement, planJson, scalePlacement, toJson, type Placement,
 } from "./calibrate";
 
 const MODEL_URL = siteScene.assets.modelUrl;
 const SLUG = (siteScene as { stream?: { slug?: string } }).stream?.slug ?? "";
 const MANIFEST_URL = SLUG ? `/assets/${SLUG}/assets/manifest.json` : "";
 
-/**
- * The walkable zone — the navmesh AABB in world space (node translation
- * [-1082.053, _, 56.300] plus its local extents +/-420.270 x +/-494.624).
- * Drawn over the calibration so you can see where map clicks will resolve.
- */
+/** The navmesh AABB — where map clicks will resolve. Drawn over the aerial. */
 const ZONE = { minX: -1502.324, maxX: -661.783, minZ: -438.324, maxZ: 550.924 };
 
 const PPM_PRESETS = [0.65, 1.31, 2.62, 4];
@@ -60,7 +51,7 @@ export default function BoundsPage() {
   const sceneRef = useRef<THREE.Object3D | null>(null);
   const [glbBbox, setGlbBbox] = useState<WorldBbox | null>(null);
   const [manifestBbox, setManifestBbox] = useState<WorldBbox | null>(null);
-  const [bboxSource, setBboxSource] = useState<"manifest" | "glb">("manifest");
+  const [bboxSource, setBboxSource] = useState<"manifest" | "glb">("glb");
   const [ppm, setPpm] = useState(1.31);
   const [mode, setMode] = useState<RenderMode>("native");
   const [opaque, setOpaque] = useState(false);
@@ -74,16 +65,13 @@ export default function BoundsPage() {
   }, [bboxSource, manifestBbox, glbBbox]);
 
   const dims = bbox ? pixelDimsFor(bbox, ppm) : null;
-  // Lazy initialiser, not an effect: the probe touches `document`, so it has to
-  // be guarded for SSR, but it never changes afterwards. Nothing renders from it
-  // until `bbox` arrives (client-only, via the manifest fetch), so the server's
-  // placeholder can't reach the HTML and mismatch on hydration.
+  // Lazy initialiser, not an effect: the probe touches `document` but never
+  // changes. Nothing renders from it until `bbox` arrives, so no hydration risk.
   const [maxTex] = useState(() => (typeof window === "undefined" ? 16384 : maxTextureSize()));
   const tooBig = !!dims && (dims.w > maxTex || dims.h > maxTex);
 
-  // Pull the runtime's bbox straight from the stream manifest. This is the
-  // number streamed-model reports via onBounds, so rendering to it is what
-  // makes the image agree with what the minimap believes.
+  // The rect streamed-model reports via onBounds. Only matters for the legacy
+  // assets.floorPlan path; map.plan stores whatever bbox you rendered to.
   useEffect(() => {
     if (!MANIFEST_URL) return;
     let alive = true;
@@ -124,9 +112,7 @@ export default function BoundsPage() {
       const out = await renderTopDown(
         sceneRef.current, bbox, dims.w, dims.h, mode, opaque ? "#0b1020" : null,
       );
-      // Decode here rather than in an effect: the calibration canvas needs the
-      // bitmap and the URL together, and awaiting the decode keeps them in one
-      // state update instead of two renders with a half-ready overlay.
+      // Decoded here so the URL and bitmap land in one state update.
       const img = new Image();
       await new Promise<void>((res, rej) => {
         img.onload = () => res();
@@ -164,9 +150,8 @@ export default function BoundsPage() {
     img.src = url;
   }, []);
 
-  // Placement is DERIVED, with an optional user override. That avoids seeding
-  // state from an effect (which would cascade a render on every load) and makes
-  // "reset" a matter of dropping the override.
+  // Derived, with an optional override: no state seeded from an effect, and
+  // "reset" is just dropping the override.
   const seed = useCallback((): Placement | null => (
     siteImg && bbox
       ? initialPlacement(siteImg.naturalWidth, siteImg.naturalHeight, bbox, guessMpp)
@@ -264,7 +249,7 @@ export default function BoundsPage() {
   };
   const onPointerUp = () => { dragRef.current.on = false; };
 
-  // Wheel scales about the placement's centre, so zooming and nudging don't fight.
+  // Scales about the centre, so zooming and nudging don't fight.
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -356,8 +341,9 @@ export default function BoundsPage() {
                 </button>
               </div>
               <p className="mt-1.5 text-[10px] leading-snug text-neutral-500">
-                Manifest is what the runtime reports via <code>onBounds</code>. Use it
-                unless you know otherwise.
+GLB renders to what you actually loaded, and <code>map.plan</code> stores those
+                bounds with the image. Manifest only matters for the legacy
+                <code> assets.floorPlan</code> path.
               </p>
             </div>
 
@@ -431,6 +417,14 @@ export default function BoundsPage() {
                 <a className={btnG} href={plan.url} download={`terminal-plan.${plan.w}x${plan.h}.png`}>
                   Download PNG
                 </a>
+                <button
+                  className={btnG}
+                  onClick={() => bbox && navigator.clipboard.writeText(
+                    planJson(bbox, "/floorplan/terminal-plan.png", plan.w, plan.h),
+                  )}
+                >
+                  Copy map.plan JSON
+                </button>
               </div>
             </div>
           )}

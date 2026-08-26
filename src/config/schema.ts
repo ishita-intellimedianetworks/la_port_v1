@@ -79,39 +79,34 @@ export type StreamConfig = {
 };
 
 /**
- * The map's extra layers.
- *
- * The terminal PLAN layer is not configured here — it already arrives as
- * `minimapData` (`floorPlanUrl` plus bounds derived from the stream manifest,
- * see use-minimap-bounds.ts). This block adds the two things that cannot be
- * derived: a wide-area aerial to sit behind it, and which part of the plan is
- * actually walkable.
+ * The map's layers. `plan` and `site` each store an image WITH the world rect it
+ * was rendered/calibrated to, so neither depends on any other source agreeing.
  */
 export type MapConfig = {
   /** Authoring note — data, not config. */
   _note?: string;
   /**
-   * The wide-area aerial drawn behind the terminal plan and greyscaled as
-   * context. Nothing resolves against it — no click, no route, no marker — so
-   * a rough alignment is fine; it is decoration for the zoomed-out view.
-   *
-   * `bounds` is in the FLIPPED, image-facing convention that `worldToPixel`
-   * consumes: `minX`/`minZ` hold the world MAXIMUM, because plans are rendered
-   * with `cam.up = +Z`. Produced by /admin/bounds' calibrate step — do not
-   * hand-write it.
+   * Top-down render of the model, drawn dimmed except where `zone` clips it back
+   * to colour. FLIPPED convention (minX holds the world MAX); paste it from
+   * /admin/bounds rather than hand-writing it.
+   */
+  plan?: {
+    imageUrl: string;
+    bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  };
+  /**
+   * Wide-area aerial behind the plan, always greyscaled. Nothing resolves
+   * against it, so a rough alignment is fine. Same flipped convention; comes out
+   * of /admin/bounds' calibrate step.
    */
   site?: {
     imageUrl: string;
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   };
   /**
-   * The walkable zone: what the map opens framed on, the only region that
-   * accepts clicks, and the part drawn in colour while everything around it is
-   * dimmed.
-   *
-   * A PLAIN world rect (minX < maxX), unlike `site.bounds` above — it is
-   * authored and read by people, not by drawImage. Defaults to the navmesh
-   * AABB when omitted, which is the honest definition of "where walking works".
+   * What the map opens on, the only region that accepts clicks, and the part
+   * drawn in colour. A PLAIN world rect (minX < maxX) since people author it.
+   * Defaults to the navmesh AABB.
    */
   zone?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
@@ -145,16 +140,8 @@ export type SceneConfig = {
     navmeshUrl?: string;
     previewUrl: string;
     envFile: string;
-    /**
-     * Top-down plan drawn on the map, rendered by /admin/bounds.
-     *
-     * Its world bounds are NOT stored beside it: they are derived at runtime
-     * from the stream manifest (use-minimap-bounds.ts), which is the same rect
-     * the render was framed to. Keeping one source means the image and its
-     * bounds cannot drift apart — but it also means a plan rendered to any
-     * OTHER framing will silently mis-register. Always render it from
-     * /admin/bounds with the bbox source set to Manifest.
-     */
+    /** LEGACY: bounds derived at runtime from the stream manifest. Prefer
+     *  `map.plan`, which stores the image and its bounds together. */
     floorPlan?: string | null;
   };
   /** The adaptive chunk streamer's parameters. Present = the terminal streams
@@ -214,8 +201,6 @@ export type SceneConfig = {
      *  field marked `ref: "hero"` is asserted equal to it at load. */
     heroContainerId: string;
   };
-  /** Optional. Without it the map falls back to the plan's own extent for both
-   *  the opening frame and the click gate. */
   map?: MapConfig;
 };
 

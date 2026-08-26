@@ -111,8 +111,7 @@ const floors = [
     // Draco-compressed — 8 KB against 305. `assets.navmeshUrl` is the fallback
     // for a site that authors no stream block.
     navmeshUrl: scene.stream ? `${STREAM_ASSET_BASE}navmesh.glb` : scene.assets.navmeshUrl!,
-    // Top-down plan for the map, rendered by /admin/bounds. Its bounds are
-    // resolved at runtime from the stream manifest, not stored beside it.
+    // Legacy map plan; this site uses `map.plan` instead.
     floorPlanUrl: scene.assets.floorPlan ?? null,
     // Where first person begins. Authored as `cameras.spawn`, NOT derived from
     // the start layout: every layout here is an aerial framing (walkable:

@@ -128,38 +128,27 @@ export function useMinimap() {
   const hotspotsRef = useRef<MapHotspot[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // World-space, projected each frame — a canvas-space ripple would stay put
-  // on screen while the map moved under it.
+  /** World-space; a canvas-space ripple would stay put while the map moved. */
   const clickMarkerRef = useRef<{ x: number; z: number; alpha: number } | null>(null);
-  // Rejected-click feedback: a brief pulse on the zone outline, so a tap
-  // outside the walkable area reads as "not here" instead of a dead UI.
+  /** Pulses the zone outline when a click lands outside it. */
   const rejectRef = useRef(0);
 
-  // ── Layers ────────────────────────────────────────────────────────────────
-  // Terminal plan (colour + a baked grey copy) and the wide-area aerial behind
-  // it. Each carries its own world rect, so they register through the shared
-  // view transform rather than being fitted to each other.
   const planRef = useRef<HTMLImageElement | null>(null);
   const planDimRef = useRef<HTMLCanvasElement | null>(null);
-  // The aerial is only ever drawn dimmed, so only the baked copy is kept.
   const siteDimRef = useRef<HTMLCanvasElement | null>(null);
 
-  // The viewport, in world units. The RAF loop reads it directly so panning and
-  // zooming never re-render React.
+  // The RAF loop reads these directly, so pan/zoom never re-renders React.
   const viewRef = useRef<View>({ cx: 0, cz: 0, mpp: 1 });
-  // Home = the framing the map opens on and the recenter button returns to.
   const homeRef = useRef<View>({ cx: 0, cz: 0, mpp: 1 });
   const mppLimitsRef = useRef({ min: 0.01, max: 100 });
   const tweenRef = useRef(0);
   const dragRef = useRef({ active: false, moved: false, sx: 0, sy: 0, cx: 0, cz: 0 });
   // Kept for the click/pan guards; always false now that drag-resize is gone.
   const resizingRef = useRef(false);
-  // Mirrors `hasDrifted` into React so the recenter button can appear. Written
-  // from the draw loop, which is the only place that knows the live view — the
-  // ref guards it so a settled view doesn't dispatch on every frame.
+  /** Drives the recenter button. Ref-guarded so a settled view doesn't
+   *  dispatch every frame. */
   const [drifted, setDrifted] = useState(false);
   const driftedRef = useRef(false);
-  /** The aerial's own bounds, read by the draw loop without re-arming it. */
   const siteBoundsRef = useRef<MinimapData["bounds"] | null>(null);
 
   // Always-current canvas size for event handlers (avoids stale closure)
@@ -426,10 +415,6 @@ export function useMinimap() {
     });
   }, [playerControllerRef, destLabel, activeFloor, selectedDestId, closePanel, triggerFloorTransition, setMapExpanded]);
 
-  // The canvas is a plain viewport now. There is no letterbox and no sticker
-  // margin: layers are positioned by their WORLD rects through the shared view
-  // transform, so an image simply lands where its bounds say it should — off
-  // the edges when zoomed in, inset when zoomed out.
   const mapWidth  = mapDims.w;
   const mapHeight = mapDims.h;
   // Sync mapSizeRef after render so event handlers always read the latest size
@@ -437,45 +422,46 @@ export function useMinimap() {
     mapSizeRef.current = { w: mapWidth, h: mapHeight };
   }, [mapWidth, mapHeight]);
 
-  // ── The three nested rects ────────────────────────────────────────────────
-  // zone ⊂ plan ⊂ site. The map opens on `zone`, only `zone` takes clicks, and
-  // the outer two exist to show where it sits.
+  // Nested rects: zone inside plan inside site. Opens on `zone`, and only
+  // `zone` takes clicks.
   const mapCfg = siteScene.map;
 
-  /** The terminal plan — image and bounds already resolved by useMinimapBounds. */
+  /** `map.plan` stores the image and the rect it was rendered to together, so
+   *  the render can come from any GLB. minimapData is the legacy fallback. */
+  const planLayer = useMemo(() => {
+    if (mapCfg?.plan) return { url: mapCfg.plan.imageUrl, bounds: mapCfg.plan.bounds };
+    return minimapData ? { url: minimapData.imageUrl, bounds: minimapData.bounds } : null;
+  }, [mapCfg, minimapData]);
+  const planUrl = planLayer?.url;
+
   const planRect: WorldRect | null = useMemo(
-    () => (minimapData ? plainRect(minimapData.bounds) : null),
-    [minimapData],
+    () => (planLayer ? plainRect(planLayer.bounds) : null),
+    [planLayer],
   );
 
-  /** The wide-area aerial. Calibrated in /admin/bounds; decoration only. */
+  /** Decoration only. */
   const siteRect: WorldRect | null = useMemo(
     () => (mapCfg?.site ? plainRect(mapCfg.site.bounds) : null),
     [mapCfg],
   );
 
-  /** Where walking works. Authored, defaulting to the plan's own extent so a
-   *  site that never configured a zone still behaves exactly as before. */
+  /** Where walking works. Defaults to the plan's extent when unauthored. */
   const zoneRect: WorldRect | null = useMemo(
     () => mapCfg?.zone ?? planRect,
     [mapCfg, planRect],
   );
 
-  /** Outermost layer — bounds the pan clamp and the zoom-out limit. */
+  /** Bounds the pan clamp and the zoom-out limit. */
   const outerRect = siteRect ?? planRect ?? zoneRect;
 
-  // The imperative pointer handlers bind once and must not re-bind on every
-  // rect change, so they read the clamp target through a ref.
+  // The pointer handlers bind once, so they read these through refs.
   const outerRectRef = useRef<WorldRect | null>(null);
   useEffect(() => { outerRectRef.current = outerRect; }, [outerRect]);
   const zoneRectRef = useRef<WorldRect | null>(null);
   useEffect(() => { zoneRectRef.current = zoneRect; }, [zoneRect]);
   useEffect(() => { siteBoundsRef.current = mapCfg?.site?.bounds ?? null; }, [mapCfg]);
 
-  // Recompute the home framing and the zoom range whenever the canvas resizes
-  // or the rects change. A view still sitting at home follows the new framing;
-  // one the user has moved is left alone, so a window resize mid-inspection
-  // doesn't yank the map back.
+  // A view still at home follows a resize; one the user moved is left alone.
   useEffect(() => {
     const W = mapWidth;
     const H = mapHeight;
@@ -494,10 +480,10 @@ export function useMinimap() {
     else viewRef.current = { ...viewRef.current, mpp: Math.min(max, Math.max(min, viewRef.current.mpp)) };
   }, [mapWidth, mapHeight, zoneRect, outerRect]);
 
-  // Re-frame on floor change — a new plan means the old view is meaningless.
+  // A new plan makes the old view meaningless.
   useEffect(() => {
     viewRef.current = { ...homeRef.current };
-  }, [minimapData?.imageUrl]);
+  }, [planUrl]);
 
   // Canvas size: a fixed small window or full-screen (fills the viewport beside
   // the left sidebar). Recomputed on viewport resize. The canvas is no longer
@@ -611,18 +597,15 @@ export function useMinimap() {
   // so the keyed slide-in animation on the wrapper has something to draw
   // through the whole 500ms in-animation.
   useEffect(() => {
-    const url = minimapData?.imageUrl;
-    if (!url) return;
+    if (!planUrl) return;
     const img = new Image();
     img.onload = () => {
       planRef.current = img;
-      // Baked once, not filtered per frame — see bakeDimmed.
       planDimRef.current = bakeDimmed(img, 0.55);
     };
-    img.src = url;
-  }, [minimapData?.imageUrl]);
+    img.src = planUrl;
+  }, [planUrl]);
 
-  // The wide-area aerial.
   const siteUrl = mapCfg?.site?.imageUrl;
   useEffect(() => {
     if (!siteUrl) return;
@@ -646,8 +629,7 @@ export function useMinimap() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Zoom about a canvas point, holding the world under it fixed. A wheel
-    // factor > 1 zooms IN, which means a SMALLER mpp — hence the reciprocal.
+    // A wheel factor > 1 zooms IN, i.e. a SMALLER mpp - hence the reciprocal.
     const applyZoom = (factor: number, cx: number, cy: number) => {
       const { w: W, h: H } = mapSizeRef.current;
       const { min, max } = mppLimitsRef.current;
@@ -709,9 +691,8 @@ export function useMinimap() {
       const dy = e.clientY - d.sy;
       if (!d.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) d.moved = true;
       if (!d.moved) return;
-      // Pan. Canvas X grows as world X shrinks (the +Z-up flip), so dragging
-      // right must INCREASE the world centre for the content to follow the
-      // pointer — hence + rather than -.
+      // Canvas X grows as world X shrinks (the +Z-up flip), so dragging right
+      // must INCREASE the world centre for the content to follow the pointer.
       const { mpp } = viewRef.current;
       const next = { ...viewRef.current, cx: d.cx + dx * mpp, cz: d.cz + dy * mpp };
       const limit = outerRectRef.current;
@@ -793,7 +774,6 @@ export function useMinimap() {
         const dy = t1.clientY - t0.clientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= 0) return;
-        // Spreading the fingers zooms IN, i.e. fewer metres per pixel.
         const targetMpp = touch.startMpp * (touch.startDist / dist);
         applyZoom(viewRef.current.mpp / targetMpp, touch.midX, touch.midY);
       } else if (e.touches.length === 1 && touch.panActive) {
@@ -833,7 +813,7 @@ export function useMinimap() {
       canvas.removeEventListener("touchend",   onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [minimapData?.imageUrl]);
+  }, [planUrl]);
 
   // ── Draw loop ─────────────────────────────────────────────────────────────
   // Skipped entirely while the minimap is collapsed (off-screen via CSS
@@ -842,7 +822,7 @@ export function useMinimap() {
   useEffect(() => {
     if (!expanded) return;
     const canvas = canvasRef.current;
-    if (!canvas || !minimapData) return;
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -879,14 +859,12 @@ export function useMinimap() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // Layers can be smaller than the canvas at the zoomed-out end, so the
-      // area around them has to be cleared every frame or pans smear.
+      // Layers can be smaller than the canvas when zoomed out, so pans smear
+      // without a full clear.
       ctx.clearRect(0, 0, W, H);
 
-      // `vb` describes what the CANVAS shows, in the same flipped shape an
-      // image's bounds use. That is what lets every painter below keep its
-      // existing `(bounds, W, H)` signature: the triple now means the viewport
-      // rather than an image rect, and no ctx transform is needed at all.
+      // `vb` describes the CANVAS in image-bounds shape, which is what lets the
+      // painters below keep their `(bounds, W, H)` signature with no transform.
       const vb = viewBounds(view, W, H);
       const place = (b: MinimapData["bounds"]) => {
         const p0 = worldToPixel(b.minX, b.minZ, vb, W, H);
@@ -896,23 +874,20 @@ export function useMinimap() {
 
       ctx.save();
 
-      // ── Layer 1: the wide-area aerial, dimmed. Context only — nothing
-      //    resolves against it, so it is never drawn in colour.
+      // Layer 1 — the aerial, always dimmed.
       if (siteDimRef.current && siteBoundsRef.current) {
         const r = place(siteBoundsRef.current);
         ctx.drawImage(siteDimRef.current, r.x, r.y, r.w, r.h);
       }
 
-      // ── Layer 2: the terminal plan, dimmed. Covers several zones; only the
-      //    walkable one gets colour, in layer 3.
-      const planPlace = place(minimapData.bounds);
-      if (planDimRef.current) {
+      // Layer 2 — the plan, dimmed.
+      const planPlace = planLayer ? place(planLayer.bounds) : null;
+      if (planDimRef.current && planPlace) {
         ctx.drawImage(planDimRef.current, planPlace.x, planPlace.y, planPlace.w, planPlace.h);
       }
 
-      // ── Layer 3: the walkable zone in full colour — the same plan image,
-      //    clipped to the zone rect. Identical placement to layer 2, so the
-      //    two register exactly and the colour patch cannot drift.
+      // Layer 3 — the zone in colour: the same image at identical placement,
+      // clipped, so the patch cannot drift from the grey it sits in.
       const zr = zoneRectRef.current;
       if (zr) {
         const z0 = worldToPixel(zr.maxX, zr.maxZ, vb, W, H);
@@ -922,7 +897,7 @@ export function useMinimap() {
         const zw = Math.abs(z1.px - z0.px);
         const zh = Math.abs(z1.py - z0.py);
 
-        if (planRef.current) {
+        if (planRef.current && planPlace) {
           ctx.save();
           ctx.beginPath();
           ctx.rect(zx, zy, zw, zh);
@@ -931,9 +906,7 @@ export function useMinimap() {
           ctx.restore();
         }
 
-        // Zone outline. Always drawn — with no plan image yet it is the only
-        // thing showing where the clickable area is, which keeps the map
-        // legible before the render lands.
+        // Drawn even with no plan image, so the clickable area stays visible.
         const reject = rejectRef.current;
         ctx.save();
         ctx.strokeStyle = reject > 0 ? `rgba(255,69,58,${0.35 + reject * 0.65})` : "rgba(255,255,255,0.35)";
@@ -944,15 +917,12 @@ export function useMinimap() {
         if (reject > 0) rejectRef.current = Math.max(0, reject - 0.04);
       }
 
-      // Overlays draw straight into canvas space through `vb`.
       const ctrl = playerControllerRef.current;
       const bounds = vb;
       // Fixed, small marker size (Google-Maps style) — path / ripple must NOT
       // scale up with the canvas.
       const markerScale = MARKER_SCALE;
-      // Markers taper on a small (phone) canvas, where the fixed 1.25 reads
-      // oversized. Keyed off the CANVAS width now rather than the old image
-      // rect, which no longer exists — same intent, one fewer indirection.
+      // Taper on a small (phone) canvas, where the fixed 1.25 reads oversized.
       const playerScale = MARKER_SCALE * Math.max(0.55, Math.min(1, W / 360));
       // Hotspot dots taper harder — clustered pins read as one blob otherwise.
       const hotspotScale = MARKER_SCALE * Math.max(0.45, Math.min(1, W / 520));
@@ -1006,17 +976,13 @@ export function useMinimap() {
         if (cm.alpha <= 0) clickMarkerRef.current = null;
       }
 
-      // Stickers anchor to world points and clamp themselves to the canvas
-      // edges. `lb` is the whole canvas now, so they project through `vb` like
-      // every other overlay.
-      if (minimapData.stickers?.length) {
+      // `lb` is the whole canvas now, so stickers project through `vb` too.
+      if (minimapData?.stickers?.length) {
         drawStickers(ctx, minimapData.stickers, vb, { dx: 0, dy: 0, dw: W, dh: H }, W, H);
       }
 
       ctx.restore();
 
-      // Surface drift to React so the recenter button can appear. Compared
-      // before writing so a settled view doesn't dispatch on every frame.
       const nowDrifted = hasDrifted(view, homeRef.current);
       if (nowDrifted !== driftedRef.current) {
         driftedRef.current = nowDrifted;
@@ -1028,17 +994,15 @@ export function useMinimap() {
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [minimapData, playerControllerRef, expanded]);
+  }, [planLayer, minimapData, playerControllerRef, expanded]);
 
   // ── Click → navigate ─────────────────────────────────────────────────────
-  // Ignored if the mousedown turned into a drag (moved > 4 px). Clicks outside
-  // the WALKABLE ZONE are rejected with a pulse on its outline — the aerial and
-  // the wider plan are context, and silently swallowing a tap there reads as a
-  // broken map rather than an out-of-bounds one.
+  // Ignored on drag. Clicks outside the walkable zone pulse its outline rather
+  // than being swallowed, which would read as a broken map.
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (dragRef.current.moved || resizingRef.current) return;
     const canvas = canvasRef.current;
-    if (!canvas || !minimapData) return;
+    if (!canvas) return;
     // While walking, the map is read-only — no re-selecting / re-routing. Use
     // Stop first. (Prevents starting a second walk mid-walk.)
     if (playerControllerRef.current?.isMoving()) return;
@@ -1049,8 +1013,6 @@ export function useMinimap() {
     const px = ((e.clientX - rect.left) / rect.width) * W;
     const py = ((e.clientY - rect.top) / rect.height) * H;
 
-    // Canvas pixel → world, straight through the view transform. No letterbox
-    // and no zoom/offset unwinding: `vb` already encodes both.
     const vb = viewBounds(viewRef.current, W, H);
     const world = pixelToWorld(px, py, vb, W, H);
 
@@ -1082,12 +1044,10 @@ export function useMinimap() {
 
     clickMarkerRef.current = { x: world.x, z: world.z, alpha: 1 };
     navigateFromMinimap(world.x, world.z);
-  }, [minimapData, mapWidth, mapHeight, navigateFromMinimap, selectMapDestination, clearDestSelection, playerControllerRef]);
+  }, [mapWidth, mapHeight, navigateFromMinimap, selectMapDestination, clearDestSelection, playerControllerRef]);
 
   // ── Recenter ──────────────────────────────────────────────────────────────
-  // Google-Maps "locate me": returns to the ZONE framing centred on the player,
-  // not a plain reset to home. The player is always on the navmesh, so this
-  // always lands inside the zone.
+  // Returns to the zone framing centred on the PLAYER, not a plain reset.
   const recenter = useCallback(() => {
     const home = homeRef.current;
     const pos = playerControllerRef.current?.getPosition();
@@ -1101,8 +1061,7 @@ export function useMinimap() {
     const step = (ts: number) => {
       if (!start) start = ts;
       const k = Math.min(1, (ts - start) / DUR);
-      // Same easeInOutQuad the small<->full size toggle uses, so the two
-      // motions feel like one control surface.
+      // Same easeInOutQuad as the small<->full size toggle.
       const t = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       viewRef.current = {
         cx: from.cx + (target.cx - from.cx) * t,

@@ -9,16 +9,12 @@
  *   pixel (0, 0)   <->   world (bbox.maxX, bbox.maxZ)
  *   pixel (W, H)   <->   world (bbox.minX, bbox.minZ)
  *
- * That 180-degree flip is encoded in `cam.up = +Z`, which is exactly the
- * convention `use-minimap-bounds.ts` applies when it builds its bounds object
- * (`{ minX: box.max.x, maxX: box.min.x, ... }`). Render here, author those
- * bounds, and world->pixel is exact with no calibration.
+ * That 180-degree flip is encoded in `cam.up = +Z`, the same convention the
+ * runtime's bounds objects use. Render here, paste the bounds into
+ * `site.json > map.plan`, and world->pixel is exact with no calibration.
  *
- * The bbox is supplied by the CALLER rather than measured here. For the
- * streamed terminal the runtime takes its bounds from `manifest.worldMin/Max`
- * (see streamed-model/index.tsx), which is NOT the same number as
- * `Box3.setFromObject()` on the offline GLB. Rendering to the GLB's own extents
- * would put the image a few metres out from what the runtime believes.
+ * The bbox is supplied by the CALLER, so a render is never silently tied to one
+ * source: whatever rect you frame to is the rect you author beside the image.
  */
 
 import * as THREE from "three";
@@ -54,8 +50,7 @@ export function derive(b: WorldBbox): Bbox {
 
 // ── Loading ──────────────────────────────────────────────────────────────────
 
-// One DRACO decoder for the session. Decoder path matches the streaming
-// chunk-manager ("/draco/") so the browser reuses the same cached WASM.
+// Decoder path matches chunk-manager so the browser reuses the cached WASM.
 let _draco: DRACOLoader | null = null;
 function dracoLoader(): DRACOLoader {
   if (!_draco) {
@@ -79,7 +74,7 @@ export async function loadGlb(src: File | string): Promise<THREE.Object3D> {
   }
 }
 
-/** The GLB's own extents. Useful for comparison, but see the header note. */
+/** The GLB's own extents. */
 export function measureBbox(scene: THREE.Object3D): WorldBbox {
   const b = new THREE.Box3().setFromObject(scene);
   return {
@@ -91,7 +86,7 @@ export function measureBbox(scene: THREE.Object3D): WorldBbox {
 
 // ── Sizing ───────────────────────────────────────────────────────────────────
 
-/** Both dims come from the bbox, so image aspect == world aspect by design. */
+/** Both dims come from the bbox, so image aspect == world aspect. */
 export function pixelDimsFor(bbox: Bbox, ppm: number): { w: number; h: number } {
   return {
     w: Math.max(2, Math.round((bbox.dx * ppm) / 2) * 2),
@@ -115,10 +110,8 @@ export function maxTextureSize(): number {
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
-// One renderer for the whole session. Context release is GC-driven, so
-// allocating per render exhausts the browser's live WebGL contexts after a few
-// toggles; render() then quietly becomes a no-op and you get back whatever the
-// canvas held last. The visible symptom is "settings change, image doesn't".
+// One renderer for the session: context release is GC-driven, so allocating per
+// render exhausts the browser's WebGL contexts and render() silently no-ops.
 let _renderer: THREE.WebGLRenderer | null = null;
 function getRenderer(): THREE.WebGLRenderer {
   if (_renderer) return _renderer;
@@ -171,8 +164,7 @@ export async function renderTopDown(
     addLighting(rs, bbox);
   }
 
-  // up = +Z looking straight down puts screen X on world -X and screen Y on
-  // world -Z, i.e. pixel(0,0) = (maxX, maxZ). See the file header.
+  // up = +Z looking down puts pixel(0,0) at (maxX, maxZ). See the file header.
   const cam = new THREE.OrthographicCamera(
     -bbox.dx / 2, bbox.dx / 2,
      bbox.dz / 2, -bbox.dz / 2,
@@ -184,8 +176,7 @@ export async function renderTopDown(
 
   renderer.render(rs, cam);
 
-  // toBlob, not toDataURL: at 4k the base64 string runs to tens of MB and
-  // blocks the main thread long enough to look like a hang.
+  // toBlob, not toDataURL: at 4k the base64 string blocks the main thread.
   const blob = await new Promise<Blob | null>((res) =>
     renderer.domElement.toBlob(res, "image/png"),
   );
@@ -214,9 +205,8 @@ function addLighting(scene: THREE.Scene, bbox: Bbox): void {
   scene.add(fill.target, fill);
 }
 
-// White fills + dark edges — reads as a schematic no matter what the source
-// materials do. Geometries are shared with the source; only the materials and
-// the EdgesGeometry are ours to dispose.
+// Reads as a schematic whatever the source materials do. Geometries are shared;
+// only the materials and EdgesGeometry are ours to dispose.
 function buildSilhouette(src: THREE.Object3D): { root: THREE.Object3D; dispose: () => void } {
   src.updateWorldMatrix(true, true);
   const root = new THREE.Group();

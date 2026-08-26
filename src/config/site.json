@@ -9,8 +9,7 @@
     "_note": "TWO MODELS, ONE ZONE. `modelUrl` is the DOLLHOUSE model — a decimated whole-zone GLB drawn in one go, which is the right answer for a fixed vantage that frames everything at once. The walking view does not use it: it streams the chunk set in `stream` instead. `previewUrl` is the point-cloud silhouette shown behind the loading HUD and must be baked FROM `modelUrl` — it is that model dissolving in, so a preview of any other mesh draws a cloud at the wrong scale and in the wrong place. 60,000 points, bounds x -2156..-64 / z -875..969, which is the 25-compressed GLB's own extent. There is no `navmeshUrl` here: the bake emits the navmesh alongside the chunks, so it travels with them (and follows NEXT_PUBLIC_ASSET_BASE to a CDN) rather than being a second copy someone has to keep in step. Set it only for a site with no `stream` block.",
     "modelUrl": "/models/la-port-zone-c5-25-compressed.glb",
     "previewUrl": "/models/la-port-zone-c5-25-compressed.preview.bin",
-    "envFile": "/env.hdr",
-    "floorPlan": "/floorplan/terminal-plan.png"
+    "envFile": "/env.hdr"
   },
   "stream": {
     "_note": [
@@ -122,7 +121,7 @@
     "heroContainerId": "EGHU4829136"
   },
   "map": {
-    "_note": "THREE NESTED RECTS. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — drawn in colour. Around it the terminal plan (`assets.floorPlan`, bounds from the stream manifest) and then `site` fade out in greyscale as you zoom out, so you can see where the zone sits in the port without ever being able to click there. `zone` is a PLAIN world rect (minX < maxX) because people author it; it defaults to the navmesh AABB, which is the honest definition of where walking works — widen it only to frame more of the plan on open. `site.bounds` is the FLIPPED image convention (minX holds the world MAX) and comes out of /admin/bounds — calibrate it, do not type it.",
+    "_note": "THREE NESTED RECTS: zone inside plan inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — drawn in colour, while `plan` and `site` fade out in greyscale around it as you zoom out. `plan` is a top-down render of the model and `site` the wide-area aerial; both store the image WITH the rect it was framed to, so the render can come from any GLB (the dollhouse model runs ~600 m wider than the streamed chunk set). Both use the FLIPPED image convention (minX holds the world MAX) and both come out of /admin/bounds — paste them, do not type them. `zone` is the exception: a PLAIN world rect (minX < maxX) because people author it, defaulting to the navmesh AABB.",
     "zone": {
       "minX": -1502.324,
       "maxX": -661.783,

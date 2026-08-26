@@ -27,17 +27,13 @@ export const MAP_FULL_CHROME_Y = 150;
 export const SIDE_LEGEND_W = 176;
 export const ZOOM_FACTOR = 1.18; // per wheel tick
 
-// Zoom is expressed in metres-per-pixel and both ends are derived at runtime
-// from the rects themselves, because "how far out is all the way out" depends
-// on how much bigger the site aerial is than the walkable zone — which is
-// authored, not fixed. These two are the only tuning left.
+// Zoom is metres-per-pixel; both ends are derived at runtime from the rects,
+// since how far out "all the way out" is depends on the authored aerial.
 
-/** How far past the zone framing you may zoom IN. 6x on an 841 x 989 m zone
- *  puts roughly 140 m across the canvas, about one berth. */
+/** How far past the zone framing you may zoom in. */
 export const ZOOM_IN_LIMIT = 6;
 
-/** Slack at the zoomed-OUT end, so the outermost layer clears the edges
- *  instead of sitting flush against them. */
+/** Slack at the zoomed-out end so the outermost layer clears the edges. */
 export const ZOOM_OUT_MARGIN = 1.08;
 
 // Sticker margin (px). Fixed pixels carved out of the existing canvas — the

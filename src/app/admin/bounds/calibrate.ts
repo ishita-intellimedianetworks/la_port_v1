@@ -3,14 +3,11 @@
 /**
  * Site-image calibration maths.
  *
- * The site image (a north-up aerial) has no world coordinates of its own. The
- * model render does — exactly, because it came out of a known ortho frustum.
- * So we align the two PICTURES, and the site image's world rect falls out
- * arithmetically from where the render landed on it.
+ * The aerial has no world coordinates of its own; the render does, exactly,
+ * because it came from a known ortho frustum. So align the two PICTURES and the
+ * aerial's world rect falls out arithmetically.
  *
- * Both images share the runtime's flipped convention: world X and Z DECREASE
- * as pixel X and Y increase (see render-floor.ts). Hence pixel 0 maps to the
- * world maximum, not the minimum.
+ * Both use the flipped convention (pixel 0 maps to the world MAXIMUM).
  */
 
 import type { Bbox } from "./render-floor";
@@ -53,8 +50,7 @@ export function calibrate(
   const mppX = bbox.dx / p.ow;
   const mppZ = bbox.dz / p.oh;
 
-  // World at site-image pixel 0 and at pixel siteW/siteH. Inside the overlay,
-  // pixel ox maps to maxX and pixel ox+ow maps to minX, so extrapolate out.
+  // Inside the overlay pixel ox maps to maxX and ox+ow to minX; extrapolate out.
   const minX = bbox.maxX + p.ox * mppX;                 // world at pixel x = 0
   const maxX = bbox.maxX - (siteW - p.ox) * mppX;       // world at pixel x = siteW
   const minZ = bbox.maxZ + p.oy * mppZ;                 // world at pixel y = 0
@@ -78,11 +74,7 @@ export function calibrate(
   };
 }
 
-/**
- * Starting placement: centre the render on the site image at the scale implied
- * by a guessed metres-per-pixel. Calibration then only has to nudge, which is
- * far easier than finding the terminal from nothing.
- */
+/** Centre the render at a guessed scale, so calibration only has to nudge. */
 export function initialPlacement(
   siteW: number,
   siteH: number,
@@ -114,7 +106,7 @@ const r = (n: number, d = 3): number => {
   return Math.round(n * k) / k;
 };
 
-/** The block to paste into site.json. */
+/** The `map.site` block to paste into site.json. */
 export function toJson(
   c: CalibrationResult,
   p: Placement,
@@ -141,6 +133,24 @@ export function toJson(
         rotationDeg: r(p.rotDeg, 2),
       },
       placement: { ox: r(p.ox, 1), oy: r(p.oy, 1), ow: r(p.ow, 1), oh: r(p.oh, 1) },
+    },
+    null,
+    2,
+  );
+}
+
+/** The `map.plan` block: the render's URL plus the rect it was framed to. */
+export function planJson(bbox: Bbox, imageUrl: string, pixelW: number, pixelH: number): string {
+  return JSON.stringify(
+    {
+      plan: {
+        imageUrl,
+        bounds: {
+          minX: r(bbox.maxX), maxX: r(bbox.minX),
+          minZ: r(bbox.maxZ), maxZ: r(bbox.minZ),
+        },
+      },
+      _render: { pixelW, pixelH, spanMetres: { x: r(bbox.dx, 1), z: r(bbox.dz, 1) }, aspect: r(bbox.aspect, 4) },
     },
     null,
     2,
