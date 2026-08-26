@@ -7,6 +7,7 @@ import {
   MAP_WINDOW_DEFAULT, MAP_FULL_INSET_X, MAP_FULL_CHROME_Y, SIDE_LEGEND_W,
 } from "../utils/constants";
 import { SHORT_MEDIA_QUERY } from "@/shared/responsive";
+import { BLACKOUT_VISIBLE_MS, FADE_IN_MS, FADE_OUT_MS } from "@/shared/ui/screens/fade-screen";
 import { pixelToWorld, worldToPixel } from "../utils/coord-utils";
 import {
   drawPath,
@@ -73,6 +74,11 @@ const MARKER_SCALE = 1.25;
  *  above the metre or two of slack a legitimate on-mesh stance has, and far
  *  below the hundreds of metres a fly camera sits at. */
 const OFF_MESH_M = 8;
+
+/** How long the drop-to-navmesh teleport takes end to end: the fade down, the
+ *  swap buffer the fade screen adds, the blackout hold, and the fade back up.
+ *  The walk starts after it so the marker is seen arriving before it moves. */
+const TELEPORT_SETTLE_MS = FADE_IN_MS + 120 + BLACKOUT_VISIBLE_MS + FADE_OUT_MS + 80;
 
 export function useMinimap() {
   const { playerControllerRef, minimapData, navigateFromMinimap, activeFloor, isMoving, triggerFloorTransition, layoutsOpen, setLayoutsOpen, fovOpen, setFovOpen } = useScene();
@@ -1057,15 +1063,20 @@ export function useMinimap() {
     const ctrl = playerControllerRef.current;
     const near = ctrl?.nearestNavPoint();
     if (ctrl && near && near.dist > OFF_MESH_M) {
-      ctrl.teleportTo([near.x, near.y, near.z], [0, ctrl.getRotationY(), 0]);
-      // One frame, so the teleport is applied before the path is planned off
-      // the new position rather than the old one.
-      requestAnimationFrame(() => navigateFromMinimap(world.x, world.z));
+      // Behind the same fade every other teleport uses — the drop is hundreds
+      // of metres, and cutting it would read as the scene glitching.
+      triggerFloorTransition(() => {
+        ctrl.teleportTo([near.x, near.y, near.z], [0, ctrl.getRotationY(), 0]);
+      });
+      // Walk only once the blackout has lifted. The marker reads the live
+      // position every frame, so this is what lets you SEE it arrive at the
+      // new spot before it sets off, rather than the two happening at once.
+      window.setTimeout(() => navigateFromMinimap(world.x, world.z), TELEPORT_SETTLE_MS);
       return;
     }
 
     navigateFromMinimap(world.x, world.z);
-  }, [mapWidth, mapHeight, navigateFromMinimap, playerControllerRef]);
+  }, [mapWidth, mapHeight, navigateFromMinimap, playerControllerRef, triggerFloorTransition]);
 
   // ── Recenter ──────────────────────────────────────────────────────────────
   // Returns to the zone framing centred on the PLAYER, not a plain reset.
