@@ -135,6 +135,9 @@ export function useMinimap() {
 
   const planRef = useRef<HTMLImageElement | null>(null);
   const planDimRef = useRef<HTMLCanvasElement | null>(null);
+  // The aerial is kept in colour as well as dimmed: with no plan layer it is
+  // the colour source for the zone.
+  const siteRef = useRef<HTMLImageElement | null>(null);
   const siteDimRef = useRef<HTMLCanvasElement | null>(null);
 
   // The RAF loop reads these directly, so pan/zoom never re-renders React.
@@ -613,7 +616,10 @@ export function useMinimap() {
     // The supplied aerial is already stylised dark outside the terminal, so it
     // takes a light touch — greyscaling and halving it again would leave the
     // surroundings near black. Raise `grey` toward 1 for a plain aerial.
-    img.onload = () => { siteDimRef.current = bakeDimmed(img, 0.85, 0); };
+    img.onload = () => {
+      siteRef.current = img;
+      siteDimRef.current = bakeDimmed(img, 0.85, 0);
+    };
     img.src = siteUrl;
   }, [siteUrl]);
 
@@ -900,12 +906,21 @@ export function useMinimap() {
         const zw = Math.abs(z1.px - z0.px);
         const zh = Math.abs(z1.py - z0.py);
 
-        if (planRef.current && planPlace) {
+        // Colour source: the plan when one is configured, else the aerial
+        // itself. That fallback is what makes `map.plan` genuinely optional —
+        // drop the block from site.json and the zone still lifts out of the
+        // dimmed surround, just at the aerial's resolution.
+        const colour = planRef.current && planPlace
+          ? { img: planRef.current as CanvasImageSource, at: planPlace }
+          : siteRef.current && siteBoundsRef.current
+            ? { img: siteRef.current as CanvasImageSource, at: place(siteBoundsRef.current) }
+            : null;
+        if (colour) {
           ctx.save();
           ctx.beginPath();
           ctx.rect(zx, zy, zw, zh);
           ctx.clip();
-          ctx.drawImage(planRef.current, planPlace.x, planPlace.y, planPlace.w, planPlace.h);
+          ctx.drawImage(colour.img, colour.at.x, colour.at.y, colour.at.w, colour.at.h);
           ctx.restore();
         }
 
