@@ -611,12 +611,9 @@ export function useMinimap() {
   useEffect(() => {
     if (!siteUrl) return;
     const img = new Image();
-    // The supplied aerial is already stylised dark outside the terminal, so it
-    // takes a light touch — greyscaling and halving it again would leave the
-    // surroundings near black. Raise `grey` toward 1 for a plain aerial.
     img.onload = () => {
       siteRef.current = img;
-      siteDimRef.current = bakeDimmed(img, 0.85, 0);
+      siteDimRef.current = bakeDimmed(img, 0.7);
     };
     img.src = siteUrl;
   }, [siteUrl]);
