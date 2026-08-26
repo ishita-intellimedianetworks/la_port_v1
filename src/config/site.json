@@ -115,14 +115,14 @@
         "distance": 250,
         "texture": {
           "px": 256,
-          "format": "webp"
+          "format": "ktx2"
         }
       },
       "far": {
         "distance": 900,
         "texture": {
           "px": 128,
-          "format": "webp"
+          "format": "ktx2"
         }
       }
     },
@@ -140,8 +140,8 @@
     },
     "cache": {
       "limitChunks": 500,
-      "residentBudgetMB": 34,
-      "_note": "Sized on AVERAGE cost per entry, not worst case: 831 chunks / 2493 lod urls, avg 454 KB decoded per entry, so 500 projects to ~222 MB of JS heap. The 360°-no-cull estimate says peak mounted 831, but scaling by the cull ratio actually observed in the browser (82 visible vs 297 no-cull) puts the real mounted set near 229 — 500 leaves ~270 spare entries for backtracking, and still sits under the 831 total so the LRU always has something evictable. residentBudgetMB 33 = peak encoded 26.0 x1.25."
+      "residentBudgetMB": 320,
+      "_note": "REAL DECODED megabytes of GPU-resident geometry + textures, clamped further by the per-device ceiling in streaming/memory.ts (whichever is lower wins). It was 34, but that counted the manifest ENCODED sizes: at the 13.5x decode ratio measured on this bake it meant ~460 MB and the loop never fired. limitChunks is now only a secondary cap on the CPU cache, which is bounded by bytes (memory.ts > cpuMB) — a count cannot bound a set whose chunk radii span 3.6 m to 692 m, and 500 was reasoned against 816 chunks when the cache is keyed by url, of which there are 816 x 3 tiers = 2,448."
     },
     "fog": {
       "enabled": true,
@@ -196,21 +196,21 @@
           "distance": 150,
           "texture": {
             "px": 256,
-            "format": "webp"
+            "format": "ktx2"
           }
         },
         "mid": {
           "distance": 800,
           "texture": {
             "px": 128,
-            "format": "webp"
+            "format": "ktx2"
           }
         },
         "far": {
           "distance": 6000,
           "texture": {
             "px": 128,
-            "format": "webp"
+            "format": "ktx2"
           }
         }
       },
@@ -222,7 +222,7 @@
       },
       "cache": {
         "limitChunks": 900,
-        "residentBudgetMB": 40
+        "residentBudgetMB": 400
       }
     }
   },
@@ -272,20 +272,21 @@
     "shadowMapSize": 1024,
     "shadowRadius": 0.5,
     "shadowBias": -0.0005,
-    "shadowNormalBias": 0.55,
+    "shadowNormalBias": 2.5,
     "shadowFollowExtent": 420
   },
   "globals": {
     "heroContainerId": "EGHU4829136"
   },
   "sky": {
-    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"dusk\" is the open-sea study's sunset palette, \"day\" its midday one, \"off\" restores the flat blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: the sun direction, the sun tint and the ambient tint are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on.",
-    "mode": "dusk",
+    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"afternoon\" is the default, \"dusk\" the open-sea study's sunset palette, \"day\" a flat midday one, \"off\" restores the plain blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: sun direction, sun tint, ambient tint and the sky-fill pair are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on. `hemiIntensity` is the sky fill that keeps the away-from-sun side off black; raising `ambientIntensity` instead would flatten the lit side.",
+    "mode": "afternoon",
     "clouds": true,
     "lights": {
-      "sunIntensity": 4.2,
-      "ambientIntensity": 0.45,
-      "envIntensity": 0.3
+      "sunIntensity": 3.4,
+      "ambientIntensity": 0.3,
+      "hemiIntensity": 1.6,
+      "envIntensity": 0.55
     }
   },
   "map": {
@@ -293,19 +294,19 @@
     "plan": {
       "imageUrl": "/floorplan/terminal-plan.png",
       "bounds": {
-        "minX": -2159.121,
-        "maxX": -58.504,
-        "minZ": 969.87,
-        "maxZ": -889.443
+        "minX": -2282.156,
+        "maxX": 85.205,
+        "minZ": 1103.21,
+        "maxZ": -993.194
       }
     },
     "site": {
       "imageUrl": "/floorplan/everport-site.jpg",
       "bounds": {
-        "minX": -2894.337,
-        "maxX": 606.691,
-        "minZ": 783.939,
-        "maxZ": -1084.228
+        "minX": -2924.012,
+        "maxX": 577.016,
+        "minZ": 756.627,
+        "maxZ": -1111.54
       }
     },
     "zone": {
@@ -430,15 +431,15 @@
       "zone": "waterside",
       "description": "Opening overview and vessel approach context",
       "position": [
-        -2137.2906,
-        22.8331,
-        339.788
+        -1370.1807,
+        27.407,
+        93.0528
       ],
       "camera": {
         "position": [
-          -1727.7812,
-          64.941,
-          288.5251
+          -1732.8771,
+          65.1325,
+          289.376
         ],
         "rotation": [
           -0.1864,
@@ -455,15 +456,15 @@
       "zone": "waterside",
       "description": "Waterside operating face",
       "position": [
-        -1131.7439,
-        2.2482,
-        900.6246
+        -1382.8192,
+        6.7614,
+        129.8674
       ],
       "camera": {
         "position": [
-          -1478.8003,
-          22.395,
-          296.1733
+          -1483.1617,
+          22.461,
+          297.0468
         ],
         "rotation": [
           0,
@@ -480,15 +481,15 @@
       "zone": "waterside",
       "description": "Crane operation and telemetry",
       "position": [
-        -1002.4796,
-        27.7175,
-        666.6466
+        -1253.1738,
+        32.3059,
+        -104.8007
       ],
       "camera": {
         "position": [
-          -1542.2666,
-          161.6903,
-          40.3305
+          -1546.8152,
+          162.1672,
+          40.4495
         ],
         "rotation": [
           -0.9516,
@@ -505,15 +506,15 @@
       "zone": "waterside",
       "description": "Immersive vessel-side and hero-container experience",
       "position": [
-        -1518.6704,
-        11.311,
-        -867.6709
+        -1275.4124,
+        15.8509,
+        -96.8164
       ],
       "camera": {
         "position": [
-          -1206.6023,
-          27.6046,
-          -234.61
+          -1210.1609,
+          27.686,
+          -235.302
         ],
         "rotation": [
           -3.1416,
@@ -530,15 +531,15 @@
       "zone": "yard",
       "description": "Container storage and yard-block intelligence",
       "position": [
-        -1202.5745,
-        10.3266,
-        -925.7362
+        -958.3843,
+        14.8636,
+        -155.0531
       ],
       "camera": {
         "position": [
-          -855.5286,
-          61.0166,
-          -354.126
+          -858.0518,
+          61.1966,
+          -355.1704
         ],
         "rotation": [
           -2.8651,
@@ -555,15 +556,15 @@
       "zone": "yard",
       "description": "Primary Digital Twin and operational-data zone",
       "position": [
-        -267.2905,
-        2.8371,
-        -137.3998
+        -1041.4925,
+        7.3521,
+        109.9318
       ],
       "camera": {
         "position": [
-          -883.2039,
-          92.0407,
-          176.7034
+          -885.8087,
+          92.3122,
+          177.2246
         ],
         "rotation": [
           -0.7614,
@@ -580,15 +581,15 @@
       "zone": "yard",
       "description": "Reefer and southern-yard operations",
       "position": [
-        -1054.1887,
-        2.0099,
-        1271.7446
+        -1305.035,
+        6.5224,
+        502.0819
       ],
       "camera": {
         "position": [
-          -1386.9375,
-          61.0166,
-          671.207
+          -1391.0281,
+          61.1966,
+          673.1866
         ],
         "rotation": [
           -0.2764,
@@ -605,15 +606,15 @@
       "zone": "landside",
       "description": "Terminal-to-road logistics interface",
       "position": [
-        -7.844,
-        0.1995,
-        8.3168
+        -781.2808,
+        4.7067,
+        256.0781
       ],
       "camera": {
         "position": [
-          -695.4219,
-          21.219,
-          287.8455
+          -697.4729,
+          21.2816,
+          288.6944
         ],
         "rotation": [
           -0.3525,
@@ -630,15 +631,15 @@
       "zone": "rail",
       "description": "Shared intermodal rail interface; do not label as Everport-only rail yard",
       "position": [
-        73.218,
-        1.4652,
-        -569.523
+        -699.9797,
+        5.9761,
+        -323.4659
       ],
       "camera": {
         "position": [
-          -635.3095,
-          23.1524,
-          -364.1899
+          -637.1832,
+          23.2206,
+          -365.264
         ],
         "rotation": [
           -2.7891,
@@ -655,15 +656,15 @@
       "zone": "executive",
       "description": "Final elevated command/executive view",
       "position": [
-        -11.6322,
-        2.9942,
-        -496.1425
+        -785.0801,
+        7.5096,
+        -249.869
       ],
       "camera": {
         "position": [
-          -386.7862,
-          157.6844,
-          -425.6898
+          -387.927,
+          158.1495,
+          -426.9453
         ],
         "rotation": [
           -2.5126,
@@ -683,14 +684,14 @@
       "popupTitle": "Main Channel / Vessel Traffic",
       "icon": "vessel",
       "position": [
-        -2144.4106,
-        18.8358,
-        313.4804
+        -1377.3218,
+        23.398,
+        66.6676
       ],
       "rotation": [
-        -3.1416,
+        1.5708,
         0,
-        -3.1416
+        2.036
       ],
       "fields": [
         {
@@ -758,14 +759,14 @@
       "popupTitle": "Everport Terminal Overview",
       "icon": "kpi",
       "position": [
-        -2130.1707,
-        26.8303,
-        366.0956
+        -1363.0396,
+        31.416,
+        119.4379
       ],
       "rotation": [
-        -3.1416,
+        1.5708,
         0,
-        -3.1416
+        2.036
       ],
       "fields": [
         {
@@ -852,14 +853,14 @@
       "popupTitle": "Berth 226 - Live Status",
       "icon": "vessel",
       "position": [
-        -1117.418,
-        6.214,
-        872.0809
+        -1368.451,
+        10.7389,
+        101.2396
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -940,14 +941,14 @@
       "popupTitle": "Quay Operations",
       "icon": "crane",
       "position": [
-        -1146.0698,
-        -1.7177,
-        929.1682
+        -1397.1875,
+        2.7838,
+        158.4952
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -1007,14 +1008,14 @@
       "popupTitle": "Crane QC-02 - Operational Status",
       "icon": "crane",
       "position": [
-        -1028.6512,
-        25.063,
-        702.6207
+        -1279.4226,
+        29.6435,
+        -68.7205
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -1096,14 +1097,14 @@
       "popupTitle": "QC-02 - Live Crane Telemetry",
       "icon": "crane",
       "position": [
-        -1018.9986,
-        59.0347,
-        707.6453
+        -1269.7416,
+        63.7154,
+        -63.6811
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -1179,14 +1180,14 @@
       "popupTitle": "Crane Safety Zone",
       "icon": "safety",
       "position": [
-        -959.789,
-        -0.9451,
-        589.6738
+        -1210.3573,
+        3.5587,
+        -182.0005
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -1246,14 +1247,14 @@
       "popupTitle": "EVER LEGACY - Vessel Profile",
       "icon": "vessel",
       "position": [
-        -1527.593,
-        5.1009,
-        -882.6998
+        -1284.3613,
+        9.6225,
+        -111.8897
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1341,14 +1342,14 @@
       "popupTitle": "Container EGHU4829136",
       "icon": "container",
       "position": [
-        -1500.8252,
-        12.2314,
-        -837.613
+        -1257.5145,
+        16.774,
+        -66.6699
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1434,14 +1435,14 @@
       "popupTitle": "Vessel Bay 42 - Container Stack",
       "icon": "container",
       "position": [
-        -1527.593,
-        16.6008,
-        -882.6998
+        -1284.3613,
+        21.1563,
+        -111.8897
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1514,14 +1515,14 @@
       "popupTitle": "Yard Stack A12-04",
       "icon": "container",
       "position": [
-        -1207.6077,
-        7.153,
-        -989.6137
+        -963.4323,
+        11.6806,
+        -219.119
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1592,14 +1593,14 @@
       "popupTitle": "Yard Block A12 - KPI",
       "icon": "yard",
       "position": [
-        -1176.4062,
-        7.153,
-        -973.9539
+        -932.1389,
+        11.6806,
+        -203.4129
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1678,14 +1679,14 @@
       "popupTitle": "Top Handler TH-024",
       "icon": "equipment",
       "position": [
-        -1223.7097,
-        16.6738,
-        -813.6411
+        -979.5818,
+        21.2295,
+        -42.6273
       ],
       "rotation": [
-        0,
         1.5708,
-        0
+        0,
+        -2.6764
       ],
       "fields": [
         {
@@ -1764,14 +1765,14 @@
       "popupTitle": "EGHU4829136 - Movement History",
       "icon": "container",
       "position": [
-        -271.8246,
-        7.1528,
-        -157.4861
+        -1046.04,
+        11.6805,
+        89.7862
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -1838,14 +1839,14 @@
       "popupTitle": "Central Yard - Live Operations",
       "icon": "yard",
       "position": [
-        -289.0501,
-        0.6793,
-        -123.1656
+        -1063.3163,
+        5.1879,
+        124.2079
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -1915,14 +1916,14 @@
       "popupTitle": "Equipment TH-031 - Live Activity",
       "icon": "equipment",
       "position": [
-        -240.9967,
-        0.6793,
-        -131.5476
+        -1015.1212,
+        5.1879,
+        115.8012
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -1999,14 +2000,14 @@
       "popupTitle": "Reefer EGHU7392014 - Condition",
       "icon": "reefer",
       "position": [
-        -1077.7498,
-        6.0454,
-        1282.6948
+        -1328.6654,
+        10.5698,
+        513.0643
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -2082,14 +2083,14 @@
       "popupTitle": "Yard Block C08",
       "icon": "yard",
       "position": [
-        -1064.1204,
-        -0.0079,
-        1289.5352
+        -1314.996,
+        4.4986,
+        519.925
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -2156,14 +2157,14 @@
       "popupTitle": "Southern Yard Activity",
       "icon": "yard",
       "position": [
-        -1020.696,
-        -0.0078,
-        1243.0039
+        -1271.4435,
+        4.4987,
+        473.2564
       ],
       "rotation": [
+        1.5708,
         0,
-        -1.5708,
-        0
+        0.4652
       ],
       "fields": [
         {
@@ -2225,14 +2226,14 @@
       "popupTitle": "Truck Gate Transaction",
       "icon": "gate",
       "position": [
-        -22.0663,
-        1.7006,
-        10.0017
+        -795.545,
+        6.2122,
+        257.768
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2305,14 +2306,14 @@
       "popupTitle": "Automated Gate Verification",
       "icon": "gate",
       "position": [
-        0,
-        0,
-        0
+        -773.4136,
+        4.5066,
+        247.7367
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2386,14 +2387,14 @@
       "popupTitle": "Landside Truck Queue",
       "icon": "gate",
       "position": [
-        -1.4657,
-        -1.1021,
-        14.9486
+        -774.8837,
+        3.4012,
+        262.7296
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2449,14 +2450,14 @@
       "popupTitle": "TICTF Track 04",
       "icon": "rail",
       "position": [
-        74.9281,
-        1.0992,
-        -575.7733
+        -698.2645,
+        5.609,
+        -329.7347
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2528,14 +2529,14 @@
       "popupTitle": "EGHU4829136 - Rail Transfer",
       "icon": "rail",
       "position": [
-        80.2388,
-        1.0992,
-        -586.3545
+        -692.9382,
+        5.609,
+        -340.347
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2596,14 +2597,14 @@
       "popupTitle": "TICTF Rail Operations",
       "icon": "rail",
       "position": [
-        64.4872,
-        2.1971,
-        -546.4412
+        -708.7363,
+        6.7102,
+        -300.316
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2679,14 +2680,14 @@
       "popupTitle": "Everport Terminal Performance",
       "icon": "kpi",
       "position": [
-        -53.9488,
-        2.1972,
-        -356.0303
+        -827.5215,
+        6.7102,
+        -109.3436
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2781,14 +2782,14 @@
       "popupTitle": "Live Operations Intelligence",
       "icon": "kpi",
       "position": [
-        -16.5766,
-        4.6629,
-        -557.4094
+        -790.0392,
+        9.1833,
+        -311.3166
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2884,14 +2885,14 @@
       "popupTitle": "Environmental & Energy Performance",
       "icon": "sustainability",
       "position": [
-        48.6135,
-        4.6629,
-        -576.3554
+        -724.6568,
+        9.1832,
+        -330.3185
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -2962,14 +2963,14 @@
       "popupTitle": "Asset Health - TH-024",
       "icon": "equipment",
       "position": [
-        20.0733,
-        4.6629,
-        -530.2242
+        -753.2811,
+        9.1832,
+        -284.0513
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "fields": [
         {
@@ -3053,14 +3054,14 @@
       "popupTitle": "EGHU4829136 - Complete Cargo Journey",
       "icon": "journey",
       "position": [
-        -56.3223,
-        -1.2149,
-        -460.6931
+        -829.902,
+        3.2881,
+        -214.315
       ],
       "rotation": [
+        1.5708,
         0,
-        0,
-        0
+        -1.1056
       ],
       "journey": [
         {
