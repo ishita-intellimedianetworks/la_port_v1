@@ -68,6 +68,12 @@ export interface MapDestination {
 // the marker near that regardless of the now full-viewport canvas.
 const MARKER_SCALE = 1.25;
 
+/** Past this far from the navmesh the player is treated as off it, and a map
+ *  click drops them to the nearest walkable point before walking. Comfortably
+ *  above the metre or two of slack a legitimate on-mesh stance has, and far
+ *  below the hundreds of metres a fly camera sits at. */
+const OFF_MESH_M = 8;
+
 export function useMinimap() {
   const { playerControllerRef, minimapData, navigateFromMinimap, activeFloor, isMoving, triggerFloorTransition, layoutsOpen, setLayoutsOpen, fovOpen, setFovOpen } = useScene();
 
@@ -1043,6 +1049,21 @@ export function useMinimap() {
     if (listModeRef.current) return;
 
     clickMarkerRef.current = { x: world.x, z: world.z, alpha: 1 };
+
+    // Every layout here is a fly camera, hundreds of metres up and off the
+    // navmesh, so a walk from one has no start node and simply does nothing.
+    // Drop to the nearest walkable point first, then walk from there — the
+    // click still means "walk to this spot", it just gets a legal start.
+    const ctrl = playerControllerRef.current;
+    const near = ctrl?.nearestNavPoint();
+    if (ctrl && near && near.dist > OFF_MESH_M) {
+      ctrl.teleportTo([near.x, near.y, near.z], [0, ctrl.getRotationY(), 0]);
+      // One frame, so the teleport is applied before the path is planned off
+      // the new position rather than the old one.
+      requestAnimationFrame(() => navigateFromMinimap(world.x, world.z));
+      return;
+    }
+
     navigateFromMinimap(world.x, world.z);
   }, [mapWidth, mapHeight, navigateFromMinimap, playerControllerRef]);
 

@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import gsap from "gsap";
 
 import { usePlayerState }        from "./hooks/use-player-state";
@@ -141,6 +142,32 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       teleportTo,
       probeFloorY: (x, z, expectedY) =>
         probeFloorY(pathfinding, state.currentZone.current, x, z, expectedY),
+      nearestNavPoint: (pos) => {
+        const zone = state.currentZone.current;
+        const fp = new THREE.Vector3(
+          pos?.x ?? state.pos.current.x,
+          pos?.y ?? (state.pos.current.y - cameraHeight),
+          pos?.z ?? state.pos.current.z,
+        );
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const z = (pathfinding as any).zones?.[zone];
+          if (!z) return null;
+          // Every group, not just getGroup's: an off-mesh point (a fly camera
+          // hundreds of metres up and outside the terminal) does not belong to
+          // one, and getGroup returns null for exactly the case this exists for.
+          const groups: number = z.groups?.length ?? 0;
+          let best = null as null | { x: number; y: number; z: number; dist: number };
+          for (let g = 0; g < groups; g++) {
+            const node = pathfinding.getClosestNode(fp, zone, g);
+            if (!node) continue;
+            const c = node.centroid;
+            const d = Math.hypot(c.x - fp.x, c.y - fp.y, c.z - fp.z);
+            if (!best || d < best.dist) best = { x: c.x, y: c.y, z: c.z, dist: d };
+          }
+          return best;
+        } catch { return null; }
+      },
       isMoving:    () => state.moving.current,
       getPosition: () => ({ x: state.pos.current.x, y: state.pos.current.y, z: state.pos.current.z }),
       getRotationY: () => state.rot.current.y,

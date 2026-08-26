@@ -61,6 +61,11 @@ export interface PlayerControllerHandle {
    * picking the candidate whose Y is closest. Result does NOT include cameraHeight.
    */
   probeFloorY: (x: number, z: number, expectedY?: number) => number | null;
+  /** Nearest walkable point to `pos` (default: the player), as a FOOT position,
+   *  plus how far away it is. Null when the nav graph has no zone loaded.
+   *  `dist` is what tells a caller whether the player is standing off-mesh. */
+  nearestNavPoint: (pos?: { x: number; y?: number; z: number })
+    => { x: number; y: number; z: number; dist: number } | null;
   getCurrentZone: () => string;
   setCurrentZone: (z: string) => void;
   setOnNavigationComplete: (cb: (() => void) | null) => void;
