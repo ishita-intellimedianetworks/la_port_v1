@@ -143,7 +143,7 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
       >
         <PanelHeader
           title={hotspot.popupTitle}
-          subtitle={`${hotspot.id} · ${layout.id} ${layout.name}`}
+          subtitle={layout.name}
           onClose={onClose}
         />
 

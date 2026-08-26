@@ -1,20 +1,23 @@
 "use client";
 
 /**
- * StreamedModel — the terminal, streamed. FIRST PERSON ONLY.
+ * StreamedModel — the terminal, streamed. BOTH VIEWS.
  *
- * Drop-in replacement for <SingleModel> in the walking view of a floor that
- * authors `site.json › stream`. Same two callbacks (`onBounds`, `onLoaded`),
- * same place in the tree, so nothing downstream — navmesh, player, minimap,
- * hotspots, environment — knows the difference.
+ * Drop-in replacement for <SingleModel> on a floor that authors
+ * `site.json › stream`. Same two callbacks (`onBounds`, `onLoaded`), same place
+ * in the tree, so nothing downstream — navmesh, player, minimap, hotspots,
+ * environment — knows the difference.
  *
- * The dollhouse keeps its single decimated GLB. Streaming is a bad trade from a
- * fixed vantage that frames the whole zone: the view cone covers everything, so
- * the frustum cull buys nothing and the bands only fight the resident-byte
- * ceiling, whose eviction drops the FURTHEST chunk first — exactly the half of
- * the frame the shot is composed around. This mounts on the way in, under the
- * entry blackout, and the blackout holds until it has filled in around the
- * landing point.
+ * ONE MOUNT, TWO STRATEGIES. Adaptive banding really is a bad trade from the
+ * dollhouse's fixed vantage — the view cone covers everything, so the frustum
+ * cull buys nothing and the bands only fight the resident-byte ceiling, whose
+ * eviction drops the FURTHEST chunk first, exactly the half of the frame the
+ * shot is composed around. The answer is not a second model but a second
+ * config: `stream.dollhouse` flattens every chunk onto the far tier and turns
+ * the cull off, which is the whole district for ~22 MB. Entering first person
+ * swaps the config in place (ChunkManager.setConfig) under the entry blackout,
+ * which holds until the near bands have filled in around the landing point —
+ * mostly from the decoded cache, since the overview already paid for them.
  *
  * What it does NOT do, and why:
  *
@@ -41,7 +44,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { ChunkManager, type StreamStats } from "@/streaming/chunk-manager";
-import { STREAM_ASSET_BASE, type StreamingConfig } from "@/streaming/config";
+import { STREAM_ASSET_BASE, detectProfile, type StreamingConfig } from "@/streaming/config";
 import type { Manifest, MaterialDef, TexManifest } from "@/streaming/types";
 import { useProgressStore } from "@/shared/stores/progress-store";
 
@@ -121,6 +124,10 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
         dracoPath: "/draco/",
         renderer: gl as THREE.WebGLRenderer, // enables KTX2 transcode-support detection
         ktx2Path: "/basis/",
+        // Memory ceilings are a property of the DEVICE, not of the scene, so
+        // they are resolved here rather than read from site.json's bands — and
+        // they deliberately do NOT move when the aerial/ground config swaps.
+        profile: detectProfile(),
       });
       mgr.current = created;
       created.setConfig(cfgRef.current); // a view swap that landed mid-construction

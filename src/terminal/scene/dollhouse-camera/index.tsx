@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { degToRad } from "three/src/math/MathUtils.js";
 import type { FloorConfig } from "@/shared/types";
+import { useWorldStore } from "@/shared/stores/world-store";
 import { FADE_MS } from "@/shared/ui/screens/fade-screen";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +81,18 @@ export default function DollhouseCamera({
 }: DollhouseCameraProps) {
   const { camera, gl, scene } = useThree();
 
+  // ── Where the orbit pivots ────────────────────────────────────────────────
+  // A STREAMED floor cannot be measured by traversing the scene: on the frame
+  // the pivot is seeded only a handful of chunks have landed, and it is seeded
+  // exactly ONCE — so the orbit would latch onto whichever corner downloaded
+  // first. The manifest's baked world bounds describe the whole zone and are
+  // published before a single chunk arrives (see StreamedModel > onBounds), so
+  // a streamed dollhouse waits for those instead.
+  // Read straight in the frame loop below — useFrame always calls the LATEST
+  // callback, so neither needs mirroring into a ref.
+  const streamed = !!activeFloor?.streamed;
+  const worldBounds = useWorldStore((s) => s.bounds);
+
   // ── Fly-in animation ──────────────────────────────────────────────────────
   // Driven directly in useFrame — no tween library, no per-frame allocations.
   const isTransitioning = useRef(false);
@@ -124,12 +137,19 @@ export default function DollhouseCamera({
   }, [interactive]);
 
   // ── Authoring aid ─────────────────────────────────────────────────────────
-  // After every orbit/zoom interaction, once the damping settles, log the live
-  // camera pose in `site.json` › `cameras.dollhouse` format (rotation as YXZ
-  // euler — the order seatAtHome applies) so a good framing can be copied
-  // straight into the config.
+  // The live camera pose in `site.json` › `cameras.dollhouse` format (rotation
+  // as the YXZ euler seatAtHome applies), so a framing found by dragging can be
+  // copied straight into the config.
+  //
+  // TWO cadences, because finding a framing and recording it are different
+  // jobs. WHILE the view moves it prints at 5 Hz, so the numbers can be read as
+  // the model turns — that is what makes it possible to aim at something rather
+  // than drag, stop, look, repeat. When the damping settles it prints once more
+  // with a `settled` marker: that is the line to paste, and the throttled ones
+  // above it are mid-drag samples of a pose nobody chose.
   const poseDirty = useRef(false);
-  const logPose = useCallback(() => {
+  const liveLogAt = useRef(0);
+  const logPose = useCallback((settled: boolean) => {
     // Authoring aid only — opt-in via ?debug=true like the rest of the logs.
     if (typeof window === "undefined" ||
         new URLSearchParams(window.location.search).get("debug") !== "true") return;
@@ -137,7 +157,7 @@ export default function DollhouseCamera({
     const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
     const p = camera.position;
     console.log(
-      `[dollhouse] "dollHouseCamera": { "position": [${r(p.x)}, ${r(p.y)}, ${r(p.z)}], "rotation": [${r(e.x)}, ${r(e.y)}, ${r(e.z)}] }`,
+      `[dollhouse${settled ? " settled" : ""}] "dollhouse": { "position": [${r(p.x)}, ${r(p.y)}, ${r(p.z)}], "rotation": [${r(e.x)}, ${r(e.y)}, ${r(e.z)}] }`,
     );
   }, [camera]);
 
@@ -441,20 +461,28 @@ export default function DollhouseCamera({
       return;
     }
 
-    // 2. Orbit around the MODEL CENTRE. Initialise the orbit basis once the GLB
-    //    is committed: pivot = the visible model's bbox centre, the spherical
-    //    seeded from the authored camera pose (so the initial radius/angle match
-    //    the configured dollhouse view — the camera just looks at the centre now).
+    // 2. Orbit around the MODEL CENTRE. Initialise the orbit basis once the
+    //    model is committed: pivot = its bbox centre, the spherical seeded from
+    //    the authored camera pose (so the initial radius/angle match the
+    //    configured dollhouse view — the camera just looks at the centre now).
     if (!orbitReady.current) {
       sceneBounds.current.makeEmpty();
-      scene.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        let n: THREE.Object3D | null = mesh;
-        while (n) { if (!n.visible) return; n = n.parent; }
-        sceneBounds.current.expandByObject(mesh);
-      });
-      if (sceneBounds.current.isEmpty()) { seatAtHome(); return; } // model not ready
+      if (streamed) {
+        if (!worldBounds) { seatAtHome(); return; } // bounds not published yet
+        sceneBounds.current.set(
+          new THREE.Vector3(...worldBounds.min),
+          new THREE.Vector3(...worldBounds.max),
+        );
+      } else {
+        scene.traverse((child) => {
+          const mesh = child as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          let n: THREE.Object3D | null = mesh;
+          while (n) { if (!n.visible) return; n = n.parent; }
+          sceneBounds.current.expandByObject(mesh);
+        });
+        if (sceneBounds.current.isEmpty()) { seatAtHome(); return; } // model not ready
+      }
 
       sceneBounds.current.getCenter(orbitCenter.current);
       const camPos = new THREE.Vector3(...initPositionRef.current);
@@ -491,17 +519,25 @@ export default function DollhouseCamera({
     camera.position.copy(orbitCenter.current).add(orbitOffset.current);
     camera.lookAt(orbitCenter.current);
 
-    // Log the pose once the damped orbit has settled after an interaction —
-    // the printed line is paste-ready for site.json.
-    if (
-      poseDirty.current &&
-      !isDragging.current &&
-      Math.abs(sphTarget.current.theta - sphCurrent.current.theta) < 1e-3 &&
-      Math.abs(sphTarget.current.phi - sphCurrent.current.phi) < 1e-3 &&
-      Math.abs(sphTarget.current.radius - sphCurrent.current.radius) < 1e-2
-    ) {
+    // Is the view still moving — either a finger/pointer is down, or the
+    // damping is still closing the gap to the target?
+    const settling =
+      Math.abs(sphTarget.current.theta - sphCurrent.current.theta) >= 1e-3 ||
+      Math.abs(sphTarget.current.phi - sphCurrent.current.phi) >= 1e-3 ||
+      Math.abs(sphTarget.current.radius - sphCurrent.current.radius) >= 1e-2;
+
+    if (isDragging.current || settling) {
+      // Live readout at 5 Hz — a line per frame would be unreadable and would
+      // cost more than the orbit itself.
+      const now = performance.now();
+      if (now - liveLogAt.current >= 200) {
+        liveLogAt.current = now;
+        logPose(false);
+      }
+    } else if (poseDirty.current) {
+      // Settled after an interaction: the paste-ready line.
       poseDirty.current = false;
-      logPose();
+      logPose(true);
     }
   });
 

@@ -10,6 +10,12 @@ import { createStore } from "../create-store";
 export type WorldBounds = {
   center: [number, number, number];
   radius: number;
+  /** The box itself, not just its bounding sphere. The sun's shadow camera
+   *  needs the real extents: a port is 2 km wide and 60 m tall, and a sphere
+   *  around that is mostly empty air — fitting the shadow frustum to it spends
+   *  the whole map on nothing. */
+  min: [number, number, number];
+  max: [number, number, number];
 };
 
 export type WorldState = {

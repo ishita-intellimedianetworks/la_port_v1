@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { HOTSPOT_BY_ID, layouts, scene, startPose, ui } from "@/config";
+import { HOTSPOT_BY_ID, layouts, poseForCamera, scene, startPose, ui } from "@/config";
 import { STREAM_ASSET_BASE } from "@/streaming/config";
 import type { DestinationsByCategory } from "../types";
 
@@ -46,23 +46,6 @@ const ROUTE_SANITIZE = false;
 const round = (v: number): number => Math.round(v * 10000) / 10000;
 const v3 = (a: readonly number[]): V3 => [round(a[0]), round(a[1]), round(a[2])];
 
-/**
- * Layout cameras are stored as position + target (handoff §4). The engine
- * applies a YXZ euler, so convert here.
- *
- * Three.js cameras look down -Z, making forward
- * `(-cos(pitch)sin(yaw), sin(pitch), -cos(pitch)cos(yaw))`; inverting it gives
- * `yaw = atan2(-dx, -dz)`. Dropping those minus signs aims every camera 180°
- * away from its subject.
- */
-function rotationLookingAt(position: V3, target: V3, eyeOffset: number): V3 {
-  const dx = target[0] - position[0];
-  const dy = target[1] - (position[1] + eyeOffset);
-  const dz = target[2] - position[2];
-  const flat = Math.hypot(dx, dz);
-  return [round(Math.atan2(dy, flat)), round(Math.atan2(-dx, -dz)), 0];
-}
-
 // ── Zones become the engine's destination categories ──────────────────────────
 
 const dests: DestinationsByCategory = {};
@@ -78,15 +61,21 @@ for (const layout of layouts) {
     note: layout.description,
     open: true,
     option: ui.zones[layout.zone]?.label ?? layout.zone,
-    camera: {
-      position: v3(layout.camera.position),
-      rotation: rotationLookingAt(layout.camera.position, layout.camera.target, eyeOffset),
-    },
+    // A layout camera is authored either as an XYZ rotation (straight off its
+    // `cp_NNN` node, in the order /extract-pos prints) or as a point to look at,
+    // and `poseForCamera` resolves both to the YXZ euler the engine applies.
+    // That arithmetic used to be copied here as well, so the two could round one
+    // pose differently — and once cameras could carry an authored rotation, the
+    // copy would have quietly ignored it and gone on deriving one.
+    camera: (() => {
+      const pose = poseForCamera(layout.camera, eyeOffset);
+      return { position: v3(pose.position), rotation: v3(pose.rotation) };
+    })(),
     // Every marker in this layout shares the camera above — the engine routes
     // a tap on any of them back to it.
     hotspots: layout.hotspots.map((id) => {
       const h = HOTSPOT_BY_ID[id];
-      return { position: v3(h.position), rotation: v3(h.rotation), label: `${h.id} · ${h.name}` };
+      return { position: v3(h.position), rotation: v3(h.rotation), label: h.name };
     }),
     showHsIn3d: true,
     ...(aerial ? { exactPose: true, teleportOnly: true } : null),
@@ -100,10 +89,11 @@ const floors = [
     id: "terminal",
     label: scene.meta.label,
     modelUrl: scene.assets.modelUrl,
-    // The WALKING view streams as distance-tiered chunks whenever site.json
-    // authors a `stream` block. The dollhouse never does — it draws
-    // `assets.modelUrl` as one decimated GLB, which is what `modelUrl` is for
-    // now. Everything about HOW it streams lives in that block.
+    // BOTH views stream as distance-tiered chunks whenever site.json authors a
+    // `stream` block — the dollhouse under `stream.dollhouse`, which flattens
+    // every chunk onto the coarsest tier. `modelUrl` below is the fallback for
+    // a site that authors no such block. Everything about HOW it streams lives
+    // in that block.
     streamed: !!scene.stream,
     // The navmesh travels WITH the chunks: the bake emits it next to them, so
     // it follows NEXT_PUBLIC_ASSET_BASE to a CDN and there is no second copy in
@@ -143,13 +133,13 @@ export const nodes: any[] = [
       position: v3(scene.cameras.dollhouse.position),
       rotation: v3(scene.cameras.dollhouse.rotation),
     },
-    // The dollhouse draws the single decimated GLB — the walking view is the
-    // half that streams. Naming it explicitly here (rather than falling through
-    // to the floor's modelUrl) is what lets the two diverge: point
-    // `assets.modelUrl` at a purpose-built low-poly overview mesh and only the
-    // dollhouse changes.
+    // The overview's own GLB, kept wired for a site with no `stream` block.
+    // With one authored the dollhouse streams instead and this goes unread —
+    // see `stream.dollhouse` in site.json.
     dollHouseModelUrl: scene.assets.modelUrl,
-    // The point-cloud sidecar shown behind the loading HUD while that GLB loads.
+    // The point-cloud sidecar shown behind the loading HUD while the overview
+    // fills in. Still baked from `assets.modelUrl`, which is the same zone at
+    // the same scale whether or not that GLB is the thing being drawn.
     dollHousePreviewUrl: scene.assets.previewUrl,
     startPosition: floors[0].startPosition,
     startRotation: floors[0].startRotation,

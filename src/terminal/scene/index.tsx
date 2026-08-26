@@ -34,7 +34,14 @@ import {
 import { zoneNameForFloor } from "./navmesh";
 import SceneEnvironment from "./environment";
 import StreamFog from "./environment/stream-fog";
-import { detectProfile, resolveStreamConfig } from "@/streaming/config";
+import {
+  detectProfile,
+  fogRange,
+  resolveAerialConfig,
+  resolveDollhouseConfig,
+  resolveStreamConfig,
+} from "@/streaming/config";
+import { useStreamConfigForCamera } from "./hooks/use-stream-config-for-camera";
 import DollhouseCamera from "./dollhouse-camera";
 import { PerfMeter } from "./perf-meter";
 import { useSceneLoading } from "./hooks/use-scene-loading";
@@ -533,26 +540,51 @@ export function SceneContent({
   // floor id in BOTH views. Keeping it stable means switching dollhouse ↔
   // first-person does NOT remount/re-parse the model — no black flash, no
   // re-reveal. Only the UCLA↔Stadium toggle (a real floor change) remounts.
+  // Only read when the floor is NOT streamed — a streamed floor draws chunks in
+  // both views now, so `dollHouseModelUrl` is dead weight for this site and
+  // stays only for a site that authors no `stream` block.
   const currentModelUrl =
     viewMode === "dollhouse"
       ? (dollHouseModelUrl ?? activeFloor?.modelUrl)
       : activeFloor?.modelUrl;
   const currentModelKey = activeFloor?.id ?? "_none";
 
-  // ── Adaptive streaming — the WALKING view only ────────────────────────────
-  // The dollhouse draws `assets.modelUrl`, one decimated whole-zone GLB, and
-  // never streams: from a fixed vantage that frames the entire zone the view
-  // cone covers everything, so the frustum cull buys nothing and the distance
-  // bands only fight the resident-byte ceiling — whose eviction drops the
-  // FURTHEST chunk first, i.e. exactly the half of the frame the shot is
-  // composed around. The streamer mounts on the way in to first person, under
-  // the entry blackout, and fills in around `cameras.spawn` before it lifts.
-  const streaming = !!activeFloor?.streamed && viewMode === "firstPerson";
+  // ── Adaptive streaming — BOTH views ───────────────────────────────────────
+  // One manifest feeds the overview and the walk. The dollhouse used to draw a
+  // separate decimated GLB (`assets.modelUrl`); it now streams the same chunks
+  // with `stream.dollhouse`, which puts every one of them on the far tier —
+  // the whole district at its coarsest, ~22 MB, with the two backdrop planes
+  // hidden. Adaptive banding still has nothing to give a fixed vantage that
+  // frames everything, which is why that config switches the cull off and
+  // flattens the tiers rather than reaching for a second asset.
+  //
+  // The payoff is the transition: StreamedModel stays MOUNTED across the view
+  // change and only its config swaps, so first person re-mounts the overview's
+  // chunks from the decoded cache and downloads just what the near bands add.
+  const streaming = !!activeFloor?.streamed;
+  // The walking half of that, for the things tuned to a camera on the ground.
+  const walking = streaming && viewMode === "firstPerson";
   // Desktop on the first render — which is also what SSR produces, so hydration
   // is stable — then the real device profile once mounted.
   const [deviceProfile, setDeviceProfile] = useState<"mobile" | "desktop">("desktop");
   useEffect(() => setDeviceProfile(detectProfile()), []);
-  const streamConfig = useMemo(() => resolveStreamConfig(deviceProfile), [deviceProfile]);
+  const groundStreamConfig = useMemo(() => resolveStreamConfig(deviceProfile), [deviceProfile]);
+  // The layout cameras are framing shots 54-412 m up and up to 2.8 km out, and
+  // the bands above are tuned for someone standing in the terminal — from four
+  // of the ten, they resolved 2 chunks of 831 and the shot framed empty sky.
+  // `stream.aerial` is the second strategy over the same manifest; the hook
+  // picks between them by camera height and hands the manager the swap. Null
+  // when no aerial block is authored, in which case this is a straight
+  // pass-through of the ground config.
+  const aerialStreamConfig = useMemo(() => resolveAerialConfig(deviceProfile), [deviceProfile]);
+  const cameraStreamConfig = useStreamConfigForCamera(groundStreamConfig, aerialStreamConfig);
+  // The overview is not "an elevated camera" — it is its own strategy (see the
+  // `dollhouse` block in site.json), so it is selected by VIEW rather than by
+  // the height hook. Absent that block, the hook's answer stands and the
+  // dollhouse simply streams like any other camera up at framing height.
+  const dollhouseStreamConfig = useMemo(() => resolveDollhouseConfig(deviceProfile), [deviceProfile]);
+  const streamConfig =
+    viewMode === "dollhouse" && dollhouseStreamConfig ? dollhouseStreamConfig : cameraStreamConfig;
 
   // Preview point-cloud is dollhouse-only — first-person floors no longer
   // ship a preview. Past initial load we use blackouts for swaps.
@@ -679,7 +711,12 @@ export function SceneContent({
       // Fit the environment to this model.
       const centre = bbox.getCenter(new THREE.Vector3());
       const radius = bbox.getSize(new THREE.Vector3()).length() * 0.5;
-      setWorldBounds({ center: [centre.x, centre.y, centre.z], radius });
+      setWorldBounds({
+        center: [centre.x, centre.y, centre.z],
+        radius,
+        min: [bbox.min.x, bbox.min.y, bbox.min.z],
+        max: [bbox.max.x, bbox.max.y, bbox.max.z],
+      });
 
       // Feed the minimap bounds, unless a dedicated bounds model does.
       const { viewMode: mode, boundsUrl, modelKey } = boundsContext.current;
@@ -984,22 +1021,27 @@ export function SceneContent({
 
       {/* The visible model — streamed, or a single GLB.
 
-          STREAMED (first person): hundreds of distance-tiered chunks driven
-          straight onto the THREE.Scene by ChunkManager, plus the distance fog
-          that lets the download radius stay small. It reports the SAME two
-          things a GLB does (world bounds, "the opening view has settled"), so
-          the navmesh, the player, the minimap and the environment are unchanged
-          by the swap. No `sharedUniforms` and no edge-feather: both patch
-          materials of a model that is fully present at mount, and a streamed
-          one never is — which is the other half of why the dollhouse keeps its
-          GLB, since the rim dissolve is a dollhouse effect.
+          STREAMED (both views of a floor that authors `stream`): hundreds of
+          distance-tiered chunks driven straight onto the THREE.Scene by
+          ChunkManager, plus the distance fog that lets the walking download
+          radius stay small. It reports the SAME two things a GLB does (world
+          bounds, "the opening view has settled"), so the navmesh, the player,
+          the minimap and the environment are unchanged by the swap. ONE element
+          serves both views — only `config` differs — so switching dollhouse ↔
+          first person re-decides tiers against the new bands and re-mounts from
+          the decoded cache instead of parsing a second model.
 
-          SINGLE GLB: the dollhouse overview, apartment interiors, and any floor
-          that authors no stream block. When the active floor authors a
-          `boundsUrl`, the bbox callback is moved to the invisible bounds GLB
-          below — same callback, same key, just sourced from a cleaner mesh that
-          omits the adjacent-floor / staircase geometry that inflates the
-          modelUrl bbox. */}
+          What that costs the overview: no `sharedUniforms` dither and no
+          edge-feather. Both patch the materials of a model that is fully
+          present at mount, and a streamed one never is. The preview cloud still
+          plays and still crossfades out — it just fades over solid geometry
+          rather than dithering it in.
+
+          SINGLE GLB: apartment interiors and any floor that authors no stream
+          block. When the active floor authors a `boundsUrl`, the bbox callback
+          is moved to the invisible bounds GLB below — same callback, same key,
+          just sourced from a cleaner mesh that omits the adjacent-floor /
+          staircase geometry that inflates the modelUrl bbox. */}
       {streaming ? (
         <>
           <StreamedModel
@@ -1078,10 +1120,11 @@ export function SceneContent({
           // dropped the camera by the difference right after handoff (the Y settle).
           cameraHeight={activeFloor?.cameraHeight ?? cameraHeight}
           onEnterFirstPerson={onEnterFirstPerson ?? (() => {})}
-          // Raises the blackout over the tail of the fly-in. The dollhouse GLB
-          // and the streamed walking model are DIFFERENT models, so the swap
-          // must not be seen; the blackout then holds until the streamer has
-          // filled in around the landing point.
+          // Raises the blackout over the tail of the fly-in. Both views now
+          // stream the same chunks, so what it covers is no longer a model swap
+          // but a TIER swap — the whole district at far giving way to the near
+          // bands around the landing point. The blackout holds until the
+          // streamer has filled that in.
           onTransitionCue={onTransitionCue}
           // Ignore all camera input (drag / wheel / pinch / double-click) until
           // the load + reveal transition has fully finished. Inline mode has no
@@ -1136,6 +1179,16 @@ export function SceneContent({
           showEnvMap={viewMode === "firstPerson"}
           shadows={activeFloor?.shadows ?? true}
           interior={!!activeFloor?.interior}
+          // Where the streamed world stops being visible, so the sun's follow
+          // square is sized from the bands actually in force rather than from a
+          // number in site.json that a retune would quietly invalidate. Fog
+          // closes fully at its far plane; with fog off, nothing exists past
+          // the unload radius.
+          followRadius={
+            walking
+              ? fogRange(streamConfig)?.far ?? streamConfig.unloadDist
+              : undefined
+          }
           lights={activeFloor?.lights}
           venueKey={activeFloor?.id}
         />

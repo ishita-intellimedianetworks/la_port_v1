@@ -33,6 +33,32 @@ function lanOrigins(): string[] {
 const nextConfig: NextConfig = {
   // Dev-only; it has no effect on `next build` / `next start`.
   allowedDevOrigins: lanOrigins(),
+
+  /**
+   * Let the browser keep the baked chunk set in DEV.
+   *
+   * `next start` already serves everything under `public/` as
+   * `max-age=31536000, immutable` (next/dist/server/lib/router-server.js), so a
+   * chunk the streamer evicts and re-mounts costs nothing in production. In DEV
+   * the same files go out as `no-cache, must-revalidate`, which turns every
+   * re-mount into a network round-trip — and the streamer re-mounts constantly
+   * by design. That makes the dev build feel far heavier than the shipped one
+   * and quietly distorts any profiling done against it.
+   *
+   * One hour rather than `immutable` because these files ARE replaced by a
+   * re-bake in the adaptive repo and the names do not change: a stale asset
+   * clears on its own within the hour, or immediately on a hard reload.
+   * Next only applies this when nothing else has already set the header.
+   */
+  async headers() {
+    if (process.env.NODE_ENV !== "development") return [];
+    return [
+      {
+        source: "/assets/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

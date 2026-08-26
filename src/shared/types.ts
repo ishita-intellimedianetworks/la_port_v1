@@ -261,6 +261,23 @@ export type LightsConfig = {
   ambientIntensity?: number;
   /** Ambient fill colour (hex). Default "#ffffff". */
   ambientColor?: string;
+  /**
+   * SKY FILL intensity — a hemisphere light, sky colour above and ground-bounce
+   * below. Default 0, so nothing that does not ask for it changes.
+   *
+   * This is what stops the side of the model facing away from the sun going
+   * black. Ambient cannot do it: it adds the same amount to every surface at
+   * every angle, so turning it up enough to lift the dark side also flattens
+   * the lit side into paper. A hemisphere light is directional — full strength
+   * on up-facing surfaces, ground colour underneath — so it fills the shadow
+   * side while leaving the form intact. It casts nothing, so it is one extra
+   * term in the shader and no extra draw.
+   */
+  hemiIntensity?: number;
+  /** Sky-fill colour from above (hex). Default "#ffffff". */
+  hemiSkyColor?: string;
+  /** Sky-fill colour from below — the ground bounce (hex). Default "#ffffff". */
+  hemiGroundColor?: string;
   /** HDR image-based lighting intensity. Default 0.65. */
   envIntensity?: number;
   /** Environment HDRI file (public path) used for image-based lighting +
@@ -280,6 +297,22 @@ export type LightsConfig = {
   shadowBias?: number;
   /** Shadow normal bias. Default 0.55. */
   shadowNormalBias?: number;
+  /** FALLBACK half-width, in world units, of the square of ground the sun's
+   *  shadow map covers WHILE WALKING. Used only on a first-person floor that
+   *  streams nothing: a streamed floor derives the size from where its fog
+   *  closes, so retuning the bands cannot leave the square too small. The
+   *  dollhouse ignores it entirely and fits the whole site.
+   *
+   *  This is the number that decides how sharp shadows look on foot — the map is
+   *  `shadowMapSize` texels across `2 x` this, so 420 m at 1024 px is 0.82 m per
+   *  texel where fitting the same map to the whole 2.8 km port was 2.7 m.
+   *
+   *  It must be comfortably LARGER than the radius you can see, not equal to it:
+   *  the square only re-centres once the camera has crossed a fifth of it, so
+   *  between re-fits the covered radius shrinks by that much. Sized to the
+   *  visible radius exactly, a ring of unshadowed ground sweeps ahead of you.
+   *  Default 420 (a 323 m visible radius plus that drift). */
+  shadowFollowExtent?: number;
   // ── Interior spot light ───────────────────────────────────────────────────
   // A shadow-casting ceiling spot placed INSIDE the room, aimed down at the
   // floor. Used on interior venues where the directional sun is blocked by the

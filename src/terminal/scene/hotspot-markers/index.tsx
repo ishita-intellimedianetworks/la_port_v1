@@ -5,7 +5,9 @@ import { useNavUiStore } from "../../stores/nav-ui-store";
 import { Hotspot } from "./hotspot";
 
 interface HotspotMarkersProps {
-  /** Marker disc radius in world units (FloorConfig.hsSize). */
+  /** Base marker radius in world units (FloorConfig.hsSize). The marker is
+   *  drawn at a constant size on SCREEN — this is the radius that rule scales
+   *  from, and the bound it is clamped against. */
   hsSize?: number;
 }
 
@@ -66,7 +68,8 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
           <Hotspot
             key={id}
             position={hotspot.position}
-            title={`${hotspot.id} · ${hotspot.name}`}
+            rotation={hotspot.rotation}
+            title={hotspot.name}
             size={hsSize ?? 0.6}
             // Every marker is white — the pulse alone marks the selection, so
             // the discs stay one consistent thing rather than two kinds.
@@ -77,7 +80,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
                 hotspotId: hotspot.id,
                 destLabel: layout.name,
                 category: layout.zone,
-                hotspotLabel: `${hotspot.id} · ${hotspot.name}`,
+                hotspotLabel: hotspot.name,
                 index: layout.hotspots.indexOf(hotspot.id) + 1,
                 total: layout.hotspots.length,
                 position: hotspot.position,

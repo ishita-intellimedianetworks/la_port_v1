@@ -9,7 +9,7 @@
  * the views the app already reads (`scene`, `ui`), rebuilds the nesting the
  * Resources panel renders, and derives the id lookups.
  *
- *   site.json › meta/assets/world/cameras/lights/globals → `scene`  (the site record)
+ *   site.json › meta/assets/world/cameras/lights/globals/sky → `scene` (the site record)
  *   site.json › theme/zones/tones/copy                   → `ui`     (presentation)
  *   site.json › layouts[]                                → `layouts`  (table)
  *   site.json › hotspots[]                               → `hotspots` (table)
@@ -20,6 +20,7 @@ import siteJson from "./site.json";
 import type {
   CameraPose,
   HotspotConfig,
+  LayoutCamera,
   LayoutConfig,
   SceneConfig,
   SiteConfig,
@@ -44,6 +45,7 @@ export const scene: SceneConfig = {
   lights: site.lights,
   globals: site.globals,
   map: site.map,
+  sky: site.sky,
 };
 
 export const ui: UiConfig = {
@@ -133,17 +135,59 @@ export function poseLookingAt(position: Vec3, target: Vec3, eyeOffset = 0): Came
 }
 
 /**
+ * Reorder an XYZ euler to the YXZ one a camera is set with.
+ *
+ * Everything authored against the model — `hotspots[].rotation`,
+ * `layouts[].camera.rotation` — is stored in the order `/extract-pos` prints,
+ * which is XYZ; every camera in the app is applied as
+ * `camera.rotation.set(x, y, z, "YXZ")`. The two orders name DIFFERENT
+ * orientations for the same triple as soon as more than one axis is non-zero,
+ * so the reorder is not cosmetic: read L04's `[3.1416, 0.4974, -3.1416]` as YXZ
+ * and the camera ends up upside down looking the wrong way.
+ *
+ * Done as arithmetic rather than by borrowing three.js's `Euler`, so the config
+ * module stays dependency-free and importable from anywhere. Composes the XYZ
+ * rotation matrix `Rx·Ry·Rz` and reads the YXZ angles back off it.
+ */
+function xyzToYxz([x, y, z]: Vec3): Vec3 {
+  const cx = Math.cos(x), sx = Math.sin(x);
+  const cy = Math.cos(y), sy = Math.sin(y);
+  const cz = Math.cos(z), sz = Math.sin(z);
+  // R = Rx·Ry·Rz, the matrix an XYZ euler builds.
+  const m11 = cy * cz, m13 = sy;
+  const m21 = sx * sy * cz + cx * sz, m22 = -sx * sy * sz + cx * cz, m23 = -sx * cy;
+  const m31 = -cx * sy * cz + sx * sz, m33 = cx * cy;
+  // YXZ reads pitch off m23, then yaw and roll from the columns either side.
+  const px = Math.asin(-Math.min(1, Math.max(-1, m23)));
+  return Math.abs(m23) < 0.9999999
+    ? [px, Math.atan2(m13, m33), Math.atan2(m21, m22)]
+    : [px, Math.atan2(-m31, m11), 0];
+}
+
+/**
+ * Resolve a `LayoutCamera` — authored either way — to the pose the runtime
+ * applies.
+ *
+ * An authored `rotation` IS the pose, straight off the `cp_NNN` node, so the
+ * only thing done to it is the XYZ → YXZ reorder above. `eyeOffset` applies
+ * solely to the `target` form, where a ground camera is authored at floor level
+ * and the runtime adds eye height when it seats it — so the pitch has to be
+ * measured from the eye, not the feet. An aerial camera is already at its final
+ * height, which is why every layout here passes 0.
+ */
+export function poseForCamera(camera: LayoutCamera, eyeOffset = 0): CameraPose {
+  if (camera.rotation) return { position: camera.position, rotation: xyzToYxz(camera.rotation) };
+  if (camera.target) return poseLookingAt(camera.position, camera.target, eyeOffset);
+  return { position: camera.position, rotation: [0, 0, 0] };
+}
+
+/**
  * A layout's authored camera, resolved to a pose. No fallback — this is the
  * arithmetic on its own, so `startPose` below can use it without depending on
  * itself.
- *
- * A ground camera is authored at floor level and the runtime adds eye height
- * when it seats it, so the pitch has to be measured from the eye, not the feet.
- * An aerial camera is already at its final height.
  */
 function authoredPose(layout: LayoutConfig): CameraPose {
-  const eyeOffset = layout.walkable === false ? 0 : site.world.eyeHeight;
-  return poseLookingAt(layout.camera.position, layout.camera.target, eyeOffset);
+  return poseForCamera(layout.camera, layout.walkable === false ? 0 : site.world.eyeHeight);
 }
 
 const ORIGIN_POSE: CameraPose = { position: [0, 0, 0], rotation: [0, 0, 0] };
@@ -194,7 +238,7 @@ export function poseForHotspot(hotspotId: string): CameraPose {
   const camera = hotspot.camera;
   if (!camera || isPlaceholder(camera.position)) return poseForLayout(hotspot.layoutId);
   const eyeOffset = LAYOUT_BY_ID[hotspot.layoutId]?.walkable === false ? 0 : site.world.eyeHeight;
-  return poseLookingAt(camera.position, camera.target, eyeOffset);
+  return poseForCamera(camera, eyeOffset);
 }
 
 // ── Field tone resolution ─────────────────────────────────────────────────────

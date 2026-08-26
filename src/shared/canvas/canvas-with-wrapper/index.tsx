@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { entry } from "@/shared/scene-data/adapter";
 import { FOV_DEFAULT } from "@/shared/stores/camera-store";
 import isLowPower from "@/shared/runtime";
+import { degradeGpuBudget } from "@/streaming/memory";
 
 const defaultPos = entry.position;
 const defaultRot = entry.rotation;
@@ -81,11 +82,22 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             // runs out of VRAM reports that rather than just hanging.
             const canvas = gl.domElement;
             const onLost = (e: Event) => {
+              // Halve the streamer's GPU ceiling and KEEP it halved. A loss is
+              // the only hard evidence this page ever gets about the machine's
+              // real video-memory limit — every other input (`deviceMemory`, the
+              // renderer string) is a guess — so it is worth more than the
+              // budget it overrides. The next streaming tick evicts against the
+              // reduced figure; see streaming/memory.ts > degradeGpuBudget.
+              const scale = degradeGpuBudget();
               console.error(
                 "[canvas] WebGL context LOST — the render loop has stopped. " +
-                  "On a phone this is usually VRAM: the model's textures did not fit.",
+                  "On a phone this is usually VRAM: the model's textures did not fit. " +
+                  `Streaming GPU budget cut to ${Math.round(scale * 100)}% for this session.`,
                 e,
               );
+              // Without this the browser is free to decline the restore, which
+              // is the difference between a stutter and a dead canvas.
+              e.preventDefault();
             };
             const onRestored = () => console.warn("[canvas] WebGL context restored");
             canvas.addEventListener("webglcontextlost", onLost);

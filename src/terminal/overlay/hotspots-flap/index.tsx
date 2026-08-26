@@ -83,9 +83,11 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
    * it — or when one of its hotspots matches, in which case only the matching
    * hotspots are listed and the row unfolds itself.
    *
-   * Matching is over the code and the name, which is exactly the text the row
-   * puts on screen: searching for something that is not visible anywhere is how
-   * a filter starts looking broken.
+   * Matching is over the code AND the name, though only the name is now on the
+   * row. The ids stay searchable because they are the handoff's stable
+   * identifiers and someone working from that document can still jump straight
+   * to L03 — a filter that accepts more than it shows costs nothing, whereas
+   * one that rejects an id the spec calls out reads as broken.
    */
   const rows = useMemo(() => {
     const hit = (...fields: string[]) => fields.some((f) => f.toLowerCase().includes(q));
@@ -175,7 +177,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                 )}
                 <div className="min-w-0 flex-1">
                   <TravelRow
-                    code={layout.id}
                     name={layout.name}
                     showChevron={false}
                     onSelect={() => travel(() => goToLayout(layout.id))}
@@ -193,7 +194,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                   {children.map((hp) => (
                     <li key={hp.id}>
                       <TravelRow
-                        code={hp.id}
                         name={hp.name}
                         showChevron={false}
                         onSelect={() => travel(() => goToHotspot(hp.id))}

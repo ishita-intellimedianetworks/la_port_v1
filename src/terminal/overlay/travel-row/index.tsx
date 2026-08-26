@@ -3,8 +3,6 @@
 import { ChevronRight } from "lucide-react";
 
 interface TravelRowProps {
-  /** L01 / H01 — the stable identifier from the handoff. */
-  code: string;
   name: string;
   onSelect: () => void;
   /** Trailing affordance. Off wherever a LEADING expand chevron already sits
@@ -20,7 +18,7 @@ interface TravelRowProps {
  * highlight that marks where you already are is the one row you will never need
  * to press, and it competed with hover for the eye.
  */
-export function TravelRow({ code, name, onSelect, showChevron = true }: TravelRowProps) {
+export function TravelRow({ name, onSelect, showChevron = true }: TravelRowProps) {
   return (
     <button
       type="button"
@@ -34,12 +32,6 @@ export function TravelRow({ code, name, onSelect, showChevron = true }: TravelRo
         border: "1.5px solid rgba(255,255,255,0.12)",
       }}
     >
-      <span
-        className="nav-display shrink-0 text-[11px] font-semibold tabular-nums short:text-[10px]"
-        style={{ color: "var(--nav-text)" }}
-      >
-        {code}
-      </span>
       <span
         className="nav-display min-w-0 flex-1 truncate text-[13px] font-semibold uppercase tracking-[0.03em] sm:text-[13.5px] short:text-[12px]"
         style={{ color: "var(--nav-text)" }}

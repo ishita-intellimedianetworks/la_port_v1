@@ -10,26 +10,62 @@
  * you view it edge-on — which, on a wall-mounted marker, is most of the time —
  * and reads as decal rather than object. A sphere has no bad angle.
  *
+ * Its size is held constant ON SCREEN rather than in the world — see BEAD_PX.
+ * A fixed world size made the same marker a speck from one layout and a wall
+ * from the next, because the checkpoints that frame them stand anywhere from a
+ * few metres to 460 units back.
+ *
  * Purely presentational; the parent decides what a click does.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { Html } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { NAV_GLASS } from "../../overlay/glass-theme";
 
 /** Rings in flight at once, evenly staggered through one cycle. */
 const PING_COUNT = 2;
 
+/**
+ * How big the bead is ON SCREEN, in CSS pixels across, at any distance.
+ *
+ * The markers used to be a fixed world size (`hsSize`, 3 units — a 6 m ball),
+ * which meant their apparent size was pure range: right at the distance the
+ * number was chosen for, a speck from anywhere further, and filling a third of
+ * the frame from a few metres away. Since a marker is a piece of UI standing in
+ * the world rather than an object in it, the honest rule is the opposite one —
+ * hold it constant on screen and let the world size follow the camera.
+ *
+ * This is the DIAMETER of the solid bead; the pings reach 2.2-3.1x it, so the
+ * whole marker occupies roughly 50-75 px. Raise it and every marker grows
+ * together, at every distance.
+ */
+const BEAD_PX = 24;
+
+/** Bounds on the world radius the rule may ask for, as a multiple of the
+ *  authored `size`. The floor keeps a marker from collapsing to nothing at the
+ *  far end of a long shot; the ceiling stops one from swelling past the object
+ *  it labels when the camera is almost inside it. */
+const MIN_SCALE = 0.06;
+const MAX_SCALE = 1;
+
 interface HotspotProps {
   position: [number, number, number];
+  /** The authored marker orientation (XYZ euler), straight off `hs_NNN` in the
+   *  hotspot GLB. Carried on the group so the marker stands in its authored
+   *  frame; the bead itself is a sphere, so nothing is visibly turned by it
+   *  until the marker grows a face. */
+  rotation?: [number, number, number];
   /** Tooltip label (the destination name). */
   title: string;
   /** Click/tap on the marker — opens the centred hotspot info overlay.
    *  Navigation still never happens from a marker (list/map/panel only). */
   onHotspotClick?: () => void;
-  /** Centre-circle radius in world units; ring + collider scale off it. */
+  /** Base radius in world units. NOT the size on screen — the frame loop scales
+   *  the whole marker so the bead stays BEAD_PX across at any distance, and this
+   *  is what that scale is measured against (and what the MIN/MAX_SCALE clamps
+   *  bound). Ring + collider are multiples of it. */
   size?: number;
   color?: string;
   /** Disc + ring colour while hovered (defaults to red). */
@@ -43,6 +79,7 @@ interface HotspotProps {
 
 export function Hotspot({
   position,
+  rotation,
   title,
   onHotspotClick,
   size = 1,
@@ -56,6 +93,15 @@ export function Hotspot({
 }: HotspotProps) {
   const coreRef = useRef<THREE.Mesh>(null);
   const pingRefs = useRef<(THREE.Mesh | null)[]>([]);
+  // The group everything visible hangs off, scaled per frame to hold the marker
+  // at BEAD_PX on screen. The tooltip is deliberately OUTSIDE it — an Html pill
+  // is screen-space already, and scaling its anchor would move it.
+  const sizerRef = useRef<THREE.Group>(null);
+  const markerWorld = useRef(new THREE.Vector3());
+  const camera = useThree((s) => s.camera);
+  // Canvas height in CSS pixels — the units BEAD_PX is expressed in, so the
+  // marker is the same size on a laptop and on a 4K monitor.
+  const viewportHeight = useThree((s) => s.size.height);
   const [hovered, setHovered] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(false);
   // Phase, not elapsed time: the pings advance by `delta / period`, so changing
@@ -107,6 +153,23 @@ export function Hotspot({
   // Three strengths — resting / selected / hovered — so "which of these did I
   // pick?" is answered by motion rather than by another colour.
   useFrame((_, delta) => {
+    // ── Constant screen size ────────────────────────────────────────────────
+    // At `dist` from a perspective camera, one CSS pixel spans
+    // `2·tan(fov/2)·dist / viewportHeight` world units. Solving that for the
+    // radius that draws BEAD_PX across gives the scale below, so the bead is
+    // the same size whether the camera is 5 m or 500 m away — and it tracks a
+    // live FOV change (the FovDisc) on its own, since fov is read every frame.
+    const sizer = sizerRef.current;
+    const cam = camera as THREE.PerspectiveCamera;
+    if (sizer && cam.isPerspectiveCamera && viewportHeight > 0) {
+      sizer.getWorldPosition(markerWorld.current);
+      const dist = cam.position.distanceTo(markerWorld.current);
+      const worldPerPx = (2 * Math.tan((cam.fov * Math.PI) / 360) * dist) / viewportHeight;
+      const wanted = (BEAD_PX / 2) * worldPerPx;
+      const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, wanted / size));
+      sizer.scale.setScalar(s);
+    }
+
     const [period, reach, peak, breathRate] = hovered
       ? [0.85, 3.1, 0.5, 5.0]
       : alwaysPulse
@@ -134,23 +197,29 @@ export function Hotspot({
     }
   });
 
-  // Sits exactly ON its authored position, with no orientation applied: the
-  // markers are authored as POINTS in space (hs_001/hs_002 float 58m above the
-  // terminal), not as decals stuck to a surface, and a sphere has no facing to
-  // orient anyway. An earlier version rotated the group and pushed the bead one
-  // radius along its local +Z to make it rest on a wall — with these poses that
-  // normal points straight DOWN, so the nudge buried it instead.
+  // Sits exactly ON its authored pose — `hs_NNN`'s translation AND rotation,
+  // both straight out of the hotspot GLB. The rotation is carried on the group
+  // and NOT compensated for anywhere below: the bead is a sphere, so it looks
+  // the same whichever way the frame is turned, and everything that would care
+  // (the tooltip anchor) is deliberately outside it. Applying it costs nothing
+  // and means an oriented marker drops straight in later.
   //
-  // The core matches the radius the old flat disc had, because it is seen from
-  // its layout's checkpoint 370-460 units away: at 0.62x it was 12px tall on a
-  // 1080p screen, which reads as a speck rather than a marker.
+  // What is NOT done is displacing the bead along that frame. An earlier
+  // version rotated the group and pushed the bead one radius along its local +Z
+  // to make it rest on a wall — with these poses that normal points straight
+  // DOWN, so the nudge buried it instead.
+  //
+  // `size` is only the BASE radius the screen-size rule scales from (see
+  // BEAD_PX): what reaches the screen is BEAD_PX across at every distance, and
+  // `size` sets where in the clamp range that lands. The ping reach, the breath
+  // and the collider are all multiples of it, so they follow automatically.
   //
   // Drawn unlit in the transparent pass with depthTest off, so it stays legible
   // through geometry the way the disc did. Hover shows the name; a CLICK (when
   // the parent passes onHotspotClick) opens the info overlay.
   return (
-    <group position={position}>
-      <group>
+    <group position={position} rotation={rotation}>
+      <group ref={sizerRef}>
         {/* The bead. Unlit on purpose: a shaded sphere goes dark on whichever
             side faces away from the sun, and half a marker is not a marker. */}
         <mesh name="hotspot_core" ref={coreRef} renderOrder={9996}>

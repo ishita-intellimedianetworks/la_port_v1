@@ -7,6 +7,7 @@ import { MeshoptDecoder } from "meshoptimizer";
 import { TIER_ORDER, type Tier, type TexFormat, type StreamingConfig } from "./config";
 import type { Manifest, ChunkEntry, MaterialDef, TexManifest, TexSlot } from "./types";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
+import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
 
 interface ChunkState {
   entry: ChunkEntry;
@@ -54,14 +55,46 @@ function sphereGizmo(center: [number, number, number], radius: number): THREE.Li
   return line;
 }
 
+/**
+ * The UV set a slot samples, clamped to one three can compile.
+ *
+ * three turns `texture.channel` straight into an attribute name (0 -> `uv`,
+ * n -> `uv{n}`), so an out-of-range value reaches the shader verbatim: this
+ * bake ships three slots with `uv: -1` (M_Rail_Ballast, M_Metal.001) and one
+ * with `uv: 3` (M_Road_Arterial_Baked_C5), and `-1` compiles to `vec3(uv-1, 1)`
+ * — a vec2 minus an int, which fails to link and drops every material sharing
+ * that program. The chunks only ever carry TEXCOORD_0/1, so anything outside
+ * that is a bake artefact and 0 is the honest reading of it.
+ */
+function uvChannel(slot?: TexSlot): number {
+  const uv = slot?.uv ?? 0;
+  return uv === 1 ? 1 : 0;
+}
+
 export interface StreamStats {
   visible: number; // chunks mounted
   loading: number;
   tris: number;
-  cacheBytes: number; // CPU cache: compressed bytes of chunks currently decoded (LRU-bounded)
+  /** CPU cache: DECODED heap bytes of every group held (mounted ones included —
+   *  three keeps their typed arrays after upload). Was the encoded size. */
+  cacheBytes: number;
   cacheCount: number; // number of decoded chunk groups held in the CPU cache
   residentBytes: number; // GPU: geometry currently mounted + textures currently uploaded
   texCount: number; // gpu-resident textures
+  /** Decoded texture bytes resident, and how many of those are idle (zero refs,
+   *  kept against a walk-back rather than disposed). */
+  texBytes: number;
+  texIdle: number;
+  /** The three ceilings in force, MB — so the HUD can show headroom, not just
+   *  a number with nothing to compare it to. */
+  budgetMB: { cpu: number; gpu: number; tex: number };
+  /** Churn since mount. `redownloads` counts chunk urls decoded, evicted, then
+   *  fetched again — the figure that says whether cpuMB is set too low. */
+  evictedChunks: number;
+  evictedTextures: number;
+  redownloads: number;
+  /** Learned decoded/encoded ratio. Seeded at this bake's measured 13.5. */
+  decodeRatio: number;
   /** True only when textures are ACTUALLY streaming as GPU-compressed KTX2 —
    *  i.e. the transcoder loaded AND at least one tier asks for it. It used to
    *  report merely that the loader existed, so the HUD read "KTX2" while every
@@ -81,12 +114,35 @@ export class ChunkManager {
 
   private states = new Map<string, ChunkState>();
   private cpuCache = new Map<string, THREE.Group>(); // url -> parsed group (decoded once)
+  /** url -> DECODED heap bytes of that group, measured off the geometry once at
+   *  parse time. Was the manifest's encoded size, which is ~13.5x smaller on
+   *  this bake and made every ceiling in this file unenforceable. */
   private cpuBytes = new Map<string, number>();
   private texCache = new Map<string, THREE.Texture>(); // `${img}@${px}` -> texture
   private texLoading = new Map<string, Promise<THREE.Texture | null>>(); // one in-flight load per texture key
   private texRefs = new Map<string, Set<string>>(); // texKey -> set of owner tokens using it
-  private texBytes = new Map<string, number>(); // texKey -> encoded byte size (from tex.json)
+  /** owner token -> the texture keys it holds. The reverse index of `texRefs`,
+   *  so releasing one mount costs the keys IT touched rather than a walk of
+   *  every key in the cache on every unmount. */
+  private texOwned = new Map<string, Set<string>>();
+  /** texKey -> DECODED byte size, measured off the texture (block-compressed
+   *  mips for KTX2, RGBA8 + mip chain for WebP). Was the encoded file size. */
+  private texBytes = new Map<string, number>();
+  /** Textures nobody references right now, least-recently-idled first. They are
+   *  KEPT, not disposed: 69 images serve 816 chunks, and the rung is part of the
+   *  cache key, so the near-rung set drops to zero refs every time you walk 50 m
+   *  and was being re-fetched and re-decoded on the way back. Eviction happens
+   *  when the texture budget is actually exceeded, not when a refcount hits 0. */
+  private texIdle = new Map<string, true>();
   private texSeq = 0; // monotonic token source for per-mount texture ownership
+  /** Real-byte ceilings for the three pools. See `memory.ts`. */
+  private budget: MemoryBudget;
+  /** Churn counters, surfaced through stats() so the HUD reports eviction and
+   *  re-download rates instead of leaving them to be reasoned about. */
+  private evictedChunks = 0;
+  private evictedTextures = 0;
+  private redownloads = 0;
+  private everCached = new Set<string>(); // urls decoded at least once this session
   private ktx2: KTX2Loader | null = null; // set when the GPU can transcode KTX2/Basis
   /** Shared-geometry layer. Null until initInstancing() finds a palette, and null
    *  forever for models baked without one — so this whole path stays inert for
@@ -103,7 +159,6 @@ export class ChunkManager {
   private animGroup: THREE.Group | null = null;
   private mixer: THREE.AnimationMixer | null = null;
 
-  private _tmp = new THREE.Vector3();
   private _cam = new THREE.Vector3();
   private _frustum = new THREE.Frustum();
   private _projView = new THREE.Matrix4();
@@ -114,6 +169,13 @@ export class ChunkManager {
   private boundsGroup = new THREE.Group();
   private gizmos = new Map<string, THREE.LineSegments>();
   private boundsOn = false;
+
+  /** Chunk ids the current config hides — resolved from `cfg.hide` against the
+   *  manifest and `materials.json`, and re-resolved on every `setConfig` since
+   *  the rules are authored per VIEW. A hidden chunk is decided as "unload" in
+   *  `update()`, so it never downloads and an already-mounted one is dropped on
+   *  the next tick. */
+  private hidden = new Set<string>();
 
   private mode: "adaptive" | "full";
   /** Set by dispose(). Async work started before it (the instance palette, the
@@ -137,6 +199,12 @@ export class ChunkManager {
     config: StreamingConfig;
     renderer?: THREE.WebGLRenderer;
     ktx2Path?: string;
+    /** Real-byte ceilings. Omitted, they are resolved for this device — see
+     *  `memory.ts > resolveBudget`. Deliberately NOT part of StreamingConfig:
+     *  the bands are authored per SCENE in site.json, while these are a property
+     *  of the DEVICE, and the aerial/ground swap must not move them. */
+    budget?: MemoryBudget;
+    profile?: "mobile" | "desktop";
   }) {
     this.scene = opts.scene;
     this.assetBase = opts.assetBase.replace(/\/$/, "") + "/";
@@ -146,6 +214,7 @@ export class ChunkManager {
     this.mode = opts.mode ?? "adaptive";
     this.cfg = opts.config;
     this.effUnload = this.cfg.unloadDist;
+    this.budget = opts.budget ?? resolveBudget(opts.profile ?? "desktop", opts.renderer);
 
     const draco = new DRACOLoader();
     draco.setDecoderPath(opts.dracoPath ?? "/draco/");
@@ -177,6 +246,38 @@ export class ChunkManager {
       this.gizmos.set(c.id, g);
       this.boundsGroup.add(g);
     }
+
+    this.hidden = this.resolveHidden();
+  }
+
+  /**
+   * `cfg.hide` -> the chunk ids it matches.
+   *
+   * The rules name a source mesh by the MATERIAL it carries, because that is
+   * the only name the bake keeps: a chunk GLB's node and mesh are both unnamed,
+   * while `materials.json` still carries what the source scene called each
+   * material. `minRadiusMetres` is the tie-break for a material that is shared
+   * — the district ground plane and the terminal's own pavement are the same
+   * material, and only one of them is 8 km across.
+   *
+   * A rule matches when EVERY predicate it states holds. One that states none
+   * matches nothing, so a typo cannot blank the model.
+   */
+  private resolveHidden(): Set<string> {
+    const rules = this.cfg.hide;
+    const out = new Set<string>();
+    if (!rules?.length) return out;
+    const nameOf = new Map(this.materials.map((m) => [m.index, m.name]));
+    for (const c of this.manifest.chunks) {
+      for (const r of rules) {
+        if (r.material === undefined && r.minRadiusMetres === undefined) continue;
+        if (r.material !== undefined && !c.materials.some((i) => nameOf.get(i) === r.material)) continue;
+        if (r.minRadiusMetres !== undefined && c.radius < r.minRadiusMetres) continue;
+        out.add(c.id);
+        break;
+      }
+    }
+    return out;
   }
 
   /**
@@ -197,6 +298,11 @@ export class ChunkManager {
   setConfig(cfg: StreamingConfig) {
     this.cfg = cfg;
     this.effUnload = cfg.unloadDist;
+    // Re-resolved rather than carried over: `hide` is authored per view, so the
+    // dollhouse's backdrop planes come back the moment the walking config takes
+    // over (and vice versa) — on the next tick, through the ordinary
+    // mount/unmount path.
+    this.hidden = this.resolveHidden();
   }
 
   /** Toggle the per-chunk bounding-sphere gizmos (radius + tier colour). */
@@ -206,10 +312,29 @@ export class ChunkManager {
     else if (!v && this.boundsGroup.parent === this.scene) this.scene.remove(this.boundsGroup);
   }
 
-  /** Distance from camera to the chunk surface (>=0 touching). */
+  /** Distance from camera to the chunk surface (0 when the camera is inside it).
+   *
+   *  Measured to the bounding BOX, not the bounding sphere. The sphere is the
+   *  half-DIAGONAL, so for anything elongated it credits a chunk with far more
+   *  nearness than it has: a 400 m quay wall seen broadside from 300 m scored
+   *  a surface distance of 0 and loaded, while a 4 m bollard standing on it
+   *  scored 300 and did not. Because the band test is the same for both, the
+   *  big object stayed and its co-located detail vanished — a canopy without
+   *  its poles, a stack without its containers.
+   *
+   *  The box is always inside the sphere, so this distance is always >= the old
+   *  one: strictly fewer chunks load, and each one is tiered more honestly.
+   *  Measured over 150 ground cameras on portla-c5-v4, 360 deg, at the old
+   *  50/150/300 bands: holes 3057 -> 2242 objects, resident 6.0 -> 5.3 MB.
+   *  It is a better metric, but it is NOT the cure on its own — see `_bands`
+   *  in `site.json > stream`, whose numbers are what actually closed the gap. */
   private surfaceDist(cam: THREE.Vector3, c: ChunkEntry): number {
-    this._tmp.set(c.center[0], c.center[1], c.center[2]);
-    return Math.max(0, this._tmp.distanceTo(cam) - c.radius);
+    const mn = c.bbox.min,
+      mx = c.bbox.max;
+    const dx = cam.x < mn[0] ? mn[0] - cam.x : cam.x > mx[0] ? cam.x - mx[0] : 0;
+    const dy = cam.y < mn[1] ? mn[1] - cam.y : cam.y > mx[1] ? cam.y - mx[1] : 0;
+    const dz = cam.z < mn[2] ? mn[2] - cam.z : cam.z > mx[2] ? cam.z - mx[2] : 0;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   /** Which tier a chunk wants, or null to unload. Applies radius-scaling. */
@@ -228,6 +353,15 @@ export class ChunkManager {
     // resident budget is off or comfortably met).
     if (d < Math.min(this.cfg.unloadDist, this.effUnload) + h) return "far";
     return null;
+  }
+
+  /** The tier a chunk should mount at: its band, or `cfg.forceTier` when the
+   *  view pins one. The pin never overrides the null — what loads and what
+   *  unloads stays the bands' decision, only the quality is overridden. */
+  private bandTier(dist: number, st: ChunkState): Tier | null {
+    const band = this.tierFor(dist, st.entry, st.current);
+    if (band === null) return null;
+    return this.cfg.forceTier ?? band;
   }
 
   /** Only the tiers this chunk actually has (small chunks may be near-only). */
@@ -270,10 +404,14 @@ export class ChunkManager {
     this.instResident.length = 0;
     for (const st of this.states.values()) {
       const dist = this.surfaceDist(this._cam, st.entry);
-      let want =
-        this.mode === "full"
+      // Hidden chunks are decided before anything else: never downloaded, and
+      // unmounted on the first tick after a config that hides them takes over.
+      const hidden = this.hidden.has(st.entry.id);
+      let want = hidden
+        ? null
+        : this.mode === "full"
           ? this.resolveTier(st.entry, "near") // full baseline: everything at near, never unload
-          : this.resolveTier(st.entry, this.tierFor(dist, st.entry, st.current));
+          : this.resolveTier(st.entry, this.bandTier(dist, st));
       // Cull out-of-view chunks beyond the always-load bubble. Nearby chunks
       // (dist <= alwaysLoadDist) stay loaded 360° so looking around is instant.
       if (cull && want !== null && dist > this.cfg.alwaysLoadDist && !this.inView(st.entry)) {
@@ -304,7 +442,7 @@ export class ChunkManager {
       // it and it would never count as resident — yet its placements are exactly
       // what should be drawn. Re-test the band directly, and apply the same
       // frustum rule so instanced geometry culls like everything else.
-      if (st.entry.inst && this.instances) {
+      if (st.entry.inst && this.instances && !hidden) {
         const inBand = this.mode === "full" || this.tierFor(dist, st.entry, st.current) !== null;
         const visible = !cull || dist <= this.cfg.alwaysLoadDist || this.inView(st.entry);
         if (inBand && visible) this.instResident.push(st.entry);
@@ -323,14 +461,13 @@ export class ChunkManager {
     // Geometry cost is known up front from the manifest; texture cost is handled
     // by phase 4. Chunks inside nearDist are always allowed — never blank out
     // what the camera is standing in.
-    const hardCap = this.cfg.residentBudgetMB > 0 ? this.cfg.residentBudgetMB * 1048576 : Infinity;
+    const hardCap = this.gpuCapBytes();
     let projected = hardCap === Infinity ? 0 : this.residentBytes();
     for (const l of loads) {
       if (budget <= 0) break;
       if (l.st.loadingTier) continue;
       if (hardCap !== Infinity && l.dist > this.cfg.nearDist) {
-        const lod = l.st.entry.lods.find((x) => x.tier === l.want);
-        const cost = lod ? lod.bytes : 0;
+        const cost = this.estGeomBytes(l.st.entry, l.want as Tier);
         if (projected + cost > hardCap) continue; // skip; a nearer chunk may still fit
         projected += cost;
       }
@@ -349,8 +486,9 @@ export class ChunkManager {
     // 4. HARD MEMORY CEILING. Distance bands alone can't bound memory (density
     //    varies), so drive the effective unload radius from what's actually
     //    resident: shrink it while over budget, ease it back out when under.
-    if (this.cfg.residentBudgetMB > 0) {
-      const budget = this.cfg.residentBudgetMB * 1048576;
+    const gpuCap = this.gpuCapBytes();
+    if (gpuCap !== Infinity) {
+      const budget = gpuCap;
       let bytes = this.residentBytes();
       if (bytes > budget) {
         this.effUnload = Math.max(this.cfg.nearDist * 1.5, this.effUnload * 0.85);
@@ -384,6 +522,13 @@ export class ChunkManager {
       }
     }
 
+    // 4a. The other two pools. Both are bounded here rather than at their point
+    //     of use: the CPU cache used to be trimmed only from inside mount(), so
+    //     descending out of the aerial view — which mounts nothing new — left it
+    //     sitting at the aerial ceiling indefinitely.
+    this.evictCache();
+    this.evictTextures();
+
     // 4b. redraw the shared instance buffers for whatever is resident now.
     //     Cheap: it early-outs unless the resident set actually changed.
     this.instances?.sync(this.instResident);
@@ -403,17 +548,88 @@ export class ChunkManager {
     }
   }
 
-  /** Bytes currently resident: mounted chunk geometry + uploaded textures
-   *  (encoded sizes — the same figure the HUD shows as "loaded (GPU now)"). */
+  /** DECODED bytes uploaded to the GPU right now: the vertex buffers of every
+   *  mounted chunk, plus every texture currently resident.
+   *
+   *  This used to sum the manifest's ENCODED sizes and compare them to
+   *  `residentBudgetMB`, which is what made the ceiling unenforceable: at the
+   *  13.5x decode ratio measured on this bake, a "34 MB" budget was really
+   *  ~460 MB, so the feedback loop below never once fired. Measured off the
+   *  decoded geometry instead, there is no ratio left to drift. */
   private residentBytes(): number {
     let n = 0;
     for (const st of this.states.values()) {
       if (!st.current || !st.group) continue;
-      const lod = st.entry.lods.find((l) => l.tier === st.current);
-      if (lod) n += lod.bytes;
+      const url = this.lodUrl(st.entry, st.current);
+      if (url) n += this.cpuBytes.get(url) ?? 0;
     }
+    return n + this.textureBytesTotal();
+  }
+
+  /** Heap held by decoded groups — mounted AND merely cached. three keeps the
+   *  typed arrays after upload, so a mounted chunk is charged here as well as
+   *  in residentBytes(); that double charge is real and was previously invisible. */
+  private cpuCacheBytes(): number {
+    let n = 0;
+    for (const b of this.cpuBytes.values()) n += b;
+    return n;
+  }
+
+  private textureBytesTotal(): number {
+    let n = 0;
     for (const b of this.texBytes.values()) n += b;
     return n;
+  }
+
+  /** The GPU ceiling actually in force: the lower of what this DEVICE can
+   *  afford and what the scene asks for.
+   *
+   *  Two knobs rather than one because they answer different questions.
+   *  `budget.gpuMB` is the device's limit and must not move when the view
+   *  swaps; `cfg.residentBudgetMB` is per-config, which is how the aerial view
+   *  — where all 816 chunks are legitimately in frame at the far tier — asks
+   *  for more headroom than the walking view needs. Both are now REAL decoded
+   *  megabytes; `residentBudgetMB` used to be encoded bytes, which is why 34
+   *  was really ~460 MB and never bound anything. */
+  private gpuCapBytes(): number {
+    const dev = this.budget.gpuMB > 0 ? this.budget.gpuMB : Infinity;
+    const scene = this.cfg.residentBudgetMB > 0 ? this.cfg.residentBudgetMB : Infinity;
+    const mb = Math.min(dev, scene);
+    if (mb === Infinity) return Infinity;
+    // Read the degrade scale LIVE rather than baking it in at construction: a
+    // context loss lands on the canvas mid-session, and the next tick must
+    // already be evicting against the reduced ceiling.
+    return mb * currentGpuScale() * 1048576;
+  }
+
+  /** What a chunk WILL cost once decoded, for the pre-mount hard cap.
+   *
+   *  Exact once the chunk has been decoded at that tier. Before that, the only
+   *  figure available is the manifest's encoded size, so it is scaled by a
+   *  decode ratio LEARNED from the chunks already measured this session rather
+   *  than hardcoded — the 13.5x in `site.json`'s note is true of this bake and
+   *  would silently mislead on the next one. */
+  private estGeomBytes(c: ChunkEntry, tier: Tier): number {
+    const url = this.lodUrl(c, tier);
+    const known = url ? this.cpuBytes.get(url) : undefined;
+    if (known !== undefined) return known;
+    const lod = c.lods.find((l) => l.tier === tier);
+    if (!lod) return 0;
+    return lod.bytes * this.decodeRatio;
+  }
+
+  /** Running mean of decoded/encoded over every chunk measured so far. Seeded
+   *  with this bake's measured figure so the very first tick is not wild. */
+  private decodeRatio = 13.5;
+  private ratioSamples = 0;
+
+  private learnRatio(encoded: number, decoded: number) {
+    if (encoded <= 0 || decoded <= 0) return;
+    const r = decoded / encoded;
+    this.ratioSamples++;
+    // Plain incremental mean; converges within the first few dozen chunks and
+    // then barely moves, which is what we want from a sizing hint.
+    this.decodeRatio += (r - this.decodeRatio) / Math.min(this.ratioSamples, 64);
   }
 
   private lodUrl(c: ChunkEntry, tier: Tier): string | null {
@@ -439,12 +655,19 @@ export class ChunkManager {
         this.cpuCache.delete(url);
         this.cpuCache.set(url, group);
       } else {
+        // A url we have decoded before and evicted is a re-download — the churn
+        // figure the HUD reports, and the one that says whether cpuMB is too low.
+        if (this.everCached.has(url)) this.redownloads++;
         const gltf = await this.loader.loadAsync(url);
         group = gltf.scene;
         this.cpuCache.set(url, group);
-        // estimate bytes from manifest
-        const lod = st.entry.lods.find((l) => l.tier === tier)!;
-        this.cpuBytes.set(url, lod.bytes);
+        // MEASURED, not estimated: walk the decoded attributes. This is the
+        // number every ceiling in this file is enforced against.
+        const bytes = geometryBytes(group);
+        this.cpuBytes.set(url, bytes);
+        this.everCached.add(url);
+        const lod = st.entry.lods.find((l) => l.tier === tier);
+        if (lod) this.learnRatio(lod.bytes, bytes);
       }
       // If state moved on while we were loading, bail.
       if (st.loadingTier !== tier) return;
@@ -550,11 +773,28 @@ export class ChunkManager {
     });
   }
 
-  /** LRU-bound the CPU cache: while over cacheLimit, drop the least-recently-used
-   *  chunk that is NOT currently on screen. Revisiting an evicted chunk simply
-   *  re-downloads it. Never evicts a mounted chunk (would blank the scene). */
+  /**
+   * LRU-bound the CPU cache BY BYTES, dropping least-recently-used groups that
+   * are not on screen until the heap is back under `budget.cpuMB`.
+   *
+   * It used to be bounded by ENTRY COUNT (`cache.limitChunks`), which cannot
+   * bound memory here for two reasons. Chunk sizes span a 3.6 m to 692 m radius,
+   * so one slot is not one cost. And the count was reasoned against the 816
+   * chunks in the manifest while the cache is keyed by URL — 816 chunks x 3
+   * tiers = 2,448 distinct entries, since one chunk you walk up to occupies
+   * far, mid and near in turn. With ~230 mounted urls protected, the authored
+   * 500 left ~270 free slots, which a walk exhausts in a minute or two and then
+   * evicts steadily.
+   *
+   * `cacheLimit` is still honoured as a secondary cap so an authored number is
+   * never silently ignored, but the byte ceiling is what actually governs.
+   * Never evicts a mounted chunk — that would blank the scene.
+   */
   private evictCache() {
-    if (this.cpuCache.size <= this.cfg.cacheLimit) return;
+    const cap = this.budget.cpuMB * 1048576;
+    let bytes = this.cpuCacheBytes();
+    if (bytes <= cap && this.cpuCache.size <= this.cfg.cacheLimit) return;
+
     const mounted = new Set<string>();
     for (const st of this.states.values()) {
       if (st.current) { const u = this.lodUrl(st.entry, st.current); if (u) mounted.add(u); }
@@ -564,11 +804,44 @@ export class ChunkManager {
       if (st.loadingTier) { const u = this.lodUrl(st.entry, st.loadingTier); if (u) mounted.add(u); }
     }
     for (const [url, group] of this.cpuCache) {
-      if (this.cpuCache.size <= this.cfg.cacheLimit) break;
+      if (bytes <= cap && this.cpuCache.size <= this.cfg.cacheLimit) break;
       if (mounted.has(url)) continue; // protect visible chunks
       this.disposeGroupFull(group);
+      bytes -= this.cpuBytes.get(url) ?? 0;
       this.cpuCache.delete(url);
       this.cpuBytes.delete(url);
+      this.evictedChunks++;
+    }
+  }
+
+  /**
+   * Bound the texture cache by bytes, evicting only what nothing references.
+   *
+   * The old policy disposed a texture the instant its refcount hit zero, with
+   * none of the anti-thrash the rest of this file has (20 m band hysteresis,
+   * `cullGraceTicks`, the chunk LRU). Because the cache key carries the rung —
+   * image 0 at 512, 256 and 128 px are three independent entries — the near-rung
+   * set drops to zero refs every time the last chunk within `nearDist` unmounts,
+   * i.e. roughly every 50 m walked, and every one of them was then re-fetched
+   * and re-decoded on the way back. Idle textures are cheap to keep: all 70
+   * images at the 128 px rung total 0.1 MB.
+   */
+  private evictTextures() {
+    const cap = this.budget.texMB * currentGpuScale() * 1048576;
+    let bytes = this.textureBytesTotal();
+    if (bytes <= cap) return;
+    for (const key of this.texIdle.keys()) {
+      if (bytes <= cap) break;
+      // Re-acquired since it was idled: acquire() removes it from texIdle, so
+      // this is belt-and-braces against a key lingering in the idle list.
+      if ((this.texRefs.get(key)?.size ?? 0) > 0) continue;
+      this.texCache.get(key)?.dispose();
+      bytes -= this.texBytes.get(key) ?? 0;
+      this.texCache.delete(key);
+      this.texBytes.delete(key);
+      this.texRefs.delete(key);
+      this.texIdle.delete(key);
+      this.evictedTextures++;
     }
   }
 
@@ -723,7 +996,7 @@ export class ChunkManager {
     // would make whichever loaded last win for both.
     const xf = slot.transform;
     const xfKey = xf ? `~${xf.offset}:${xf.scale}:${xf.rotation}` : "";
-    const key = `${slot.image}@${chosen}#${wS},${wT}${useKtx2 ? "!k" : ""}|uv${slot.uv ?? 0}${xfKey}`;
+    const key = `${slot.image}@${chosen}#${wS},${wT}${useKtx2 ? "!k" : ""}|uv${uvChannel(slot)}${xfKey}`;
     return { url, key, useKtx2, wS, wT, bytes };
   }
 
@@ -741,7 +1014,7 @@ export class ChunkManager {
     tex.anisotropy = 8;
     // Which UV attribute to sample. three reads `channel` (0 -> uv, 1 -> uv1);
     // the port's ground/water normal + metallicRoughness maps live on uv1.
-    tex.channel = slot?.uv ?? 0;
+    tex.channel = uvChannel(slot);
     // KHR_texture_transform. Mirrors three's own GLTFLoader handling: offset and
     // scale map straight onto offset/repeat, and rotation is NEGATED because
     // glTF rotates the UVs while three rotates the texture, about center (0,0).
@@ -774,6 +1047,11 @@ export class ChunkManager {
     if (!pick) return Promise.resolve();
     if (!this.texRefs.has(pick.key)) this.texRefs.set(pick.key, new Set());
     this.texRefs.get(pick.key)!.add(owner);
+    if (!this.texOwned.has(owner)) this.texOwned.set(owner, new Set());
+    this.texOwned.get(owner)!.add(pick.key);
+    // Referenced again — take it back off the idle list so evictTextures()
+    // cannot drop a texture that is about to be drawn with.
+    this.texIdle.delete(pick.key);
 
     const cached = this.texCache.get(pick.key);
     if (cached) { assign(cached); return Promise.resolve(); }
@@ -792,7 +1070,11 @@ export class ChunkManager {
           // Discard if every chunk that wanted it left while we were decoding.
           if ((this.texRefs.get(pick.key)?.size ?? 0) === 0) { tex.dispose(); return null; }
           this.texCache.set(pick.key, tex);
-          this.texBytes.set(pick.key, pick.bytes);
+          // MEASURED off the decoded texture: block-compressed mip chain for a
+          // KTX2, RGBA8 + generated mips for a WebP. `pick.bytes` is the file
+          // size on the wire, which for a 512 px WebP understates the resident
+          // cost by ~40x.
+          this.texBytes.set(pick.key, textureBytes(tex));
           return tex;
         })
         .catch((e) => {
@@ -805,15 +1087,30 @@ export class ChunkManager {
     return p.then((t) => { if (t) assign(t); });
   }
 
+  /** Drop one mount's claim on its textures.
+   *
+   *  A key that falls to zero refs is IDLED, not disposed — it joins the LRU
+   *  tail and only actually goes when `evictTextures()` finds the pool over
+   *  budget. That is the whole anti-thrash fix: turning around, or walking a
+   *  block and back, no longer re-fetches and re-decodes the near rung.
+   *
+   *  Walks only the keys THIS owner held (via `texOwned`) rather than the whole
+   *  cache, which the old version did on every single unmount. */
   private releaseTextures(owner: string) {
-    for (const [key, refs] of this.texRefs) {
-      if (refs.delete(owner) && refs.size === 0) {
-        this.texCache.get(key)?.dispose();
-        this.texCache.delete(key);
-        this.texRefs.delete(key);
-        this.texBytes.delete(key);
+    const keys = this.texOwned.get(owner);
+    if (!keys) return;
+    for (const key of keys) {
+      const refs = this.texRefs.get(key);
+      if (!refs) continue;
+      refs.delete(owner);
+      // Idle, not dead. Re-inserted at the tail so the most recently released
+      // texture is the LAST one evicted.
+      if (refs.size === 0 && this.texCache.has(key)) {
+        this.texIdle.delete(key);
+        this.texIdle.set(key, true);
       }
     }
+    this.texOwned.delete(owner);
   }
 
   stats(): StreamStats {
@@ -828,26 +1125,28 @@ export class ChunkManager {
         visible++;
         byTier[st.current]++;
         const lod = st.entry.lods.find((l) => l.tier === st.current);
-        if (lod) {
-          tris += lod.tris;
-          residentGeom += lod.bytes; // geometry actually mounted on the GPU right now
-        }
+        if (lod) tris += lod.tris;
+        // DECODED bytes uploaded right now, measured off the geometry.
+        const url = this.lodUrl(st.entry, st.current);
+        if (url) residentGeom += this.cpuBytes.get(url) ?? 0;
       }
     }
-    // CPU cache: everything downloaded so far (mounted or not) — never re-fetched.
-    let cacheBytes = 0;
-    for (const b of this.cpuBytes.values()) cacheBytes += b;
-    // GPU-resident textures currently uploaded.
-    let residentTex = 0;
-    for (const b of this.texBytes.values()) residentTex += b;
+    const residentTex = this.textureBytesTotal();
     return {
       visible,
       loading,
       tris,
-      cacheBytes,
+      cacheBytes: this.cpuCacheBytes(),
       cacheCount: this.cpuCache.size,
       residentBytes: residentGeom + residentTex,
       texCount: this.texCache.size,
+      texBytes: residentTex,
+      texIdle: this.texIdle.size,
+      budgetMB: { cpu: this.budget.cpuMB, gpu: this.budget.gpuMB, tex: this.budget.texMB },
+      evictedChunks: this.evictedChunks,
+      evictedTextures: this.evictedTextures,
+      redownloads: this.redownloads,
+      decodeRatio: this.decodeRatio,
       ktx2Active: this.ktx2 !== null && TIER_ORDER.some((t) => (this.cfg.texFormat?.[t] ?? "auto") !== "webp"),
       byTier,
     };
@@ -939,7 +1238,13 @@ export class ChunkManager {
       });
     this.texCache.clear();
     this.texLoading.clear();
+    this.texRefs.clear();
+    this.texOwned.clear();
+    this.texBytes.clear();
+    this.texIdle.clear();
     this.cpuCache.clear();
+    this.cpuBytes.clear();
+    this.everCached.clear();
     this.states.clear();
     if (this.mixer) { this.mixer.stopAllAction(); this.mixer = null; }
     if (this.animGroup) {

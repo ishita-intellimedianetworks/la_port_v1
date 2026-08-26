@@ -38,10 +38,11 @@ const ICON_CLASS = "text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]";
  * An unknown name falls back rather than crashing the overlay.
  *
  * The names mirror what is actually on screen: `home` / `dollhouse` / `info` /
- * `map` are the four bottom-dock circles (BottomBar), `stop` + `speed` are the
- * walking dock, `turn` is the NavHud banner, `resources` is the left edge tab
- * and `marker` is a hotspot disc in the 3D scene. Keep them in step with those
- * components, so the card teaches the glyph the viewer is actually looking at.
+ * `map` are the four bottom-dock circles (BottomBar) and `resources` is the
+ * left edge tab. The rest (`stop`, `speed`, `turn`, `marker`, `walk`, …) are no
+ * longer used by the shipped copy but stay mapped, so a tile can be added back
+ * in `site.json` alone. Keep them in step with those components, so the card
+ * teaches the glyph the viewer is actually looking at.
  */
 const ICONS: Record<string, LucideIcon> = {
   pointer: MousePointerClick,
@@ -72,11 +73,11 @@ function toItem(item: InstructionItemCopy) {
  * The dollhouse card teaches the two gestures that view has — orbiting, and
  * the double-click that leads inside — as a flat pair of tiles.
  *
- * The first-person card is a legend for the whole HUD: it walks through every
- * icon and every bar the viewer can see, grouped by where each one lives
- * (looking around, the scene itself, the walking dock, the bottom bar). It is
- * reopened at any time from the dock's Instructions button, so it doubles as
- * the app's only reference for what a glyph means.
+ * The first-person card is deliberately short: the look gesture, the RESOURCES
+ * tab, and one tile per bottom-bar button. Everything else (hotspot discs, the
+ * walking dock, the turn banner) is discovered in place and no longer spelled
+ * out here, so the card stays a glance rather than a manual. It is reopened at
+ * any time from the dock's Instructions button.
  *
  * The copy describes the controls this engine actually binds. There is no
  * keyboard movement here — no WASD, no arrow keys. Looking is a pointer drag

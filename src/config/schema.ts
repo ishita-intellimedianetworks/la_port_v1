@@ -7,13 +7,35 @@ export type CameraPose = {
 };
 
 /**
- * A camera as the handoff §4 authors it: `camera_position` + `camera_target`.
- * The rotation is derived from the two — a target is what an author can point
- * at something, and it survives the model swap far better than an euler.
+ * A layout's viewpoint, stored in whichever of the two forms it was AUTHORED
+ * in. Exactly one of `rotation` / `target` is set.
+ *
+ * `rotation` — the pose as it came out of the model, straight off `/extract-pos`
+ * for the `cp_NNN` node. That quaternion IS the framing the artist set, so
+ * storing it means nothing the runtime does can drift from what was authored in
+ * 3ds Max.
+ *
+ * `target` — the handoff §4 form (`camera_position` + `camera_target`), for a
+ * viewpoint a person aims by naming the thing to look at rather than by
+ * dialling in an angle. The rotation is derived from the two.
+ *
+ * Both resolve to the same `CameraPose`; see `poseForCamera` in config/index.ts.
+ * A target used to be the only form, and the cp cameras were stored by
+ * projecting a point onto their view ray — which round-trips exactly for these
+ * ten but is a derived number standing in for an authored one, and would
+ * silently drop any roll a future camera carried.
  */
 export type LayoutCamera = {
   position: Vec3;
-  target: Vec3;
+  /**
+   * Authored world rotation in **XYZ** order — exactly what `/extract-pos`
+   * prints for the `cp_NNN` node, and the same convention `hotspots[].rotation`
+   * uses. NOT the YXZ `[pitch, yaw, roll]` the camera is finally set with:
+   * `poseForCamera` reorders it. Paste it from the tool, do not hand-convert.
+   */
+  rotation?: Vec3;
+  /** A point to look at; the rotation is derived from it and `position`. */
+  target?: Vec3;
 };
 
 // ── site.json › stream — the adaptive chunk streamer ──────────────────────────
@@ -25,6 +47,29 @@ export type LayoutCamera = {
 export type StreamTier = {
   distance: number;
   texture: { px: number; format: "auto" | "webp" | "ktx2" };
+};
+
+/**
+ * One "don't draw this" rule, matched against the manifest.
+ *
+ * NAMED BY MATERIAL, NOT BY MESH, because the bake does not keep mesh names: a
+ * chunk GLB's single node and mesh are both unnamed, and `materials.json` is
+ * the only place a name from the source scene survives. So a source mesh is
+ * addressed here through the material it carries, plus an optional size guard
+ * for when that material is shared with things that must stay (the terminal's
+ * own pavement carries the same material as the district ground plane).
+ *
+ * A chunk is hidden when EVERY predicate the rule states matches it. A rule
+ * that states none matches nothing — an empty rule silently blanking the model
+ * is not a failure mode worth having.
+ */
+export type StreamHideRule = {
+  /** Which source mesh this rule stands for. Documentation only. */
+  _mesh?: string;
+  /** Exact `materials.json` name; the chunk must carry it. */
+  material?: string;
+  /** Chunk bounding-sphere radius floor, metres. */
+  minRadiusMetres?: number;
 };
 
 export type StreamConfig = {
@@ -53,12 +98,22 @@ export type StreamConfig = {
     refRadius: number;
   };
   cache: {
-    /** LRU ceiling on DECODED chunk groups held in the JS heap. Must exceed the
-     *  peak mounted count or the LRU finds nothing evictable — and stay under
-     *  the manifest's chunk count or it can never evict at all. */
+    /** SECONDARY cap on the number of decoded chunk groups in the JS heap. The
+     *  cache is bounded by BYTES (`streaming/memory.ts > cpuMB`); this is only
+     *  an additional entry ceiling, kept so an authored number is never
+     *  silently ignored. A count cannot bound this set on its own — chunk radii
+     *  span 3.6 m to 692 m, and the cache is keyed by URL, so the manifest's
+     *  816 chunks are 2,448 possible entries (one per chunk per tier). */
     limitChunks: number;
-    /** Hard ceiling on resident encoded bytes (geometry + textures). Exceed it
-     *  and the effective unload radius shrinks until it fits. 0 = off. */
+    /** Hard ceiling on REAL DECODED resident megabytes (geometry + textures).
+     *  Exceed it and the effective unload radius shrinks until it fits. 0 = off.
+     *
+     *  Clamped by the per-device budget — whichever is lower wins — so this is
+     *  the knob for what a SCENE needs (the aerial view legitimately holds the
+     *  whole model at the far tier) while the device ceiling stays fixed.
+     *
+     *  Until this was corrected it counted the manifest's ENCODED sizes, which
+     *  on this bake are 13.5x smaller than what is actually held. */
     residentBudgetMB: number;
   };
   /** Distance fog, which is what lets `tiers.far.distance` be small: chunks
@@ -75,6 +130,73 @@ export type StreamConfig = {
      *  is what keeps it the same colour as the sky it dissolves into while
      *  that sky is crossfading. Set a hex only to pin it. */
     color?: string;
+  };
+  /** Pin every chunk to ONE quality band, whatever the distance bands say.
+   *
+   *  For a fixed vantage that frames the whole zone there is no near and no
+   *  far — everything is the backdrop — so the dollhouse pins "far" and draws
+   *  the model at its coarsest LOD and smallest texture rung throughout.
+   *
+   *  It is a pin, not a re-band: the distances still decide what LOADS and what
+   *  unloads, only the tier the winner mounts at is overridden. Authoring
+   *  near/mid at 0 would have had the same visible effect and one invisible
+   *  one — the resident-budget loop shrinks the effective unload radius toward
+   *  `near × 1.5`, so with near at 0 a device that runs short of VRAM empties
+   *  the whole overview instead of thinning it. */
+  forceTier?: "near" | "mid" | "far";
+  /** Chunks matched by any of these are never loaded — see `StreamHideRule`.
+   *  Authored per VIEW (the dollhouse hides the backdrop planes the walking
+   *  view stands on), so it is normally set inside `dollhouse` / `aerial`
+   *  rather than here. */
+  hide?: StreamHideRule[];
+  /** THE SECOND STRATEGY over the same manifest, for elevated framing cameras
+   *  (every `layouts[].camera` authored `walkable: false`).
+   *
+   *  The bands above are tuned for a person standing in the terminal, where
+   *  everything that matters is within a few hundred metres. A layout camera
+   *  sits 54-412 m up and as much as 2.8 km from the terminal, so under those
+   *  bands the whole zone falls outside the unload radius and the shot frames
+   *  empty sky. This block is what such a camera streams with instead.
+   *
+   *  Authored as a PARTIAL override: only the keys that differ appear and the
+   *  rest is inherited from the ground config, so a retune above carries here
+   *  automatically. Omit the whole block to disable the swap entirely. */
+  aerial?: {
+    _note?: string | string[];
+    /** Camera height (world Y, metres) at or above which the aerial bands take
+     *  over, and below which the ground bands come back. TWO thresholds, not
+     *  one, so a camera sitting exactly on the line cannot flip every tick. */
+    enterAboveMetres: number;
+    exitBelowMetres: number;
+    tiers?: Partial<Record<"near" | "mid" | "far", StreamTier>>;
+    streaming?: Partial<StreamConfig["streaming"]>;
+    cache?: Partial<StreamConfig["cache"]>;
+    fog?: Partial<StreamConfig["fog"]>;
+  };
+
+  /** THE THIRD STRATEGY over the same manifest — the DOLLHOUSE overview.
+   *
+   *  The overview is one fixed vantage that frames the entire zone, so it wants
+   *  the opposite of what the walking bands give: every chunk present, all of
+   *  them at the coarsest tier, none of them culled. `forceTier: "far"` is what
+   *  flattens it — the lowest geometry LOD and the 128 px rung, the cheapest
+   *  complete picture this asset set can produce — and the bytes are exactly
+   *  the ones the walking view then re-mounts from cache on the way in.
+   *
+   *  `hide` is what makes it usable: the two district-scale backdrop planes
+   *  (the ocean and the ground) are 15 x 10 km each, so from up here they are
+   *  the whole frame and they drag the orbit pivot off the terminal.
+   *
+   *  Same partial-override rule as `aerial`. Omit the block and the dollhouse
+   *  falls back to whichever config the camera's height selects. */
+  dollhouse?: {
+    _note?: string | string[];
+    tiers?: Partial<Record<"near" | "mid" | "far", StreamTier>>;
+    streaming?: Partial<StreamConfig["streaming"]>;
+    cache?: Partial<StreamConfig["cache"]>;
+    fog?: Partial<StreamConfig["fog"]>;
+    forceTier?: StreamConfig["forceTier"];
+    hide?: StreamHideRule[];
   };
 };
 
@@ -122,16 +244,15 @@ export type SceneConfig = {
     /**
      * The single-GLB model — a whole-zone mesh light enough to draw in one go.
      *
-     * With `stream` present it is the DOLLHOUSE model and nothing else: the
-     * overview is a fixed vantage looking at the entire zone from the air,
-     * which is the one shot adaptive streaming is bad at (the view cone covers
-     * everything, so the frustum cull buys nothing and the bands only fight the
-     * byte ceiling). A decimated single-draw-call mesh is simply the right
-     * answer up there, and the walking view streams instead. Point this at a
-     * purpose-built low-poly overview mesh to make the dollhouse cheaper — no
-     * other part of the app reads it.
+     * UNUSED while `stream` is present. It was the dollhouse model: the
+     * overview is a fixed vantage on the entire zone, the one shot adaptive
+     * banding is bad at, so it drew a decimated GLB while the walking view
+     * streamed. `stream.dollhouse` answers that with a second CONFIG over the
+     * same chunks instead — every chunk on the far tier — which costs about the
+     * same bytes and hands them straight to first person through the decoded
+     * cache, so the second asset stopped earning its place.
      *
-     * With `stream` absent it is the walking model too.
+     * With `stream` absent it is the model for both views.
      */
     modelUrl: string;
     /** Only for a site with no `stream` block. A streamed site takes the
@@ -187,6 +308,12 @@ export type SceneConfig = {
   lights: {
     ambientIntensity: number;
     ambientColor: string;
+    /** Sky fill (hemisphere light) — what keeps the away-from-sun side off
+     *  black. Omitted → 0. See `LightsConfig.hemiIntensity` for why ambient is
+     *  not the knob for this. */
+    hemiIntensity?: number;
+    hemiSkyColor?: string;
+    hemiGroundColor?: string;
     envIntensity: number;
     sunIntensity: number;
     sunColor: string;
@@ -195,6 +322,9 @@ export type SceneConfig = {
     shadowRadius: number;
     shadowBias: number;
     shadowNormalBias: number;
+    /** Half-width of the sun's shadow square while walking. See `LightsConfig`.
+     *  Omitted → 340. */
+    shadowFollowExtent?: number;
   };
   globals: {
     /** The container the whole H09 -> H14 -> H24 -> H30 story follows. Every
@@ -202,6 +332,45 @@ export type SceneConfig = {
     heroContainerId: string;
   };
   map?: MapConfig;
+  /** The analytic sky dome. Absent (or `mode: "off"`) keeps the flat
+   *  background-colour backdrop this app shipped with. */
+  sky?: SkyConfig;
+};
+
+/**
+ * The procedural sky, ported from the `open-sea` shader study — a gradient +
+ * sun + horizon cloud band evaluated per pixel, with no texture and no post
+ * pass. See `terminal/scene/environment/sky`.
+ */
+export type SkyConfig = {
+  /** Authoring note — data, not config. */
+  _note?: string;
+  /** `off` = the flat background colour (the previous backdrop). */
+  mode: "day" | "afternoon" | "dusk" | "off";
+  /** Explicit point on the day arc, 0..1, overriding the mode's default stop.
+   *  0 is the sun on the horizon, 1 is high midday. */
+  t?: number;
+  /** Procedural cloud band along the horizon. Default true; the only part of
+   *  the shader with a real per-pixel cost, so turn it off to make the sky
+   *  nearly free. */
+  clouds?: boolean;
+  /**
+   * Lighting merged OVER `lights` while the sky is on, so the model is lit for
+   * the time of day rather than for noon.
+   *
+   * INTENSITIES ONLY. `sunDirection`, `sunColor`, `ambientColor` and the
+   * `hemi*Color` pair are derived
+   * from the same palette the sky itself is drawn from (`lightingForT`) — a
+   * hand-picked hex beside a generated sky is the pair that drifts apart. What
+   * the palette cannot know is how STRONGLY to light a model, since the study
+   * it came from is a shader with no scene lights at all; that is what this is.
+   */
+  lights?: Partial<
+    Omit<
+      SceneConfig["lights"],
+      "sunDirection" | "sunColor" | "ambientColor" | "hemiSkyColor" | "hemiGroundColor"
+    >
+  >;
 };
 
 // ── site.json › presentation ──────────────────────────────────────────────────
@@ -404,6 +573,7 @@ export type SiteConfig = {
   lights: SceneConfig["lights"];
   globals: SceneConfig["globals"];
   map?: SceneConfig["map"];
+  sky?: SceneConfig["sky"];
   zones: UiConfig["zones"];
   tones: UiConfig["tones"];
   /** Everything the UI puts on screen in words. */
