@@ -670,6 +670,10 @@
             "text": "Home returns you to the start point"
           },
           {
+            "icon": "firstPerson",
+            "text": "First Person drops you on foot at the terminal's walking start"
+          },
+          {
             "icon": "dollhouse",
             "text": "Dollhouse zooms back out to the overview"
           },

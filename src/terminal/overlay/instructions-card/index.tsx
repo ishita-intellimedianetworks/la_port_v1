@@ -12,6 +12,7 @@ import {
   MoveHorizontal,
   MoveVertical,
   PanelLeft,
+  PersonStanding,
   RotateCcw,
   Square,
   Home,
@@ -26,6 +27,17 @@ interface InstructionsCardProps {
   mode: "dollhouse" | "firstPerson";
   visible: boolean;
   onDismiss: () => void;
+  /**
+   * Is the First Person circle actually in the dock? Its tile is dropped when
+   * it is not.
+   *
+   * The circle is conditional — it needs an authored `cameras.firstPerson` and
+   * it is not drawn on the frozen `/` variant — so the copy cannot simply list
+   * it. Passed in rather than re-derived here: the caller decides whether to
+   * draw the circle, and the same value gates both, which is what stops the
+   * card teaching a button that is not on screen.
+   */
+  showFirstPerson?: boolean;
 }
 
 const ICON_CLASS = "text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]";
@@ -55,6 +67,7 @@ const ICONS: Record<string, LucideIcon> = {
   info: Info,
   map: MapIcon,
   resources: PanelLeft,
+  firstPerson: PersonStanding,
   stop: Square,
   speed: Gauge,
   turn: CornerUpRight,
@@ -84,8 +97,13 @@ function toItem(item: InstructionItemCopy) {
  * (`use-pointer-drag`) and moving is a double-click on the floor
  * (`use-double-click-nav`).
  */
-export function InstructionsCard({ mode, visible, onDismiss }: InstructionsCardProps) {
+export function InstructionsCard({ mode, visible, onDismiss, showFirstPerson }: InstructionsCardProps) {
   const copy = uiCopy.instructions[mode];
+  // By icon name, not by position, so reordering the tiles in site.json cannot
+  // silently drop the wrong one.
+  const items = showFirstPerson
+    ? copy.items
+    : copy.items?.filter((i) => i.icon !== "firstPerson");
 
   return (
     <InstructionsOverlay
@@ -93,7 +111,7 @@ export function InstructionsCard({ mode, visible, onDismiss }: InstructionsCardP
       title={copy.title}
       subtitle={copy.subtitle}
       columns={copy.columns}
-      instructions={copy.items?.map(toItem)}
+      instructions={items?.map(toItem)}
       groups={copy.groups?.map((group) => ({
         label: group.label,
         items: group.items.map(toItem),

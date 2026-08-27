@@ -44,10 +44,15 @@ const PING_COUNT = 2;
  */
 const BEAD_PX = 24;
 
-/** The same figure for a FINGER. A mouse pointer is one pixel; a fingertip
- *  covers ~9 mm of glass and you cannot see through it, so the marker has to be
- *  big enough to aim at with the thing itself hidden under your hand. */
-const BEAD_PX_TOUCH = 34;
+/** The same figure for a FINGER.
+ *
+ *  Bigger than the mouse figure because a fingertip covers ~9 mm of glass and
+ *  you cannot see through it — but only a little, because what a finger needs
+ *  is a big enough TARGET, and the target is COLLIDER_MULT_TOUCH below, not
+ *  this. 34 made the beads themselves crowd a phone screen; dropping to 26 is
+ *  a ~24% smaller marker, and the collider multiplier is raised to match so
+ *  the thing you are actually aiming at does not move at all. */
+const BEAD_PX_TOUCH = 26;
 
 /** Bounds on the world radius the rule may ask for, as a multiple of the
  *  authored `size`. The floor keeps a marker from collapsing to nothing at the
@@ -67,11 +72,15 @@ const MAX_SCALE_TOUCH = 4;
 
 /** Edge of the invisible hit box, as a multiple of the bead RADIUS — so the
  *  target is `COLLIDER_MULT / 2` times the bead's width on screen, at every
- *  distance. 3.5 gives a 42 px square around a 24 px bead (fine for a mouse);
- *  4 around a 34 px bead gives 68 px, comfortably past the ~44 px minimum a
- *  fingertip needs. */
+ *  distance. 3.5 gives a 42 px square around a 24 px bead (fine for a mouse).
+ *
+ *  Touch is sized from the TARGET backwards: 5.2 around a 26 px bead is
+ *  5.2 x 13 = 67.6 px, which is what 4 around the old 34 px bead gave. So the
+ *  marker got smaller and the thing a fingertip has to hit did not — still
+ *  comfortably past the ~44 px minimum. Shrink the bead again and this has to
+ *  rise again, or the two silently re-couple. */
 const COLLIDER_MULT = 3.5;
-const COLLIDER_MULT_TOUCH = 4;
+const COLLIDER_MULT_TOUCH = 5.2;
 
 /** How far a finger may roll between touchdown and lift and still count as a
  *  tap rather than the start of a camera drag (CSS px). */

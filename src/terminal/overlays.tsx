@@ -367,6 +367,12 @@ export default function Overlays() {
     });
   }, [firstPersonPose, playerControllerRef, closeOverlays, triggerFloorTransition]);
 
+  /** The First Person circle, or nothing. Needs an authored standpoint, and is
+   *  not drawn on the frozen `/` variant. Hoisted so the dock and the
+   *  instructions card are gated by the SAME value — teaching a circle that is
+   *  not on screen is worse than not teaching it. */
+  const firstPersonAction = !uiFrozen && firstPersonPose ? handleFirstPerson : undefined;
+
   // Hide the standing-at destination from its own list (re-appears once it un-latches).
 
   // Opening the full map covers the screen. The map and the label panel SHARE
@@ -464,6 +470,7 @@ export default function Overlays() {
       {phase === "firstPerson" && (
         <InstructionsCard
           mode="firstPerson"
+          showFirstPerson={!!firstPersonAction}
           visible={isReady && instructionsOpen}
           onDismiss={() => {
             markFpInstructionsSeen();
@@ -577,7 +584,7 @@ export default function Overlays() {
           type="button"
           title="Exit to village"
           onClick={exitToVillage}
-          className="fixed left-6 top-6 z-[116] flex h-[42px] cursor-pointer items-center gap-2 rounded-[14px] pl-3 pr-4 transition-[filter] hover:brightness-110 short:left-2 short:top-2 short:h-9 short:gap-1.5 short:pl-2 short:pr-3"
+          className="fixed left-6 top-6 z-[116] flex h-[42px] cursor-pointer items-center gap-2 rounded-[14px] pl-3 pr-4 transition-[opacity,transform,filter] duration-[420ms] ease-out hover:brightness-110 short:left-2 short:top-2 short:h-9 short:gap-1.5 short:pl-2 short:pr-3"
           style={{
             background: "var(--nav-glass)",
             backdropFilter: "var(--nav-backdrop)",
@@ -586,7 +593,11 @@ export default function Overlays() {
             willChange: "backdrop-filter",
             border: "1.5px solid var(--nav-border)",
             boxShadow: "var(--nav-shadow-chip)",
-            opacity: mapEntered && !fadeVisible ? 1 : 0,
+            opacity: mapEntered && !fadeVisible && !mapExpanded ? 1 : 0,
+            // Leaves the way the Resources panel beside it does — off the left
+            // edge — so the whole left side clears as one movement.
+            transform: mapExpanded ? "translateX(calc(-100% - 24px))" : "translateX(0)",
+            pointerEvents: mapExpanded ? "none" : undefined,
           }}
         >
           <ArrowLeft size={17} strokeWidth={2} color="var(--nav-text)" className="short:h-[15px] short:w-[15px]" />
@@ -637,7 +648,9 @@ export default function Overlays() {
             setHotspotsFlapOpen(next);
           }}
           disabled={fadeVisible}
-          tucked={isMoving || instructionsOpen || dataCardOpen}
+          // The map is the widest overlay there is and it opens over this edge,
+          // so the panel slides out rather than sitting under it.
+          tucked={isMoving || instructionsOpen || dataCardOpen || mapExpanded}
         />
       )}
 
@@ -648,10 +661,13 @@ export default function Overlays() {
           // a card is being read the four circles are not the thing to press,
           // and the way out of the card is the card's own close button.
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen && !dataCardOpen}
-          // Resources is open: drop the dock off the bottom edge. The panel is
-          // the tallest overlay on the screen and, on a landscape phone, ends
-          // within a thumb's width of these circles.
-          tucked={hotspotsFlapOpen}
+          // Resources or the map is open: drop the dock off the bottom edge.
+          // Either one is the tallest thing on screen and, on a landscape phone,
+          // ends within a thumb's width of these circles. Tucked rather than
+          // merely hidden, so the dock travels instead of dimming in place —
+          // and the Map circle stays reachable, since tapping it is what put
+          // the map up.
+          tucked={hotspotsFlapOpen || mapExpanded}
           mapOpen={mapExpanded}
           onOpenMap={() => {
             // Read the toggle BEFORE closeOverlays sets it false, or the map
@@ -689,7 +705,7 @@ export default function Overlays() {
           // something nobody is missing. `undefined` is also what a site with no
           // `cameras.firstPerson` pose passes, so BottomBar already handles it.
           mapDisabled={uiFrozen}
-          onFirstPerson={!uiFrozen && firstPersonPose ? handleFirstPerson : undefined}
+          onFirstPerson={firstPersonAction}
         />
       )}
 
