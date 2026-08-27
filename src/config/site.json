@@ -389,16 +389,7 @@
     }
   },
   "map": {
-    "_note": "TWO RECTS: zone inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — lifted out of a dimmed surround. ONE image does both passes: `site` is a pre-graded aerial that already lights the terminal and darkens everything around it, so there is no second render layered over it to misregister against. A `plan` block may be added back (a top-down model render, its own bounds beside it) when the zone needs more resolution than the aerial carries. `site.bounds` names the world coords of the image EDGES: minX/maxX are its left/right (X grows rightward, east), minZ/maxZ its top/bottom (Z grows UPWARD, north) — so X reads plainly and only Z is inverted. VERIFIED twice: the lit terminal centres on the navmesh to within 2 m in X and 45 m in Z, and the spawn point lands on the quay it is authored at. `zone` is a PLAIN world rect (minX < maxX) because people author it, defaulting to the navmesh AABB.",
-    "plan": {
-      "imageUrl": "/floorplan/terminal-plan.png",
-      "bounds": {
-        "minX": -1606.959,
-        "maxX": -114.854,
-        "minZ": 790.44,
-        "maxZ": -967.835
-      }
-    },
+    "_note": "TWO RECTS: zone inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — lifted out of a dimmed surround. Bounds on an image layer name the world coords of its EDGES: minX/maxX are its left/right (X grows rightward, east), minZ/maxZ its top/bottom (Z grows UPWARD, north) — so X reads plainly and only Z is inverted. `site` is the full-port aerial, always dimmed. `plan` is a top-down model render laid over it and is optional: drop the block and the zone still lifts out of the surround, just at the aerial's resolution. PLAN BOUNDS ARE NOT CALIBRATED — they are the exact world AABB of la-port-zone-c5-model-v4_dollhouse-optimized-optimized.glb, which /admin/bounds framed the render to, so world→pixel is exact by construction. A top-down camera with up=+Z puts +X on the LEFT, so the raw render is mirrored east-west; the tool now un-mirrors on export, and this file was flipped by hand because it predates that fix. Cross-checked: the flipped plan's quay, crane rails and rail fans land on the aerial's own, and 93% of the 831 streamed chunk centres fall on plan geometry against a 24% chance level. `zone` is a PLAIN world rect (minX < maxX) because people author it; it is exactly the navmesh AABB.",
     "site": {
       "imageUrl": "/floorplan/everport-site.jpg",
       "bounds": {
@@ -406,6 +397,15 @@
         "maxX": 577.016,
         "minZ": 756.627,
         "maxZ": -1111.54
+      }
+    },
+    "plan": {
+      "imageUrl": "/floorplan/terminal-plan.webp",
+      "bounds": {
+        "minX": -2159.121,
+        "maxX": -58.504,
+        "minZ": 969.87,
+        "maxZ": -889.443
       }
     },
     "zone": {

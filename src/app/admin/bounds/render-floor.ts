@@ -3,14 +3,15 @@
 /**
  * Top-down orthographic renderer for the map plan.
  *
- * The output PNG's pixel <-> world mapping is fixed by the camera, not by any
- * post-hoc transform, so it drops straight into the runtime minimap:
+ * The output PNG's pixel <-> world mapping is fixed by the camera, so it drops
+ * straight into the runtime minimap:
  *
- *   pixel (0, 0)   <->   world (bbox.maxX, bbox.maxZ)
- *   pixel (W, H)   <->   world (bbox.minX, bbox.minZ)
+ *   pixel (0, 0)   <->   world (bbox.minX, bbox.maxZ)
+ *   pixel (W, H)   <->   world (bbox.maxX, bbox.minZ)
  *
- * That 180-degree flip is encoded in `cam.up = +Z`, the same convention the
- * runtime's bounds objects use. Render here, paste the bounds into
+ * North-up, east-right. Z is inverted because the image's first row is its top;
+ * X is not, because `unmirror()` below undoes the east-west flip a `cam.up = +Z`
+ * top-down view produces. Render here, paste the bounds into
  * `site.json > map.plan`, and world->pixel is exact with no calibration.
  *
  * The bbox is supplied by the CALLER, so a render is never silently tied to one
@@ -178,7 +179,7 @@ export async function renderTopDown(
 
   // toBlob, not toDataURL: at 4k the base64 string blocks the main thread.
   const blob = await new Promise<Blob | null>((res) =>
-    renderer.domElement.toBlob(res, "image/png"),
+    unmirror(renderer.domElement).toBlob(res, "image/png"),
   );
 
   if (mode !== "silhouette") rs.remove(scene);
@@ -186,6 +187,27 @@ export async function renderTopDown(
 
   if (!blob) throw new Error("toBlob returned null (render likely exceeded GPU limits)");
   return { url: URL.createObjectURL(blob), bytes: blob.size, w: pixelW, h: pixelH };
+}
+
+/**
+ * Flips the render east-west so the PNG reads as a map.
+ *
+ * A camera looking down -Y with up = +Z has screen-right = -X: in a Y-up world
+ * where +Z is north, a top-down view puts EAST ON THE LEFT. Undoing it here,
+ * rather than by handing the runtime a bounds rect with minX > maxX, keeps
+ * `map.plan.bounds` plain-X like `map.site.bounds` and keeps the minimap off
+ * negative-width drawImage.
+ */
+function unmirror(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = document.createElement("canvas");
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext("2d");
+  if (!ctx) return src;
+  ctx.translate(src.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(src, 0, 0);
+  return out;
 }
 
 function addLighting(scene: THREE.Scene, bbox: Bbox): void {

@@ -139,14 +139,19 @@ export function toJson(
   );
 }
 
-/** The `map.plan` block: the render's URL plus the rect it was framed to. */
+/**
+ * The `map.plan` block: the render's URL plus the rect it was framed to.
+ *
+ * Only Z is inverted — the render is un-mirrored on export, so X reads plainly
+ * here and in `map.site.bounds` alike.
+ */
 export function planJson(bbox: Bbox, imageUrl: string, pixelW: number, pixelH: number): string {
   return JSON.stringify(
     {
       plan: {
         imageUrl,
         bounds: {
-          minX: r(bbox.maxX), maxX: r(bbox.minX),
+          minX: r(bbox.minX), maxX: r(bbox.maxX),
           minZ: r(bbox.maxZ), maxZ: r(bbox.minZ),
         },
       },
