@@ -201,36 +201,24 @@ export type StreamConfig = {
 };
 
 /**
- * The map's layers. `plan` and `site` each store an image WITH the world rect it
- * was rendered/calibrated to, so neither depends on any other source agreeing.
+ * The map. ONE layer: a top-down render stored WITH the world rect its camera
+ * was framed to, so pixel<->world needs no calibration and depends on no other
+ * source agreeing.
  */
 export type MapConfig = {
   /** Authoring note — data, not config. */
   _note?: string;
   /**
-   * Top-down render of the model, drawn dimmed except where `zone` clips it back
-   * to colour. FLIPPED convention (minX holds the world MAX); paste it from
-   * /admin/bounds rather than hand-writing it.
+   * The render, letterboxed into the map canvas. `bounds` uses the FLIPPED
+   * convention on BOTH axes (minX holds the world MAX, minZ the world MAX),
+   * which is what encodes a top-down camera's orientation; paste it from
+   * /admin/bounds rather than hand-writing it, and never reorder the numbers to
+   * read "naturally" — minX < maxX here mirrors the map east-west.
    */
   plan?: {
     imageUrl: string;
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   };
-  /**
-   * Wide-area aerial behind the plan, always greyscaled. Nothing resolves
-   * against it, so a rough alignment is fine. Same flipped convention; comes out
-   * of /admin/bounds' calibrate step.
-   */
-  site?: {
-    imageUrl: string;
-    bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
-  };
-  /**
-   * What the map opens on, the only region that accepts clicks, and the part
-   * drawn in colour. A PLAIN world rect (minX < maxX) since people author it.
-   * Defaults to the navmesh AABB.
-   */
-  zone?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
 
 // ── site.json › the site record ───────────────────────────────────────────────

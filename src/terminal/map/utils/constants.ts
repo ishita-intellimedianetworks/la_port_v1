@@ -27,14 +27,10 @@ export const MAP_FULL_CHROME_Y = 150;
 export const SIDE_LEGEND_W = 176;
 export const ZOOM_FACTOR = 1.18; // per wheel tick
 
-// Zoom is metres-per-pixel; both ends are derived at runtime from the rects,
-// since how far out "all the way out" is depends on the authored aerial.
-
-/** How far past the zone framing you may zoom in. */
-export const ZOOM_IN_LIMIT = 6;
-
-/** Slack at the zoomed-out end so the outermost layer clears the edges. */
-export const ZOOM_OUT_MARGIN = 1.08;
+// Zoom is a plain canvas scale about the letterboxed plan, so 1 is "the whole
+// render fits" and the pan clamp below never lets a blank edge show.
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 8;
 
 // Sticker margin (px). Fixed pixels carved out of the existing canvas — the
 // canvas keeps the same outer dimensions as before stickers existed, and

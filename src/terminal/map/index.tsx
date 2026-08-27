@@ -9,7 +9,7 @@ import { MapDestinationControls } from "./map-destination-controls";
 import { MapSelect } from "./map-select";
 import { iconFor } from "../overlay/destination-panel/subcategory-rail";
 import { CROWD_DOT, CROWD_WORD } from "../overlay/destination-panel/destination-card";
-import { ArrowLeft, ListFilter, LocateFixed, Maximize2, Minimize2, X } from "lucide-react";
+import { ArrowLeft, ListFilter, Maximize2, Minimize2, X } from "lucide-react";
 import { NAV_GLASS_PANEL } from "../overlay/glass-theme";
 import { useShortViewport } from "@/shared/responsive";
 // Phone (landscape): the destination legend moves BESIDE the plan instead of
@@ -30,7 +30,6 @@ interface MinimapProps {
 export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }: MinimapProps) {
   const {
     canvasRef, mapWidth, mapHeight, radioWidth, expanded, closeMap, fullScreen, toggleFullScreen, handleClick,
-    recenter, drifted,
     isMoving, stopNav, playerControllerRef,
     destCats, destLabel, pickDestLabel, mapOptions, mapOption, pickMapOption,
     mapDests, listMode, selectMapDestination,
@@ -229,21 +228,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
             style={{ width: "100%", height: "100%", cursor: listMode ? "default" : "crosshair", display: "block" }}
           />
 
-          {/* Recenter - appears only once the view has drifted. */}
-          <button
-            onClick={recenter}
-            aria-label="Recentre on your position"
-            title="Recentre on your position"
-            className="absolute bottom-2.5 right-2.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-[opacity,transform] duration-200 hover:bg-white/[0.1] short:bottom-1.5 short:right-1.5 short:h-7 short:w-7"
-            style={{
-              ...NAV_GLASS_PANEL,
-              opacity: drifted ? 1 : 0,
-              transform: drifted ? "scale(1)" : "scale(0.85)",
-              pointerEvents: drifted ? "auto" : "none",
-            }}
-          >
-            <LocateFixed className="h-[17px] w-[17px] short:h-[14px] short:w-[14px]" strokeWidth={2} color="var(--nav-text)" />
-          </button>
         </div>
 
         {/* Phone list-mode: destination legend BESIDE the plan — a compact

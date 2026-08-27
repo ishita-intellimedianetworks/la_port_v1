@@ -389,30 +389,15 @@
     }
   },
   "map": {
-    "_note": "TWO RECTS: zone inside site. The map opens framed on `zone` — the walkable area, the only place a click resolves to a route — lifted out of a dimmed surround. Bounds on an image layer name the world coords of its EDGES: minX/maxX are its left/right (X grows rightward, east), minZ/maxZ its top/bottom (Z grows UPWARD, north) — so X reads plainly and only Z is inverted. `site` is the full-port aerial, always dimmed. `plan` is a top-down model render laid over it and is optional: drop the block and the zone still lifts out of the surround, just at the aerial's resolution. PLAN BOUNDS ARE NOT CALIBRATED — they are the exact world AABB of la-port-zone-c5-model-v4_dollhouse-optimized-optimized.glb, which /admin/bounds framed the render to, so world→pixel is exact by construction. A top-down camera with up=+Z puts +X on the LEFT, so the raw render is mirrored east-west; the tool now un-mirrors on export, and this file was flipped by hand because it predates that fix. Cross-checked: the flipped plan's quay, crane rails and rail fans land on the aerial's own, and 93% of the 831 streamed chunk centres fall on plan geometry against a 24% chance level. `zone` is a PLAIN world rect (minX < maxX) because people author it; it is exactly the navmesh AABB.",
-    "site": {
-      "imageUrl": "/floorplan/everport-site.jpg",
-      "bounds": {
-        "minX": -2924.012,
-        "maxX": 577.016,
-        "minZ": 756.627,
-        "maxZ": -1111.54
-      }
-    },
+    "_note": "ONE LAYER, 1:1 with the model. `plan` is a top-down orthographic render from /admin/bounds and `bounds` is the exact world AABB the camera was framed to — la-port-zone-c5-model-v4_dollhouse-optimized-optimized.glb — so pixel↔world is exact by construction rather than calibrated. BOTH AXES ARE SWAPPED (minX holds the world MAX, minZ the world MAX): a top-down camera with up=+Z puts +X on the left and the image's first row is its top, and the swap is what encodes that. Paste this block from /admin/bounds rather than hand-writing it, and never reorder the numbers to read 'naturally' — minX < maxX here would mirror the map east-west. The renderer letterboxes the image into the canvas (CONTAIN) and clicks are resolved against that rect, so the image frame IS the clickable area.",
     "plan": {
       "imageUrl": "/floorplan/terminal-plan.webp",
       "bounds": {
-        "minX": -2159.121,
-        "maxX": -58.504,
+        "minX": -58.504,
+        "maxX": -2159.121,
         "minZ": 969.87,
         "maxZ": -889.443
       }
-    },
-    "zone": {
-      "minX": -1502.324,
-      "maxX": -661.783,
-      "minZ": -438.324,
-      "maxZ": 550.924
     }
   },
   "zones": {
