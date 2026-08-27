@@ -613,9 +613,6 @@ export default function Overlays() {
           // within a thumb's width of these circles.
           tucked={hotspotsFlapOpen}
           mapOpen={mapExpanded}
-          // The map overlay is off for now — the button stays in the dock,
-          // greyed, rather than being removed, so the row does not reflow.
-          mapDisabled
           onOpenMap={() => {
             // Read the toggle BEFORE closeOverlays sets it false, or the map
             // could never be opened — only closed and immediately reopened.
