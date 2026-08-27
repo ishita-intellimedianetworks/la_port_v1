@@ -58,10 +58,18 @@ export interface MapDestination {
   crowd?: string;
 }
 
-// Fixed, small player/path/ripple size on the full-screen map (Google-Maps
-// style). The original small panel used scale 1 (= DEFAULT_MAP_SIZE); we keep
-// the marker near that regardless of the now full-viewport canvas.
-const MARKER_SCALE = 1.25;
+/**
+ * One lever for every mark drawn over the plan: the route, the destination pin,
+ * the click ripple and (tapered below) the player.
+ *
+ * Fixed canvas pixels, Google-Maps style — marks do NOT grow with the canvas or
+ * the zoom. It dropped from 1.25 when the map became one 1:1 layer: that frames
+ * the model's full 2100 m at zoom 1 rather than the 840 m zone, so a mark of
+ * unchanged pixel size started covering three times the ground and read as
+ * oversized. The pixel floors in draw.ts were lowered to match, since several
+ * sat above what this now asks for and would have clamped it.
+ */
+const MARKER_SCALE = 0.62;
 
 /** Past this far from the navmesh the player is treated as off it, and a map
  *  click drops them to the nearest walkable point before walking. Comfortably

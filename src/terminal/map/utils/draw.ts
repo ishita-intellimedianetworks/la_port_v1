@@ -237,10 +237,10 @@ export function drawPath(
   ctx.lineJoin = "round";
   // Casing (darker, wider) then bright core on top.
   ctx.strokeStyle = ROUTE_CASING;
-  ctx.lineWidth = Math.max(2, navConfig.minimap.casingWidthPx * scale);
+  ctx.lineWidth = Math.max(1.2, navConfig.minimap.casingWidthPx * scale);
   stroke();
   ctx.strokeStyle = PATH_COLOR;
-  ctx.lineWidth = Math.max(1, navConfig.minimap.coreWidthPx * scale);
+  ctx.lineWidth = Math.max(0.8, navConfig.minimap.coreWidthPx * scale);
   stroke();
   ctx.restore();
 
@@ -256,7 +256,7 @@ export function drawPath(
 // so the map and the 3D scene read as the same marker.
 function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
   const red = navConfig.color.destRed; // same red the 3D pin + ring use
-  const headR = Math.max(4, navConfig.minimap.destPinHeadPx * scale); // sphere head radius
+  const headR = Math.max(2.5, navConfig.minimap.destPinHeadPx * scale); // sphere head radius
   const coneH = headR * 2.0;   // cone height (tip → base)
   const coneHW = headR * 0.62; // cone half-width at the base
   const cy = y - coneH - headR * 0.7; // sphere head centre, floating above the cone
@@ -265,7 +265,7 @@ function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.lineCap = "round";
   ctx.fillStyle = red;
   ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = Math.max(1, 1.4 * scale);
+  ctx.lineWidth = Math.max(0.7, 1.4 * scale);
   ctx.shadowColor = "rgba(0,0,0,0.35)";
   ctx.shadowBlur = 5 * scale;
   ctx.shadowOffsetY = 1.5 * scale;
@@ -591,7 +591,7 @@ export function drawPlayerFOV(
   const scale = markerScale ?? W / DEFAULT_MAP_SIZE;
   const scaledFovLen = FOV_LENGTH * scale;
   const scaledPlayerSize = PLAYER_SIZE * scale;
-  const strokeWidth = Math.max(1, 1.5 * scale);
+  const strokeWidth = Math.max(0.7, 1.5 * scale);
 
   ctx.save();
   ctx.translate(px, py);
@@ -645,9 +645,9 @@ export function drawClickMarker(
 ) {
   ctx.globalAlpha = marker.alpha;
   ctx.beginPath();
-  ctx.arc(marker.px, marker.py, Math.max(3, 7 * scale), 0, Math.PI * 2);
+  ctx.arc(marker.px, marker.py, Math.max(2, 7 * scale), 0, Math.PI * 2);
   ctx.strokeStyle = CLICK_MARKER;
-  ctx.lineWidth = Math.max(1, 2 * scale);
+  ctx.lineWidth = Math.max(0.7, 2 * scale);
   ctx.stroke();
   ctx.globalAlpha = 1;
 }
