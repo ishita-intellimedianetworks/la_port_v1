@@ -32,6 +32,30 @@ import type {
 export const site = siteJson as unknown as SiteConfig;
 
 /**
+ * Where the map's images are served from.
+ *
+ * Same shape as NEXT_PUBLIC_STREAM_BASE: the COMPLETE base, used verbatim with
+ * one filename appended. Unset falls back to `/floorplan`, the copies under
+ * `public/`, so a checkout with no env still runs.
+ *
+ * `map.*.imageUrl` is therefore a BARE FILENAME. An absolute URL is still
+ * honoured and skips the base entirely, for a site that pins one image to a
+ * different host than the rest.
+ */
+const FLOORPLAN_BASE = (process.env.NEXT_PUBLIC_FLOORPLAN_BASE ?? "/floorplan").replace(/\/+$/, "");
+
+function floorplanUrl(imageUrl: string): string {
+  return /^(https?:)?\/\//.test(imageUrl) ? imageUrl : `${FLOORPLAN_BASE}/${imageUrl.replace(/^\/+/, "")}`;
+}
+
+/** `map` with its image URLs resolved, so no reader has to know about the base. */
+const resolvedMap: SiteConfig["map"] = site.map && {
+  ...site.map,
+  ...(site.map.plan && { plan: { ...site.map.plan, imageUrl: floorplanUrl(site.map.plan.imageUrl) } }),
+  ...(site.map.base && { base: { ...site.map.base, imageUrl: floorplanUrl(site.map.base.imageUrl) } }),
+};
+
+/**
  * `scene` and `ui` are VIEWS over one document, kept because every reader in
  * the app already speaks them. Merging the files did not need to become a
  * rename touching a hundred call sites.
@@ -40,11 +64,12 @@ export const scene: SceneConfig = {
   meta: site.meta,
   assets: site.assets,
   stream: site.stream,
+  streamV2: site.streamV2,
   world: site.world,
   cameras: site.cameras,
   lights: site.lights,
   globals: site.globals,
-  map: site.map,
+  map: resolvedMap,
   sky: site.sky,
 };
 

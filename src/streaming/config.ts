@@ -18,7 +18,7 @@
  * the FIRST match, so nearDist < midDist < farDist < unloadDist must hold.
  */
 import { scene } from "@/config";
-import type { StreamConfig, StreamHideRule } from "@/config/schema";
+import type { StreamConfig, StreamHideRule, StreamVariantConfig } from "@/config/schema";
 
 export type Tier = "near" | "mid" | "far";
 
@@ -61,6 +61,22 @@ export interface StreamingConfig {
   frustumMargin: number;
   alwaysLoadDist: number;
   cullGraceTicks: number;
+  /** Where three's transmission pass may run — see `StreamConfig.render`. The
+   *  single biggest frame-time lever in this file: one visible transmissive
+   *  material re-renders the whole opaque scene every frame. */
+  transmission: "off" | "near" | "all";
+  /** Dress a chunk at the smallest rung so it can appear immediately, and
+   *  promote it to its tier's rung in the background. */
+  progressiveTex: boolean;
+  /** Ceiling on texture upgrades started per tick, nearest first. */
+  texUpgradesPerTick: number;
+  /** Whether the pixel ratio follows the frame rate at all. Off, `maxDpr` is a
+   *  fixed ceiling and `AdaptiveQuality` is not mounted. */
+  adaptiveDpr: boolean;
+  /** Ceiling on canvas pixel ratio. Read by `AdaptiveQuality`, not by
+   *  `ChunkManager` — it travels here because it is per-VIEW like the bands
+   *  are, and the dollhouse and the walking view can afford different ones. */
+  maxDpr: number;
   /** Mount every chunk at this tier regardless of its distance band. The bands
    *  still decide what loads and what unloads — see `StreamConfig.forceTier`. */
   forceTier?: Tier;
@@ -94,13 +110,46 @@ export interface StreamingConfig {
 // the slug to suit the CDN would break the local path and disagree with the
 // manifest. Either source must allow cross-origin GET; the S3 prefix above
 // answers `Access-Control-Allow-Origin: *`.
-const STREAM_BASE_FULL = process.env.NEXT_PUBLIC_STREAM_BASE;
+// ONE VARIABLE PER BAKE. They are read as separate literal expressions, not
+// composed from the variant id, because Next inlines `process.env.NEXT_PUBLIC_*`
+// by STATIC TEXT MATCH at build time — `process.env[`..._${id}`]` compiles to a
+// lookup on an object that does not exist in the browser and silently yields
+// undefined.
+const STREAM_BASE_V1 = process.env.NEXT_PUBLIC_STREAM_BASE;
+const STREAM_BASE_V2 = process.env.NEXT_PUBLIC_STREAM_BASE_V2;
 const ASSET_ROOT = (process.env.NEXT_PUBLIC_ASSET_BASE ?? "/assets").replace(/\/+$/, "");
 
-/** Public URL base for the baked chunk set, ending in a slash. */
-export const STREAM_ASSET_BASE = STREAM_BASE_FULL
-  ? `${STREAM_BASE_FULL.trim().replace(/\/+$/, "")}/`
-  : `${ASSET_ROOT}/${scene.stream.slug}/assets/`;
+const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
+
+/**
+ * Where ONE bake is served from, ending in a slash.
+ *
+ * Three sources, most specific first:
+ *
+ *   NEXT_PUBLIC_STREAM_BASE      the published prefix for `/`, and
+ *   NEXT_PUBLIC_STREAM_BASE_V2   the one for `/v2`. THE SOURCE OF TRUTH: one
+ *                                variable per bake, so both live in `.env` and
+ *                                a deploy can repoint either without a code
+ *                                edit. They win over anything authored.
+ *   `stream.assetBase`           a per-block URL in site.json. Still supported
+ *                                and still typed, but deliberately UNAUTHORED
+ *                                on this site — two places holding the same URL
+ *                                is two places to drift.
+ *   NEXT_PUBLIC_ASSET_BASE       a ROOT that `<slug>/assets/` is appended to,
+ *                                defaulting to `/assets` — the local staging
+ *                                copy under public/, which is gitignored. This
+ *                                is the LAST resort: with no env var set, a
+ *                                route 404s its chunk fetches here rather than
+ *                                silently streaming the other bake.
+ *
+ * Whichever wins must allow cross-origin GET.
+ */
+function assetBaseFor(id: StreamVariantId, block: { slug: string; assetBase?: string }): string {
+  const fromEnv = id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
+  if (fromEnv) return withSlash(fromEnv);
+  if (block.assetBase) return withSlash(block.assetBase);
+  return `${ASSET_ROOT}/${block.slug}/assets/`;
+}
 
 /** site.json's vocabulary -> the shape ChunkManager consumes. The only place
  *  the two are translated. */
@@ -134,6 +183,11 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
     residentBudgetMB: m.cache.residentBudgetMB,
 
     fog: m.fog,
+    transmission: m.render.transmission,
+    progressiveTex: m.render.progressiveTextures,
+    texUpgradesPerTick: m.render.texUpgradesPerTick,
+    adaptiveDpr: m.render.adaptiveDpr,
+    maxDpr: m.render.maxDpr,
     // Inert until a ktx stage has run on the asset set; harmless before that.
     useKtx2: true,
 
@@ -146,9 +200,92 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
   };
 }
 
-const RAW = scene.stream;
+/**
+ * Merge a `streamV2`-shaped partial over the base `stream` block.
+ *
+ * Key by key, and deliberately NOT a generic deep merge: the shapes here are
+ * small and known, and a generic one would silently accept a key that means
+ * nothing. `aerial` and `dollhouse` merge one level down so a variant can
+ * replace just their `hide` list — which is the normal case, since that is the
+ * only part of them that names things inside a specific manifest.
+ */
+function mergeVariant(base: StreamConfig, v: StreamVariantConfig): StreamConfig {
+  return {
+    ...base,
+    slug: v.slug,
+    assetBase: v.assetBase ?? base.assetBase,
+    tiers: {
+      near: v.tiers?.near ?? base.tiers.near,
+      mid: v.tiers?.mid ?? base.tiers.mid,
+      far: v.tiers?.far ?? base.tiers.far,
+    },
+    streaming: { ...base.streaming, ...v.streaming },
+    cache: { ...base.cache, ...v.cache },
+    fog: { ...base.fog, ...v.fog },
+    render: { ...base.render, ...v.render },
+    forceTier: v.forceTier ?? base.forceTier,
+    hide: v.hide ?? base.hide,
+    aerial: base.aerial ? { ...base.aerial, ...v.aerial } : undefined,
+    dollhouse: base.dollhouse ? { ...base.dollhouse, ...v.dollhouse } : undefined,
+  };
+}
 
-const GROUND: StreamingConfig = toStreamingConfig(RAW);
+/** Which bake a route streams. `v1` is `stream`; `v2` is `streamV2` merged
+ *  over it, and falls back to `v1` when no such block is authored. */
+export type StreamVariantId = "v1" | "v2";
+
+/**
+ * One bake, fully resolved: where it is served from, and the three strategies
+ * over its manifest.
+ *
+ * These used to be module-level constants over the single `stream` block, which
+ * is exactly what stopped two bakes coexisting — the asset base in particular
+ * was a `const` derived from an env var, so the whole app could only ever point
+ * at one of them. Everything is per-variant now, and the route chooses.
+ */
+export interface StreamVariant {
+  id: StreamVariantId;
+  /** Ends in a slash. Everything the streamer fetches hangs off it. */
+  assetBase: string;
+  /** The navmesh travels WITH the chunks, so it follows the variant too — a
+   *  route walking on the other bake's navmesh is a subtle, nasty bug. */
+  navmeshUrl: string;
+  ground: StreamingConfig;
+  aerial: StreamingConfig | null;
+  dollhouse: StreamingConfig | null;
+  /** The two heights that switch ground <-> aerial, or null when this variant
+   *  authors no aerial block. */
+  aerialSwitch: { enterAbove: number; exitBelow: number } | null;
+}
+
+function buildVariant(id: StreamVariantId, raw: StreamConfig): StreamVariant {
+  const assetBase = assetBaseFor(id, raw);
+  return {
+    id,
+    assetBase,
+    navmeshUrl: `${assetBase}navmesh.glb`,
+    ground: toStreamingConfig(raw),
+    aerial: buildAerial(raw),
+    dollhouse: buildDollhouse(raw),
+    aerialSwitch: raw.aerial
+      ? { enterAbove: raw.aerial.enterAboveMetres, exitBelow: raw.aerial.exitBelowMetres }
+      : null,
+  };
+}
+
+const V1_RAW = scene.stream;
+const V2_RAW = scene.streamV2 ? mergeVariant(V1_RAW, scene.streamV2) : V1_RAW;
+
+/** Both bakes, resolved once. `/` reads v1, `/v2` reads v2; with no `streamV2`
+ *  block authored the two are the same object and `/v2` is simply an alias. */
+export const STREAM_VARIANTS: Record<StreamVariantId, StreamVariant> = {
+  v1: buildVariant("v1", V1_RAW),
+  v2: buildVariant("v2", V2_RAW),
+};
+
+export function streamVariant(id: StreamVariantId): StreamVariant {
+  return STREAM_VARIANTS[id];
+}
 
 // =============================================================================
 // MOBILE PROFILE — a proportional shrink, not a second set of magic numbers.
@@ -168,6 +305,15 @@ const MOBILE = {
   rungScale: 0.5,
   /** One chunk per tick — the smoothest fill on a weak CPU/GPU. */
   loadsPerTick: 1,
+  /** A phone cannot pay for a second full scene render, and the stand-in alpha
+   *  is indistinguishable on these materials. Forced, not scaled. */
+  transmission: "off" as const,
+  /** Half the upgrade wave: a small screen hides the preview rung for longer,
+   *  and the network is the scarcer resource here. */
+  texUpgradesScale: 0.5,
+  /** DPR ceiling. `AdaptiveQuality` still steps DOWN from it under load; this
+   *  is only where it starts. */
+  maxDpr: 1.25,
 };
 
 function mobileProfile(c: StreamingConfig): StreamingConfig {
@@ -183,6 +329,9 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
     textureDist: unloadDist,
     texRung: { near: rung(c.texRung.near), mid: rung(c.texRung.mid), far: rung(c.texRung.far) },
     maxLoadsPerTick: MOBILE.loadsPerTick,
+    transmission: MOBILE.transmission,
+    texUpgradesPerTick: Math.max(1, Math.round(c.texUpgradesPerTick * MOBILE.texUpgradesScale)),
+    maxDpr: Math.min(c.maxDpr, MOBILE.maxDpr),
     // A smaller bubble mounts fewer chunks, so the cache can be smaller too —
     // but it must still exceed the peak mounted count or the LRU does nothing.
     cacheLimit: Math.max(64, Math.round(c.cacheLimit * 0.4)),
@@ -208,8 +357,12 @@ export function detectProfile(): "mobile" | "desktop" {
  *  `resolveAerialConfig` (the elevated layout framings) and
  *  `resolveDollhouseConfig` (the overview, which is selected by view rather
  *  than by camera height). */
-export function resolveStreamConfig(profile?: "mobile" | "desktop"): StreamingConfig {
-  return (profile ?? detectProfile()) === "mobile" ? mobileProfile(GROUND) : GROUND;
+export function resolveStreamConfig(
+  variant: StreamVariantId,
+  profile?: "mobile" | "desktop",
+): StreamingConfig {
+  const ground = STREAM_VARIANTS[variant].ground;
+  return (profile ?? detectProfile()) === "mobile" ? mobileProfile(ground) : ground;
 }
 
 // =============================================================================
@@ -234,30 +387,22 @@ export function resolveStreamConfig(profile?: "mobile" | "desktop"): StreamingCo
 
 /** Merge `stream.aerial` over `stream` and resolve, or null when no aerial
  *  block is authored (in which case the swap never happens). */
-function buildAerial(): StreamingConfig | null {
-  const a = RAW.aerial;
+function buildAerial(raw: StreamConfig): StreamingConfig | null {
+  const a = raw.aerial;
   if (!a) return null;
   return toStreamingConfig({
-    ...RAW,
+    ...raw,
     tiers: {
-      near: a.tiers?.near ?? RAW.tiers.near,
-      mid: a.tiers?.mid ?? RAW.tiers.mid,
-      far: a.tiers?.far ?? RAW.tiers.far,
+      near: a.tiers?.near ?? raw.tiers.near,
+      mid: a.tiers?.mid ?? raw.tiers.mid,
+      far: a.tiers?.far ?? raw.tiers.far,
     },
-    streaming: { ...RAW.streaming, ...a.streaming },
-    cache: { ...RAW.cache, ...a.cache },
-    fog: { ...RAW.fog, ...a.fog },
+    streaming: { ...raw.streaming, ...a.streaming },
+    cache: { ...raw.cache, ...a.cache },
+    fog: { ...raw.fog, ...a.fog },
+    render: { ...raw.render, ...a.render },
   });
 }
-
-const AERIAL: StreamingConfig | null = buildAerial();
-
-/** The two heights that switch between the configs, or null when no aerial
- *  block is authored. Two of them so a camera resting on the line cannot flip
- *  the config every tick. */
-export const AERIAL_SWITCH: { enterAbove: number; exitBelow: number } | null = RAW.aerial
-  ? { enterAbove: RAW.aerial.enterAboveMetres, exitBelow: RAW.aerial.exitBelowMetres }
-  : null;
 
 /**
  * The config for an elevated framing camera, or null when `stream.aerial` is
@@ -270,16 +415,20 @@ export const AERIAL_SWITCH: { enterAbove: number; exitBelow: number } | null = R
  * block exists to fix. The bytes it would have saved are not there to save
  * anyway — the far tier is 22 MB for the entire model.
  */
-export function resolveAerialConfig(profile?: "mobile" | "desktop"): StreamingConfig | null {
-  if (!AERIAL) return null;
-  if ((profile ?? detectProfile()) !== "mobile") return AERIAL;
+export function resolveAerialConfig(
+  variant: StreamVariantId,
+  profile?: "mobile" | "desktop",
+): StreamingConfig | null {
+  const aerial = STREAM_VARIANTS[variant].aerial;
+  if (!aerial) return null;
+  if ((profile ?? detectProfile()) !== "mobile") return aerial;
   const rung = (px: number) => Math.max(128, Math.round((px * MOBILE.rungScale) / 128) * 128);
   return {
-    ...AERIAL,
+    ...aerial,
     texRung: {
-      near: rung(AERIAL.texRung.near),
-      mid: rung(AERIAL.texRung.mid),
-      far: rung(AERIAL.texRung.far),
+      near: rung(aerial.texRung.near),
+      mid: rung(aerial.texRung.mid),
+      far: rung(aerial.texRung.far),
     },
     maxLoadsPerTick: MOBILE.loadsPerTick,
   };
@@ -307,25 +456,24 @@ export function resolveAerialConfig(profile?: "mobile" | "desktop"): StreamingCo
 /** Merge `stream.dollhouse` over `stream` and resolve, or null when no
  *  dollhouse block is authored (the overview then streams with whatever the
  *  camera's height selects, like any other elevated camera). */
-function buildDollhouse(): StreamingConfig | null {
-  const d = RAW.dollhouse;
+function buildDollhouse(raw: StreamConfig): StreamingConfig | null {
+  const d = raw.dollhouse;
   if (!d) return null;
   return toStreamingConfig({
-    ...RAW,
+    ...raw,
     tiers: {
-      near: d.tiers?.near ?? RAW.tiers.near,
-      mid: d.tiers?.mid ?? RAW.tiers.mid,
-      far: d.tiers?.far ?? RAW.tiers.far,
+      near: d.tiers?.near ?? raw.tiers.near,
+      mid: d.tiers?.mid ?? raw.tiers.mid,
+      far: d.tiers?.far ?? raw.tiers.far,
     },
-    streaming: { ...RAW.streaming, ...d.streaming },
-    cache: { ...RAW.cache, ...d.cache },
-    fog: { ...RAW.fog, ...d.fog },
-    forceTier: d.forceTier ?? RAW.forceTier,
-    hide: d.hide ?? RAW.hide,
+    streaming: { ...raw.streaming, ...d.streaming },
+    cache: { ...raw.cache, ...d.cache },
+    fog: { ...raw.fog, ...d.fog },
+    render: { ...raw.render, ...d.render },
+    forceTier: d.forceTier ?? raw.forceTier,
+    hide: d.hide ?? raw.hide,
   });
 }
-
-const DOLLHOUSE: StreamingConfig | null = buildDollhouse();
 
 /**
  * The config for the dollhouse overview, or null when `stream.dollhouse` is
@@ -336,10 +484,14 @@ const DOLLHOUSE: StreamingConfig | null = buildDollhouse();
  * view whole — shrinking either would hand a phone a half-built model, and
  * there are no bytes to save: the entire far tier is ~22 MB.
  */
-export function resolveDollhouseConfig(profile?: "mobile" | "desktop"): StreamingConfig | null {
-  if (!DOLLHOUSE) return null;
-  if ((profile ?? detectProfile()) !== "mobile") return DOLLHOUSE;
-  return { ...DOLLHOUSE, maxLoadsPerTick: MOBILE.loadsPerTick };
+export function resolveDollhouseConfig(
+  variant: StreamVariantId,
+  profile?: "mobile" | "desktop",
+): StreamingConfig | null {
+  const dollhouse = STREAM_VARIANTS[variant].dollhouse;
+  if (!dollhouse) return null;
+  if ((profile ?? detectProfile()) !== "mobile") return dollhouse;
+  return { ...dollhouse, maxLoadsPerTick: MOBILE.loadsPerTick };
 }
 
 /**

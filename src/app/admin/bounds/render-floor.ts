@@ -3,15 +3,15 @@
 /**
  * Top-down orthographic renderer for the map plan.
  *
- * The output PNG's pixel <-> world mapping is fixed by the camera, not by any
- * post-hoc transform, so it drops straight into the runtime minimap:
+ * The output PNG's pixel <-> world mapping is fixed by the camera plus one
+ * half-turn on export (see rotate180), so it drops straight into the minimap:
  *
- *   pixel (0, 0)   <->   world (bbox.maxX, bbox.maxZ)
- *   pixel (W, H)   <->   world (bbox.minX, bbox.minZ)
+ *   pixel (0, 0)   <->   world (bbox.minX, bbox.minZ)
+ *   pixel (W, H)   <->   world (bbox.maxX, bbox.maxZ)
  *
- * That 180-degree flip is encoded in `cam.up = +Z`, the same convention the
- * runtime's bounds objects use. Render here, paste the bounds into
- * `site.json > map.plan`, and world->pixel is exact with no calibration.
+ * Screen right is +X and screen up is -Z. Render here, paste the bounds into
+ * `site.json > map.plan`, and world->pixel is exact with no calibration — but
+ * paste BOTH, since the rotation and the bounds only agree as a pair.
  *
  * The bbox is supplied by the CALLER, so a render is never silently tied to one
  * source: whatever rect you frame to is the rect you author beside the image.
@@ -178,7 +178,7 @@ export async function renderTopDown(
 
   // toBlob, not toDataURL: at 4k the base64 string blocks the main thread.
   const blob = await new Promise<Blob | null>((res) =>
-    renderer.domElement.toBlob(res, "image/png"),
+    rotate180(renderer.domElement).toBlob(res, "image/png"),
   );
 
   if (mode !== "silhouette") rs.remove(scene);
@@ -186,6 +186,30 @@ export async function renderTopDown(
 
   if (!blob) throw new Error("toBlob returned null (render likely exceeded GPU limits)");
   return { url: URL.createObjectURL(blob), bytes: blob.size, w: pixelW, h: pixelH };
+}
+
+/**
+ * Turns the render half a turn so the PNG reads the right way up.
+ *
+ * A camera looking down -Y with up = +Z puts pixel (0,0) at (maxX, maxZ) — the
+ * site comes out upside-down to a reader. Rotating here, and emitting PLAIN
+ * bounds beside it (see planJson), leaves world->pixel exactly where it was: the
+ * image turns and the rect turns with it. Doing one without the other puts every
+ * click and marker 180 degrees out, which is why they live in one commit.
+ *
+ * A rotation, unlike a flip, cannot change handedness — so this only changes
+ * which way the picture reads, never which side of you something is on.
+ */
+function rotate180(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = document.createElement("canvas");
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext("2d");
+  if (!ctx) return src;
+  ctx.translate(src.width, src.height);
+  ctx.rotate(Math.PI);
+  ctx.drawImage(src, 0, 0);
+  return out;
 }
 
 function addLighting(scene: THREE.Scene, bbox: Bbox): void {

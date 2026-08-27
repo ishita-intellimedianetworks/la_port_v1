@@ -44,7 +44,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { ChunkManager, type StreamStats } from "@/streaming/chunk-manager";
-import { STREAM_ASSET_BASE, detectProfile, type StreamingConfig } from "@/streaming/config";
+import { detectProfile, type StreamingConfig } from "@/streaming/config";
+import { useStreamVariant } from "@/streaming/variant";
 import type { Manifest, MaterialDef, TexManifest } from "@/streaming/types";
 import { useProgressStore } from "@/shared/stores/progress-store";
 
@@ -69,6 +70,13 @@ export interface StreamedModelProps {
 
 export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedModelProps) {
   const { scene, camera, gl } = useThree();
+  // WHICH BAKE. `/` streams `stream`, `/v2` streams `streamV2` — different
+  // manifests at different prefixes, so this decides every URL below. It is in
+  // the construction effect's dep list on purpose: pointing at another asset
+  // set is not a retune, it is a different model, and the decoded-chunk cache
+  // from the old one is worthless against it.
+  const variant = useStreamVariant();
+  const assetBase = variant.assetBase;
   const mgr = useRef<ChunkManager | null>(null);
   const acc = useRef(0);
 
@@ -99,9 +107,9 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
     let alive = true;
     (async () => {
       const [manifest, materials, tex] = await Promise.all([
-        loadJson<Manifest>(`${STREAM_ASSET_BASE}manifest.json`),
-        loadJson<MaterialDef[]>(`${STREAM_ASSET_BASE}materials.json`),
-        loadJson<TexManifest>(`${STREAM_ASSET_BASE}tex.json`),
+        loadJson<Manifest>(`${assetBase}manifest.json`),
+        loadJson<MaterialDef[]>(`${assetBase}materials.json`),
+        loadJson<TexManifest>(`${assetBase}tex.json`),
       ]);
       if (!alive) return;
 
@@ -115,7 +123,7 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
 
       const created = new ChunkManager({
         scene: scene as THREE.Scene,
-        assetBase: STREAM_ASSET_BASE,
+        assetBase,
         manifest,
         materials,
         tex,
@@ -144,7 +152,7 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
       mgr.current?.dispose();
       mgr.current = null;
     };
-  }, [scene, gl]);
+  }, [scene, gl, assetBase]);
 
   // Config swap (the mobile profile landing after mount, or a live retune):
   // re-decide every chunk against the new bands on the next tick, keeping the

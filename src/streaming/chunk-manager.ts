@@ -25,7 +25,16 @@ interface ChunkState {
   /** True while retexture() has a load in flight, so the update tick doesn't
    *  stack duplicate passes over the same group. */
   retexturing?: boolean;
+  /** The rung the materials on screen were dressed at, or null when untextured.
+   *  Progressive mounting dresses a chunk at the smallest rung and promotes it
+   *  later, so "is this chunk textured" stopped being a boolean question. */
+  texPx: number | null;
 }
+
+/** The px passed to pickTex to mean "the smallest rung this image has". pickTex
+ *  clamps a request down to the largest rung <= px and falls back to the
+ *  smallest when nothing qualifies, so 1 always resolves to the smallest. */
+const PREVIEW_PX = 1;
 
 // Debug: colors for the per-chunk bounding-sphere gizmos, by current tier.
 const TIER_COLOR: Record<Tier, number> = { near: 0x39d353, mid: 0xe3b341, far: 0xf0883e };
@@ -177,6 +186,36 @@ export class ChunkManager {
    *  the next tick. */
   private hidden = new Set<string>();
 
+  /** Object names in `animated.glb` the current config hides, and the objects
+   *  that were actually switched off for them. The animated group is
+   *  permanently resident, so hiding is a `visible = false` rather than an
+   *  unload — see `StreamHideRule.node`. */
+  private hiddenNodes = new Set<string>();
+  private hiddenAnimated: THREE.Object3D[] = [];
+
+  /**
+   * Chunks that have finished decoding and dressing but are NOT yet in the
+   * scene.
+   *
+   * Adding each one the moment its own decode returns is what makes a fill read
+   * as assembly rather than as arrival: decode time tracks chunk size and this
+   * bake's chunks span two orders of magnitude, so a batch requested together
+   * lands scattered over seconds, essentially in size order — which is no order
+   * at all to the eye. Holding them and flushing on the streaming tick turns
+   * that into a few coherent waves, and because the flush is sorted by distance
+   * each wave fills outward from the camera.
+   */
+  private pendingReveal: {
+    st: ChunkState;
+    group: THREE.Group;
+    tier: Tier;
+    owner: string;
+    textured: boolean;
+    px: number;
+    /** When it was queued, for the stall guard in flushReveals. */
+    at: number;
+  }[] = [];
+
   private mode: "adaptive" | "full";
   /** Set by dispose(). Async work started before it (the instance palette, the
    *  animated rig, an in-flight chunk) must not attach anything afterwards. */
@@ -218,6 +257,15 @@ export class ChunkManager {
 
     const draco = new DRACOLoader();
     draco.setDecoderPath(opts.dracoPath ?? "/draco/");
+    // Decode WIDER. three's default pool is 4 workers, and on a Draco-compressed
+    // chunk set that is the throughput ceiling on the whole fill: decoding is
+    // what stands between asking for a chunk and being able to show it, and
+    // `loadsPerTick` cannot raise a number the decoder is already the bottleneck
+    // for. One core is left for the main thread's own work, which is why this is
+    // hardwareConcurrency MINUS one rather than all of it.
+    draco.setWorkerLimit(
+      Math.max(4, Math.min(12, (typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4) - 1)),
+    );
     draco.preload();
     this.loader = new GLTFLoader();
     this.loader.setDRACOLoader(draco);
@@ -241,13 +289,14 @@ export class ChunkManager {
     }
 
     for (const c of this.manifest.chunks) {
-      this.states.set(c.id, { entry: c, current: null, group: null, loadingTier: null, textured: false, outTicks: 0, texOwner: null });
+      this.states.set(c.id, { entry: c, current: null, group: null, loadingTier: null, textured: false, outTicks: 0, texOwner: null, texPx: null });
       const g = sphereGizmo(c.center, c.radius);
       this.gizmos.set(c.id, g);
       this.boundsGroup.add(g);
     }
 
     this.hidden = this.resolveHidden();
+    this.hiddenNodes = this.resolveHiddenNodes();
   }
 
   /**
@@ -270,14 +319,57 @@ export class ChunkManager {
     const nameOf = new Map(this.materials.map((m) => [m.index, m.name]));
     for (const c of this.manifest.chunks) {
       for (const r of rules) {
+        // A `node` rule addresses the animated group, not the chunks — see
+        // resolveHiddenNodes. Skipping it here is what stops it matching every
+        // chunk by stating no chunk predicate.
+        if (r.node !== undefined) continue;
         if (r.material === undefined && r.minRadiusMetres === undefined) continue;
-        if (r.material !== undefined && !c.materials.some((i) => nameOf.get(i) === r.material)) continue;
+        if (r.material !== undefined) {
+          const want = Array.isArray(r.material) ? r.material : [r.material];
+          if (!c.materials.some((i) => want.includes(nameOf.get(i) ?? ""))) continue;
+        }
         if (r.minRadiusMetres !== undefined && c.radius < r.minRadiusMetres) continue;
         out.add(c.id);
         break;
       }
     }
     return out;
+  }
+
+  /** The `node` half of `cfg.hide` — object names in `animated.glb`.
+   *
+   *  Separate from the chunk rules because it is a different addressing scheme
+   *  over a different thing: chunks are anonymous and are named by the material
+   *  they carry, while the animated group keeps the source hierarchy and is
+   *  named directly. See `StreamHideRule.node` for why that group cannot be
+   *  reached by a chunk rule at all. */
+  private resolveHiddenNodes(): Set<string> {
+    const out = new Set<string>();
+    for (const r of this.cfg.hide ?? []) if (r.node) out.add(r.node);
+    return out;
+  }
+
+  /**
+   * Apply the current `node` rules to the animated group.
+   *
+   * Reversible by construction: exactly the objects this hid are the objects it
+   * un-hides, so a mesh that is invisible for some OTHER reason (applyMaterials
+   * hides un-texturable shells) is never quietly switched back on.
+   *
+   * Called from both `setConfig` and `initAnimation` because either can land
+   * last — the dollhouse config is normally in force before `animated.glb`
+   * finishes downloading, and the view can also swap long after it has.
+   */
+  private applyNodeHiding() {
+    for (const o of this.hiddenAnimated) o.visible = true;
+    this.hiddenAnimated = [];
+    const g = this.animGroup;
+    if (!g || this.hiddenNodes.size === 0) return;
+    g.traverse((o) => {
+      if (o === g || !o.visible || !this.hiddenNodes.has(o.name)) return;
+      o.visible = false;
+      this.hiddenAnimated.push(o);
+    });
   }
 
   /**
@@ -303,6 +395,10 @@ export class ChunkManager {
     // over (and vice versa) — on the next tick, through the ordinary
     // mount/unmount path.
     this.hidden = this.resolveHidden();
+    // The animated group has no mount/unmount path to ride, so its rules are
+    // applied here and now rather than being picked up by the next tick.
+    this.hiddenNodes = this.resolveHiddenNodes();
+    this.applyNodeHiding();
   }
 
   /** Toggle the per-chunk bounding-sphere gizmos (radius + tier colour). */
@@ -399,6 +495,11 @@ export class ChunkManager {
       this._frustum.setFromProjectionMatrix(this._projView);
     }
 
+    // 0. Show whatever finished decoding since the last tick, as one wave.
+    //    Before the tier decisions below, so this tick reasons about what is
+    //    actually on screen rather than about a set one flush out of date.
+    this.flushReveals();
+
     // 1. decide desired tier per chunk, collect changes with a priority (distance)
     const changes: { st: ChunkState; want: Tier | null; dist: number }[] = [];
     this.instResident.length = 0;
@@ -475,12 +576,37 @@ export class ChunkManager {
       this.mount(l.st, l.want as Tier);
     }
 
-    // 3. textures follow a distance cutoff, not the tier: a chunk stays loaded
-    //    past textureDist but drops to a flat material once beyond it.
+    // 3. Textures. Two things can be out of date on a mounted chunk:
+    //
+    //    a) whether it is textured at all — that follows a distance cutoff
+    //       rather than the tier, so a chunk stays loaded past textureDist but
+    //       drops to a flat material once beyond it;
+    //    b) which RUNG it carries — progressive mounting dresses a chunk at the
+    //       smallest rung so it can appear immediately, and this is where it is
+    //       promoted to the rung its tier actually asks for.
+    //
+    //    (a) is unbudgeted: it is a downgrade to a flat material, or a chunk
+    //    coming back into the textured zone, and both are rare. (b) is budgeted
+    //    and nearest-first, because after a fill EVERY chunk wants an upgrade at
+    //    once and an unbounded wave would re-saturate the network the fill has
+    //    just cleared.
+    const upgrades: { st: ChunkState; dist: number }[] = [];
     for (const st of this.states.values()) {
-      if (!st.current || !st.group) continue;
+      if (!st.current || !st.group || st.retexturing) continue;
       const want = this.isTextured(st.current, st.entry);
-      if (want !== st.textured && !st.retexturing) this.retexture(st, want);
+      if (want !== st.textured) { this.retexture(st, want); continue; }
+      if (!want) continue;
+      if (st.texPx !== this.cfg.texRung[st.current]) {
+        upgrades.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
+      }
+    }
+    if (upgrades.length) {
+      upgrades.sort((a, b) => a.dist - b.dist);
+      const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
+      for (let i = 0; i < Math.min(perTick, upgrades.length); i++) {
+        const u = upgrades[i];
+        this.retexture(u.st, true, this.cfg.texRung[u.st.current!]);
+      }
     }
 
     // 4. HARD MEMORY CEILING. Distance bands alone can't bound memory (density
@@ -646,6 +772,7 @@ export class ChunkManager {
 
   private async mount(st: ChunkState, tier: Tier) {
     st.loadingTier = tier;
+    let queued = false;
     const url = this.lodUrl(st.entry, tier);
     if (!url) { st.loadingTier = null; return; } // fully-instanced chunk: nothing to fetch
     try {
@@ -681,14 +808,112 @@ export class ChunkManager {
       // neighbours. The previously mounted tier stays visible, fully textured,
       // for the whole load: we acquire under a NEW owner token and only release
       // the old one after the swap below.
+      //
+      // WHICH rung it waits for is the difference between a scene that appears
+      // in one piece and one that assembles itself in front of you. At the
+      // tier's own rung every chunk waits on its own images, so chunks land one
+      // at a time in whatever order the network returns them. At the preview
+      // rung they nearly all hit the texture cache instead — the whole image set
+      // is ~0.1 MB at 128 px and is SHARED between chunks — so a neighbourhood
+      // appears together and sharpens a moment later (the upgrade pass in
+      // update() phase 3).
+      //
+      // Two exceptions, both because the preview rung is for filling a BLANK,
+      // never for replacing something already on screen:
+      //
+      //   a tier SWAP keeps the previous tier visible for the whole load, so
+      //   there is nothing to hurry and no reason to accept a blurry
+      //   intermediate — dropping to 128 px and climbing back would be a
+      //   visible quality dip every time you walk toward a building;
+      //
+      //   NEAR is by definition what is being looked at. The preview rung
+      //   resolves to ~128 px, which on a decal off a 2048 source is mush, and
+      //   near is only a few dozen chunks, so waiting for their real textures
+      //   costs almost nothing.
+      const isSwap = st.group !== null && st.current !== null;
+      const preview = this.cfg.progressiveTex && textured && !isSwap && tier !== "near";
+      const px = preview ? PREVIEW_PX : this.cfg.texRung[tier];
       const owner = `${st.entry.id}#${++this.texSeq}`;
-      await this.applyMaterials(group, tier, textured, owner);
+      await this.applyMaterials(group, tier, textured, owner, px);
       if (st.loadingTier !== tier) {
         this.releaseTextures(owner); // abandoned mid-load; don't leak the refs
         return;
       }
 
+      // Ready, but NOT shown yet — queued for the next flush so it arrives with
+      // its neighbours. `loadingTier` deliberately stays set until then: it is
+      // what stops a duplicate load being queued for the same chunk, and what
+      // keeps evictCache() from disposing the group between here and the flush.
+      this.pendingReveal.push({ st, group, tier, owner, textured, px, at: performance.now() });
+      queued = true;
+    } catch (e) {
+      console.error("chunk load failed", url, e);
+    } finally {
+      // A QUEUED chunk keeps `loadingTier` until flushReveals clears it. Clearing
+      // it here would make every reveal look stale and drop the whole batch.
+      if (!queued && st.loadingTier === tier) st.loadingTier = null;
+    }
+  }
+
+  /**
+   * Reveal decoded chunks as an OUTWARD SWEEP, not in the order they happened to
+   * finish.
+   *
+   * This is the whole of the arrival smoothing, and it is done by ORDERING
+   * rather than by shading — deliberately. Two per-chunk fades were tried in the
+   * repo this came from and both read as flicker, not as a fade: a plain alpha
+   * ramp (flipping `transparent` moves a mesh into the transparent pass, where
+   * it sorts against itself and shows its own back faces, and recompiles the
+   * shader at each end of the ramp), and `alphaHash` (a STOCHASTIC threshold
+   * meant to be resolved by temporal AA — without TAA it is animated per-pixel
+   * noise). Nothing here touches a material, so there is nothing left to
+   * flicker.
+   *
+   * The rule: a chunk waits until nothing NEARER is still decoding. Decode time
+   * tracks chunk size, so completion order is essentially size order, which is
+   * why an unordered fill looked random. Gating on "is anything closer still
+   * coming?" turns it into a front that moves out from the camera.
+   *
+   * MAX_HOLD_MS is the escape hatch: one slow near chunk must not dam everything
+   * behind it, so anything waiting longer than that goes anyway.
+   */
+  private static readonly MAX_HOLD_MS = 600;
+
+  private flushReveals() {
+    if (!this.pendingReveal.length) return;
+
+    // The nearest chunk still DECODING — queued ones are already done, so they
+    // must not count as blocking themselves.
+    const queued = new Set(this.pendingReveal.map((r) => r.st));
+    let nearestInFlight = Infinity;
+    for (const st of this.states.values()) {
+      if (!st.loadingTier || queued.has(st)) continue;
+      const d = this.surfaceDist(this._cam, st.entry);
+      if (d < nearestInFlight) nearestInFlight = d;
+    }
+
+    const now = performance.now();
+    const ready: typeof this.pendingReveal = [];
+    const hold: typeof this.pendingReveal = [];
+    for (const r of this.pendingReveal) {
+      const d = this.surfaceDist(this._cam, r.st.entry);
+      if (d <= nearestInFlight || now - r.at >= ChunkManager.MAX_HOLD_MS) ready.push(r);
+      else hold.push(r);
+    }
+    this.pendingReveal = hold;
+    if (!ready.length) return;
+
+    ready.sort((a, b) => this.surfaceDist(this._cam, a.st.entry) - this.surfaceDist(this._cam, b.st.entry));
+    for (const r of ready) {
+      const { st, group, tier, owner, textured, px } = r;
+      // The world moved on while this sat in the queue — the chunk was unloaded,
+      // or re-tiered out from under it. Drop it and let go of its textures.
+      if (st.loadingTier !== tier) {
+        this.releaseTextures(owner);
+        continue;
+      }
       st.textured = textured;
+      st.texPx = textured ? px : null;
       // swap: remove previous tier group, add new
       if (st.group && st.group !== group) this.scene.remove(st.group);
       if (group.parent !== this.scene) this.scene.add(group);
@@ -698,26 +923,80 @@ export class ChunkManager {
       st.texOwner = owner;
       st.group = group;
       st.current = tier;
-      // bound the CPU cache now that this chunk is mounted (it's protected).
-      this.evictCache();
-    } catch (e) {
-      console.error("chunk load failed", url, e);
-    } finally {
-      if (st.loadingTier === tier) st.loadingTier = null;
+      st.loadingTier = null;
     }
+    // bound the CPU cache now that these chunks are mounted (they're protected).
+    this.evictCache();
   }
 
-  /** Re-dress an ALREADY VISIBLE group when it crosses textureDist. The new maps
-   *  are fetched and assigned before the old owner is released, so the mesh is
-   *  never on screen with a disposed or missing texture. Guarded by
-   *  `st.retexturing` so the update tick can't stack duplicate passes. */
-  private async retexture(st: ChunkState, want: boolean) {
+  /**
+   * Re-dress an ALREADY VISIBLE group by swapping MAPS ON THE EXISTING
+   * MATERIALS — never by rebuilding them.
+   *
+   * This is the whole difference between a texture upgrade you cannot see and a
+   * white flash. `applyMaterials()` disposes each material and builds a fresh
+   * one whose `map` is null until its image resolves; run against a group that
+   * is on screen, the mesh renders untextured for the length of a network fetch.
+   * That was tolerable when the only caller was the textureDist crossing, which
+   * essentially never fires (textureDist == unloadDist). Progressive mounting
+   * makes EVERY chunk take this path once, a few at a time, so the scene would
+   * flash its way through itself mesh by mesh.
+   *
+   * Here the old map stays bound until `assign` swaps the new one in, so there
+   * is no frame without a texture.
+   */
+  private async reskinTextures(
+    group: THREE.Group,
+    tier: Tier,
+    textured: boolean,
+    owner: string,
+    px: number,
+  ) {
+    const pending: Promise<void>[] = [];
+    const fmt = this.cfg.texFormat?.[tier] ?? "auto";
+    group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const idx = mesh.userData.matIdx as number | undefined;
+      const def = idx === undefined ? undefined : this.materials[idx];
+      const m = mesh.material as THREE.MeshStandardMaterial;
+      if (!m || !def?.textures) return;
+      const T = def.textures;
+      if (!textured) {
+        // Going flat: this one IS a visible change, and is meant to be — it is
+        // what "beyond textureDist" looks like. Dropping the maps is immediate
+        // because there is nothing to wait for.
+        m.map = null;
+        m.normalMap = null;
+        m.metalnessMap = null;
+        m.roughnessMap = null;
+        m.emissiveMap = null;
+        m.needsUpdate = true;
+        return;
+      }
+      if (T.baseColor) pending.push(this.setTex(T.baseColor, px, "srgb", owner, (t) => { m.map = t; m.needsUpdate = true; }, fmt));
+      if (T.normal) pending.push(this.setTex(T.normal, px, "linear", owner, (t) => { m.normalMap = t; m.needsUpdate = true; }, fmt));
+      if (T.metallicRoughness)
+        pending.push(this.setTex(T.metallicRoughness, px, "linear", owner, (t) => { m.metalnessMap = t; m.roughnessMap = t; m.needsUpdate = true; }, fmt));
+      if (T.emissive) pending.push(this.setTex(T.emissive, px, "srgb", owner, (t) => { m.emissiveMap = t; m.needsUpdate = true; }, fmt));
+    });
+    // settle, never reject — setTex catches its own failures.
+    await Promise.all(pending);
+  }
+
+  /** Re-dress an ALREADY VISIBLE group: either because it crossed textureDist,
+   *  or to promote it off the progressive preview rung. The new maps are fetched
+   *  and assigned before the old owner is released, so the mesh is never on
+   *  screen with a disposed or missing texture. Guarded by `st.retexturing` so
+   *  the update tick can't stack duplicate passes. */
+  private async retexture(st: ChunkState, want: boolean, px?: number) {
     const group = st.group, tier = st.current;
     if (!group || !tier) return;
     st.retexturing = true;
+    const rung = px ?? this.cfg.texRung[tier];
     const owner = `${st.entry.id}#${++this.texSeq}`;
     try {
-      await this.applyMaterials(group, tier, want, owner);
+      await this.reskinTextures(group, tier, want, owner, rung);
       // Bail if the chunk was unmounted or re-tiered while we were loading.
       if (st.group !== group || st.current !== tier) {
         this.releaseTextures(owner);
@@ -726,6 +1005,7 @@ export class ChunkManager {
       if (st.texOwner && st.texOwner !== owner) this.releaseTextures(st.texOwner);
       st.texOwner = owner;
       st.textured = want;
+      st.texPx = want ? rung : null;
     } finally {
       st.retexturing = false;
     }
@@ -746,6 +1026,8 @@ export class ChunkManager {
     }
     if (st.texOwner) this.releaseTextures(st.texOwner);
     st.texOwner = null;
+    st.texPx = null;
+    st.textured = false;
     st.group = null;
     st.current = null;
     st.outTicks = 0;
@@ -854,7 +1136,10 @@ export class ChunkManager {
    *  the handover, releasing the previous token only once this group is on
    *  screen. Releasing here (as this used to) disposed textures the visible mesh
    *  was still using. */
-  private async applyMaterials(group: THREE.Group, tier: Tier, textured: boolean, owner: string) {
+  private async applyMaterials(group: THREE.Group, tier: Tier, textured: boolean, owner: string, px?: number) {
+    // The rung to request. Explicit so mount() can dress a chunk at the preview
+    // rung and a later pass can upgrade the SAME group to the tier's own.
+    const rung = px ?? this.cfg.texRung[tier];
     const pending: Promise<void>[] = [];
     group.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -887,7 +1172,7 @@ export class ChunkManager {
       // def: the port's OSM_Buildings carry their tint as vertex colours on 23%
       // of the model's triangles, and without this they all render flat.
       const hasVertexColor = !!mesh.geometry.getAttribute("color");
-      mesh.material = this.buildMaterial(def, textured ? tier : null, owner, pending, hasVertexColor);
+      mesh.material = this.buildMaterial(def, textured ? tier : null, owner, pending, hasVertexColor, tier, rung);
       // Hide un-texturable shells: some decimated mid/far LOD prims lose their
       // UVs in baking, so a texture can't map onto them and they'd render as a
       // solid white patch. The near LOD keeps all its UVs, so the building comes
@@ -909,14 +1194,31 @@ export class ChunkManager {
     await Promise.all(pending);
   }
 
+  /** True when three's transmission pass may run for a chunk mounted at
+   *  `mountTier`. See `StreamConfig.render.transmission` for why this is gated:
+   *  ONE visible transmissive material re-renders the whole opaque scene into a
+   *  buffer every frame, which roughly doubles draw calls. */
+  private transmissionAllowed(mountTier: Tier | null): boolean {
+    const mode = this.cfg.transmission;
+    if (mode === "all") return true;
+    if (mode === "off") return false;
+    return mountTier === "near";
+  }
+
   private buildMaterial(
     def: MaterialDef | undefined,
     tier: Tier | null,
     owner: string,
     pending: Promise<void>[],
     vertexColors = false,
+    /** The tier the chunk is MOUNTED at — distinct from `tier`, which is null
+     *  when the chunk is beyond textureDist. Only used to gate transmission. */
+    mountTier: Tier | null = tier,
+    /** The rung to request. Defaults to the tier's own. */
+    px?: number,
   ): THREE.Material {
-    const hasTransmission = !!def && (def.transmission ?? 0) > 0;
+    const wantsTransmission = !!def && (def.transmission ?? 0) > 0;
+    const hasTransmission = wantsTransmission && this.transmissionAllowed(mountTier);
     const m = hasTransmission ? new THREE.MeshPhysicalMaterial() : new THREE.MeshStandardMaterial();
     m.vertexColors = vertexColors;
     if (def) {
@@ -931,6 +1233,16 @@ export class ChunkManager {
       }
       m.side = def.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
 
+      if (wantsTransmission && !hasTransmission) {
+        // Transmission is gated off for this tier, so stand it in with plain
+        // alpha. This bake's transmissive materials all carry no baseColour map
+        // and `thickness: 0`, which is exactly the case where the two look
+        // near-identical — and this costs no extra scene render.
+        m.transparent = true;
+        m.opacity = Math.max(0.05, 1 - (def.transmission ?? 0) * 0.85);
+        m.depthWrite = false;
+      }
+
       if (hasTransmission) {
         // Glass / water: transparent-refractive. Rendered via three's transmission
         // pass so you can see textured geometry behind it (e.g. the pool bottom).
@@ -943,7 +1255,7 @@ export class ChunkManager {
       }
 
       if (tier && def.textures) {
-        const px = this.cfg.texRung[tier];
+        const rung = px ?? this.cfg.texRung[tier];
         // Format is per tier too, so a distant chunk can take the cheap
         // GPU-compressed rung while what you stand next to stays WebP-crisp
         // (or vice versa). See site.json > stream.tiers.<t>.texture.format.
@@ -952,12 +1264,12 @@ export class ChunkManager {
         // Every slot returns a promise that settles when the image is decoded and
         // assigned; applyMaterials awaits them all so the mesh is never shown
         // with a half-populated material.
-        if (T.baseColor) pending.push(this.setTex(T.baseColor, px, "srgb", owner, (t) => { m.map = t; m.needsUpdate = true; }, fmt));
-        if (T.normal) pending.push(this.setTex(T.normal, px, "linear", owner, (t) => { m.normalMap = t; m.needsUpdate = true; }, fmt));
+        if (T.baseColor) pending.push(this.setTex(T.baseColor, rung, "srgb", owner, (t) => { m.map = t; m.needsUpdate = true; }, fmt));
+        if (T.normal) pending.push(this.setTex(T.normal, rung, "linear", owner, (t) => { m.normalMap = t; m.needsUpdate = true; }, fmt));
         if (T.metallicRoughness)
-          pending.push(this.setTex(T.metallicRoughness, px, "linear", owner, (t) => { m.metalnessMap = t; m.roughnessMap = t; m.needsUpdate = true; }, fmt));
+          pending.push(this.setTex(T.metallicRoughness, rung, "linear", owner, (t) => { m.metalnessMap = t; m.roughnessMap = t; m.needsUpdate = true; }, fmt));
         // (occlusion/aoMap skipped: needs a 2nd UV set the geometry doesn't carry)
-        if (T.emissive) pending.push(this.setTex(T.emissive, px, "srgb", owner, (t) => { m.emissiveMap = t; m.needsUpdate = true; }, fmt));
+        if (T.emissive) pending.push(this.setTex(T.emissive, rung, "srgb", owner, (t) => { m.emissiveMap = t; m.needsUpdate = true; }, fmt));
       }
     } else {
       m.color.set(0x888888);
@@ -1162,8 +1474,15 @@ export class ChunkManager {
       // Palette geometry is always resident, so it is always textured at the
       // near rung. Its textures are held under one permanent owner token rather
       // than a per-chunk one — they must outlive any individual chunk.
+      //
+      // The transmission gate gets `null`, NOT the near tier. The palette is
+      // resident for the whole session, so treating it as near would keep the
+      // transmission pass — a full extra scene render — switched on permanently
+      // no matter what the chunk tiers were doing, which is exactly the cost the
+      // gate exists to remove. Only "all" turns it on here.
       const pending: Promise<void>[] = [];
-      return this.buildMaterial(this.materials[matIdx], TIER_ORDER[0], "palette", pending, false);
+      const gate = this.cfg.transmission === "all" ? TIER_ORDER[0] : null;
+      return this.buildMaterial(this.materials[matIdx], TIER_ORDER[0], "palette", pending, false, gate);
     });
     const ok = await layer.load();
     // The palette download outlives a dispose() that lands mid-flight (React
@@ -1201,6 +1520,10 @@ export class ChunkManager {
     }
     this.scene.add(gltf.scene);
     this.animGroup = gltf.scene;
+    // The config was very likely set before this download finished, so apply
+    // its `node` rules now — otherwise the dollhouse gets its ocean back every
+    // time animated.glb happens to land after the view has already switched.
+    this.applyNodeHiding();
     this.mixer = new THREE.AnimationMixer(gltf.scene);
     for (const clip of gltf.animations) this.mixer.clipAction(clip).play();
     return gltf.animations.length > 0;
@@ -1236,6 +1559,9 @@ export class ChunkManager {
           mat?.dispose();
         }
       });
+    for (const r of this.pendingReveal) this.releaseTextures(r.owner);
+    this.pendingReveal = [];
+    this.hiddenAnimated = [];
     this.texCache.clear();
     this.texLoading.clear();
     this.texRefs.clear();

@@ -644,6 +644,21 @@ body {
   transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), pointer-events 0s 0.35s;
 }
 
+/* The progress-driven background veil. Its own layer with an animated OPACITY,
+   which the compositor changes for free — the alpha used to live in the root's
+   `background-color`, repainting the full screen every frame (and forcing the
+   blended radial above it to re-composite with it).
+   z-index -1 puts it exactly where that background-color sat: behind every
+   other child of .htl-root, which itself is a stacking context. */
+.htl-veil {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--htl-bg);
+  pointer-events: none;
+  will-change: opacity;
+}
+
 .htl-bg-radial {
   position: absolute;
   inset: 0;
@@ -703,6 +718,15 @@ body {
 
 .htl-progress-fill {
   height: 100%;
+  /* Full width, SCALED — not a changing width. Animating `width` re-ran layout
+     for 120 ms after each of the hundred-odd progress steps, i.e. more or less
+     continuously through the load, on the same main thread that is decoding
+     mesh chunks. `transform` is compositor-only.
+     The gradient is unaffected: it is sized to this element's own box in both
+     versions, so the same span of it is on screen at any given percentage. */
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
   background: linear-gradient(
     90deg,
     var(--htl-color) 0%,
@@ -711,7 +735,8 @@ body {
   box-shadow:
     0 0 12px var(--htl-color),
     0 0 4px var(--htl-accent);
-  transition: width 120ms linear;
+  transition: transform 120ms linear;
+  will-change: transform;
 }
 
 .htl-percent {

@@ -18,6 +18,7 @@ import { NavHud } from "./overlay/nav-hud";
 import { PanelHeader } from "./overlay/destination-panel/panel-header";
 import { DEST_CATEGORIES } from "./overlay/destination-panel/category-meta";
 import { HotspotsFlap } from "./overlay/hotspots-flap";
+import { useStreamVariantId } from "@/streaming/variant";
 import { BottomBar } from "./overlay/bottom-bar";
 import { SpeedControl } from "./overlay/speed-control";
 import { useTerminalUi } from "./context/ui-context";
@@ -26,7 +27,9 @@ import { useNavUiStore } from "./stores/nav-ui-store";
 import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
 import { HotspotDataCard } from "./overlay/hotspot-card";
 import { SkyDebug } from "./overlay/sky-debug";
+import { GradeDebug } from "./overlay/grade-debug";
 import { tick } from "@/shared/runtime/diagnostics";
+import { scene as siteScene } from "@/config";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
 // "Home" / "currently at" are decided purely by XZ proximity to the fixed start
@@ -70,6 +73,12 @@ export default function Overlays() {
   const atHome = useNavUiStore((s) => s.atHome);
   const setAtHome = useNavUiStore((s) => s.setAtHome);
   const goHome = useNavUiStore((s) => s.goHome);
+  // WHICH ROUTE. `/` is frozen at what the main version ships — see the two
+  // uses below; `/v2` is where the newer chrome is being tried out. It is the
+  // same id the streaming layer resolves its bake from, so a route cannot end
+  // up with v2's UI over v1's model.
+  const streamVariant = useStreamVariantId();
+  const uiFrozen = streamVariant === "v1";
   const setMapExpanded = useNavUiStore((s) => s.setMapExpanded);
   const mapExpanded = useNavUiStore((s) => s.mapExpanded);
   const eventsOpen = useNavUiStore((s) => s.eventsOpen);
@@ -326,6 +335,37 @@ export default function Overlays() {
     });
     setAtHome(true);
   }, [goHome, playerControllerRef, activeFloor, startPosition, startRotation, setAtHome, closeOverlays, triggerFloorTransition]);
+
+  /**
+   * "First Person" — stand at `cameras.firstPerson`, the one authored pose that
+   * is ON the navmesh.
+   *
+   * Deliberately NOT handleHome with a different constant. Home is an arrival:
+   * it re-arms the at-home card, clears the latched destination and asserts
+   * `atHome`. This is a relocation — it drops the player somewhere walkable and
+   * says nothing about where that is. `currentDest` and `atHome` are recomputed
+   * from live position by the poll above, so they correct themselves within a
+   * tick and the map's marker follows the player there on its own; writing
+   * either one here would only fight that poll.
+   */
+  const firstPersonPose = siteScene.cameras.firstPerson;
+  const handleFirstPerson = useCallback(() => {
+    const ctrl = playerControllerRef.current;
+    if (!ctrl || !firstPersonPose) return;
+    // An arrival elsewhere, so nothing that was open still belongs on screen.
+    closeOverlays();
+    ctrl.clearPreview();
+    const p = firstPersonPose.position as [number, number, number];
+    const r = firstPersonPose.rotation as [number, number, number];
+    // The authored Y is the CAMERA's height, not the ground — probe the floor
+    // and let teleportTo re-add the eye height, exactly as Home does. The
+    // authored value is passed only as the expectedY tie-breaker.
+    const surfaceY = ctrl.probeFloorY(p[0], p[2], p[1]) ?? p[1];
+    // Same fade-down / snap / fade-up as every other teleport.
+    triggerFloorTransition(() => {
+      ctrl.teleportTo([p[0], surfaceY, p[2]], r);
+    });
+  }, [firstPersonPose, playerControllerRef, closeOverlays, triggerFloorTransition]);
 
   // Hide the standing-at destination from its own list (re-appears once it un-latches).
 
@@ -637,6 +677,19 @@ export default function Overlays() {
             setInstructionsOpen(true);
           }}
           onHome={handleHome}
+          // TWO WAYS OF NOT OFFERING SOMETHING, and they are not interchangeable.
+          //
+          // The Map circle stays in the dock, greyed and out of the tab order.
+          // It ships on the main version that way, and removing it instead would
+          // reflow the row and move where the muscle memory for Home and
+          // Dollhouse lands.
+          //
+          // First Person is omitted outright: it has never shipped, so there is
+          // no position to preserve and a greyed circle would only advertise
+          // something nobody is missing. `undefined` is also what a site with no
+          // `cameras.firstPerson` pose passes, so BottomBar already handles it.
+          mapDisabled={uiFrozen}
+          onFirstPerson={!uiFrozen && firstPersonPose ? handleFirstPerson : undefined}
         />
       )}
 
@@ -737,6 +790,11 @@ export default function Overlays() {
       {/* ?debug=true only — the time-of-day slider, next to PerfMeter's readout
           so the sky's cost can be watched while it is being driven. */}
       {ui.sceneContent.debug && <SkyDebug />}
+
+      {/* ?debug=true only — exposure / brightness / contrast / saturation,
+          stacked under the sky slider. Both write a store that config only
+          SEEDS, so a value dialled here is pasted back into `site.json`. */}
+      {ui.sceneContent.debug && <GradeDebug />}
     </>
   );
 }

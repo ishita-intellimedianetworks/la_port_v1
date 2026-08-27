@@ -64,18 +64,55 @@ export type StreamTier = {
  * is not a failure mode worth having.
  */
 export type StreamHideRule = {
+  /** Authoring note — data, not config. */
+  _note?: string;
   /** Which source mesh this rule stands for. Documentation only. */
   _mesh?: string;
-  /** Exact `materials.json` name; the chunk must carry it. */
-  material?: string;
+  /** Exact `materials.json` name(s); the chunk must carry AT LEAST ONE of them.
+   *  A list is one rule, not several: a source object assembled from a dozen
+   *  untitled materials (the bridge) is one thing to the person hiding it, and
+   *  splitting it into a dozen rules only makes it possible to update eleven. */
+  material?: string | string[];
   /** Chunk bounding-sphere radius floor, metres. */
   minRadiusMetres?: number;
+  /**
+   * Exact object name in `animated.glb`, matched against that group instead of
+   * against the chunks.
+   *
+   * THE ANIMATED GROUP IS NOT CHUNKED. Anything that moves is lifted out of the
+   * chunk set at bake time — a chunk folds the node matrix into its vertices,
+   * and an animation is exactly a moving node matrix — and the result is
+   * PERMANENTLY RESIDENT: never banded, never evicted, never culled. So no
+   * `material`/`minRadiusMetres` rule can reach it, and on this bake that is
+   * precisely where the ocean now lives.
+   *
+   * It is matched by NAME rather than by material because it is the one part of
+   * the asset set that still HAS names: chunk GLBs are stripped down to an
+   * unnamed node and mesh, while `animated.glb` keeps the source hierarchy
+   * intact (`holder_water`, `holder_RIG_C1`, …). Naming a scene root hides the
+   * whole subtree, which is both cheaper and less brittle than naming a leaf.
+   *
+   * Hiding is a `visible = false`, not an unload: the geometry stays in memory
+   * (it has nowhere else to be) and the clip keeps running, so switching views
+   * back is instant and the ocean is mid-wave rather than reset.
+   */
+  node?: string;
 };
 
 export type StreamConfig = {
   /** Which baked asset set to stream. Resolves to
-   *  `${NEXT_PUBLIC_ASSET_BASE ?? "/assets"}/<slug>/assets/`. */
+   *  `${NEXT_PUBLIC_ASSET_BASE ?? "/assets"}/<slug>/assets/` unless `assetBase`
+   *  names a published one outright. */
   slug: string;
+  /** The COMPLETE published base for this bake, used verbatim — nothing is
+   *  appended. Set it when a bake is served from somewhere no root + slug can
+   *  compose, which is the normal case once there is more than one bake:
+   *  `NEXT_PUBLIC_STREAM_BASE` is a single global and can only name one of
+   *  them. Unset, resolution falls back to that variable and then to
+   *  `<assetRoot>/<slug>/assets/`. */
+  assetBase?: string;
+  /** Authoring note for `assetBase` — data, not config. */
+  _assetBaseNote?: string;
   tiers: Record<"near" | "mid" | "far", StreamTier>;
   streaming: {
     /** `tiers.far.distance` × this = the unload radius. A 10% anti-thrash
@@ -115,6 +152,59 @@ export type StreamConfig = {
      *  Until this was corrected it counted the manifest's ENCODED sizes, which
      *  on this bake are 13.5x smaller than what is actually held. */
     residentBudgetMB: number;
+  };
+  /**
+   * FRAME TIME, not looks. Four knobs that change how expensive a frame is
+   * without changing which chunks are resident, all read live by the browser —
+   * none of them needs a re-bake, and none of them moves a distance band.
+   */
+  render: {
+    /**
+     * Where three's transmission pass may run.
+     *
+     * ONE visible material with `transmission > 0` makes three re-render the
+     * whole opaque scene into a buffer EVERY FRAME, so draw calls roughly
+     * double. This bake carries three such materials (M_Invisible.002,
+     * _Translucent_Glass_Blue_1, Translucent_Glass_Blue) across 66 of its 641
+     * chunks, so the pass was on in nearly every view. All three have no
+     * baseColour map and `thickness: 0`, which is exactly when plain alpha is
+     * indistinguishable from real refraction — so "off" costs nothing visible
+     * and removes a full extra scene render.
+     *
+     *   "off"  — never; transmissive materials stand in as plain alpha
+     *   "near" — only where a chunk is mounted at the near tier
+     *   "all"  — the original cost, including the always-resident palette and
+     *            the animated rig
+     */
+    transmission: "off" | "near" | "all";
+    /**
+     * Mount each chunk at the SMALLEST texture rung, then upgrade to its tier's
+     * rung in the background.
+     *
+     * Without it `mount()` awaits the tier's own images, so a chunk cannot
+     * appear until its own textures land and the scene visibly assembles itself
+     * one mesh at a time. The whole image set is ~0.1 MB at 128 px and is
+     * SHARED between chunks, so the preview is nearly always a cache hit and a
+     * neighbourhood arrives together. The near tier never previews — see
+     * `chunk-manager.ts > mount`.
+     */
+    progressiveTextures: boolean;
+    /** Texture upgrades started per streaming tick, nearest chunk first.
+     *  Bounded only so the upgrade wave does not re-saturate the network the
+     *  fill has just cleared. At 4 and updateHz 10, a viewpoint that mounts
+     *  ~150 chunks left them at the preview rung for nearly 4 seconds. */
+    texUpgradesPerTick: number;
+    /** Whether the pixel ratio FOLLOWS the frame rate. Off, `maxDpr` is simply
+     *  a fixed ceiling and nothing moves it — which is what `/` did before
+     *  `AdaptiveQuality` existed, and is why the flag is separate from the
+     *  ceiling rather than folded into it. */
+    adaptiveDpr: boolean;
+    /** CEILING on the canvas pixel ratio, not a promise: `AdaptiveQuality`
+     *  samples frame time each second and steps down toward 0.75 when the
+     *  device cannot hold ~20 fps, climbing back only with real headroom.
+     *  Resolution is the cheapest thing to give up — dropping geometry costs
+     *  whole buildings. */
+    maxDpr: number;
   };
   /** Distance fog, which is what lets `tiers.far.distance` be small: chunks
    *  dissolve into the backdrop before the unload boundary instead of being
@@ -172,6 +262,7 @@ export type StreamConfig = {
     streaming?: Partial<StreamConfig["streaming"]>;
     cache?: Partial<StreamConfig["cache"]>;
     fog?: Partial<StreamConfig["fog"]>;
+    render?: Partial<StreamConfig["render"]>;
   };
 
   /** THE THIRD STRATEGY over the same manifest — the DOLLHOUSE overview.
@@ -195,19 +286,78 @@ export type StreamConfig = {
     streaming?: Partial<StreamConfig["streaming"]>;
     cache?: Partial<StreamConfig["cache"]>;
     fog?: Partial<StreamConfig["fog"]>;
+    render?: Partial<StreamConfig["render"]>;
     forceTier?: StreamConfig["forceTier"];
     hide?: StreamHideRule[];
   };
 };
 
 /**
- * The map. ONE layer: a top-down render stored WITH the world rect its camera
- * was framed to, so pixel<->world needs no calibration and depends on no other
- * source agreeing.
+ * A SECOND BAKE, served at its own route beside the first.
+ *
+ * `stream` is the whole contract for one asset set. This is a PARTIAL OVERRIDE
+ * of it: only the keys that differ are authored, and everything unnamed tracks
+ * the base block, so a retune there carries across on its own.
+ *
+ * WHY AN OVERRIDE AND NOT A SECOND FULL BLOCK. Two bakes of the same zone agree
+ * about almost everything that matters here — the bands, the cache ceilings,
+ * the fog, the aerial strategy are properties of the ZONE and the camera, not
+ * of how the geometry was cut. What genuinely differs is the manifest they
+ * point at (hence `slug` + `assetBase`) and anything that NAMES something
+ * inside it, which in practice is only the dollhouse's `hide` list. Duplicating
+ * the rest would mean two copies drifting apart silently.
+ *
+ * `aerial` and `dollhouse` merge KEY BY KEY over the base's, so an override can
+ * replace just `hide` and leave the tiers, the pin and the notes alone.
+ * `render` and `streaming` merge the same way. `tiers` merges per band.
+ */
+export type StreamVariantConfig = {
+  _note?: string | string[];
+  /** REQUIRED: a variant that streams the same manifest is not a variant. */
+  slug: string;
+  assetBase?: string;
+  _assetBaseNote?: string;
+  tiers?: Partial<Record<"near" | "mid" | "far", StreamTier>>;
+  streaming?: Partial<StreamConfig["streaming"]> & { _note?: string | string[] };
+  cache?: Partial<StreamConfig["cache"]>;
+  fog?: Partial<StreamConfig["fog"]>;
+  render?: Partial<StreamConfig["render"]> & { _note?: string | string[] };
+  forceTier?: StreamConfig["forceTier"];
+  hide?: StreamHideRule[];
+  /** Merged key by key over `stream.aerial` / `stream.dollhouse`. */
+  aerial?: Partial<NonNullable<StreamConfig["aerial"]>>;
+  dollhouse?: Partial<NonNullable<StreamConfig["dollhouse"]>>;
+};
+
+/**
+ * The map. TWO layers, each stored WITH the world rect it covers, so both are
+ * placed by the same world->pixel transform and can only ever agree: `base` is
+ * optional context under `plan`, and `plan` alone still works exactly as it did.
+ * Nothing is calibrated at runtime and neither layer depends on the other's
+ * pixels — only on its own rect being right.
  */
 export type MapConfig = {
   /** Authoring note — data, not config. */
   _note?: string;
+  /**
+   * OPTIONAL context layer, drawn UNDER `plan` — the surrounding port and city,
+   * so the terminal reads as a place rather than a shape on glass. Same rect
+   * convention as `plan` and, like it, must be an image whose axes are already
+   * the model's: a rect cannot express a rotation, so any turn between the
+   * source and the model has to be baked into the exported image.
+   *
+   * It defines nothing else. Clicks, overlays and the letterbox are all
+   * resolved against `plan`, so this layer can be swapped, re-framed or dropped
+   * without touching navigation.
+   */
+  base?: {
+    /** Authoring note — data, not config. */
+    _note?: string;
+    /** BARE FILENAME, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
+     *  `/floorplan`). An absolute URL is honoured verbatim. */
+    imageUrl: string;
+    bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  };
   /**
    * The render, letterboxed into the map canvas. `bounds` uses the FLIPPED
    * convention on BOTH axes (minX holds the world MAX, minZ the world MAX),
@@ -216,9 +366,23 @@ export type MapConfig = {
    * read "naturally" — minX < maxX here mirrors the map east-west.
    */
   plan?: {
+    /** Authoring note — data, not config. */
+    _note?: string;
+    /** BARE FILENAME, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
+     *  `/floorplan`). An absolute URL is honoured verbatim. */
     imageUrl: string;
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   };
+  /**
+   * What the map OPENS on and what the recenter button returns to: the part
+   * worth looking at, rather than the whole of `plan`. A PLAIN world rect
+   * (minX < maxX) because people author it; defaults to the plan's own extent.
+   *
+   * Framing only. It does not gate clicks — `plan` does that — so getting it
+   * slightly wrong costs a little framing and nothing else. Zooming out from
+   * here is what reveals `base`.
+   */
+  zone?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
 
 // ── site.json › the site record ───────────────────────────────────────────────
@@ -256,6 +420,10 @@ export type SceneConfig = {
   /** The adaptive chunk streamer's parameters. Present = the terminal streams
    *  instead of loading `assets.modelUrl` as one GLB. */
   stream: StreamConfig;
+  /** A SECOND bake of the same zone, served at `/v2`, authored as a partial
+   *  override of `stream`. Absent, that route resolves to the same thing `/`
+   *  does. See `StreamVariantConfig`. */
+  streamV2?: StreamVariantConfig;
   world: {
     eyeHeight: number;
     /**
@@ -266,6 +434,43 @@ export type SceneConfig = {
      */
     fov: number;
     shadows: boolean;
+    /**
+     * Colour grade — the finishing pass over the rendered image. Absent, or all
+     * four at their neutral values, means NOTHING is applied and nothing costs
+     * anything (see below for why that matters).
+     *
+     * Two different mechanisms, deliberately:
+     *
+     *   exposure   multiplies the scene in HDR BEFORE tone mapping
+     *              (`renderer.toneMappingExposure`). It is a uniform inside a
+     *              step three.js already runs, so it is free, and it is the
+     *              only one of the four with the full dynamic range still in
+     *              hand — highlights roll off instead of clipping. Reach for
+     *              this FIRST when the scene is simply too dark or too hot.
+     *
+     *   brightness / contrast / saturation
+     *              a CSS `filter` on the canvas element, exactly as the
+     *              facet_4 study does it. That runs on the 8-bit sRGB image
+     *              after tone mapping, so it can band if pushed hard, and it
+     *              costs the compositor a full-screen pass every frame — which
+     *              is why the filter is omitted entirely when all three are 0
+     *              rather than emitted as a no-op `brightness(1)`.
+     *
+     * The canvas is shared by the dollhouse and the walking view, so a grade
+     * here applies to both. It does NOT touch the HTML overlays: the glass UI
+     * and the hotspot tooltips are siblings of the canvas, not children.
+     *
+     * `site.json` is only the seed — the `?debug=true` panel drives the live
+     * values, same arrangement as the sky slider.
+     */
+    grade?: {
+      /** Multiplier, 1 = untouched. Applied before tone mapping. */
+      exposure?: number;
+      /** Offsets, 0 = untouched. CSS filter takes `1 + n`. */
+      brightness?: number;
+      contrast?: number;
+      saturation?: number;
+    };
   };
   cameras: {
     /**
@@ -288,10 +493,30 @@ export type SceneConfig = {
      * walkable checkpoint to derive it from. Deriving it anyway put the walking
      * start at L01's camera — 381 m up and 46 m outside the navmesh in X.
      *
-     * VERIFIED ON-MESH against `assets.navmeshUrl`: the point is inside a
-     * navmesh triangle, surface Y 0.160.
+     * NOT ON THE NAVMESH — this comment claimed the opposite until it was
+     * re-checked against the v5 navmesh: the point is inside the mesh's AABB
+     * but misses all 3,950 triangles, the nearest vertex being 95.3 m away.
+     * Landing here works (Home probes the floor and teleports regardless), but
+     * WALKING out of it depends on the snap finding an island, which is why
+     * `firstPerson` below exists.
      */
     spawn: CameraPose;
+    /**
+     * A standpoint that IS on the navmesh — what the bottom bar's "First
+     * Person" circle drops the player at.
+     *
+     * It exists because `spawn` above does not satisfy that, and the two are
+     * different jobs: `spawn` is the composed shot the entry blackout lifts on
+     * and the one Home returns to, while this is simply somewhere the player
+     * can walk from. Do not merge them by pointing this at `spawn` — that is
+     * the state this replaced.
+     *
+     * VERIFIED ON-MESH against the streamed navmesh (v5, 3,950 triangles): the
+     * XZ is inside a triangle, surface Y 0.153, nearest vertex 0.9 m. Re-check
+     * that before moving it — a pose that misses the mesh makes this circle do
+     * nothing a player can act on.
+     */
+    firstPerson?: CameraPose;
   };
   lights: {
     ambientIntensity: number;
@@ -556,6 +781,7 @@ export type SiteConfig = {
   startLayoutId: string;
   assets: SceneConfig["assets"];
   stream: SceneConfig["stream"];
+  streamV2: SceneConfig["streamV2"];
   world: SceneConfig["world"];
   cameras: SceneConfig["cameras"];
   lights: SceneConfig["lights"];

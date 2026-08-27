@@ -52,6 +52,22 @@ export const SHORT_MEDIA_QUERY = `(max-height: ${SHORT_BREAKPOINT_PX}px)`;
 export const PORTRAIT_MEDIA_QUERY = "(orientation: portrait)";
 
 /**
+ * "This is a finger, not a mouse."
+ *
+ * Asked as a CAPABILITY question rather than a width one because the thing that
+ * changes is the size of the pointing device, not the size of the screen: a
+ * 10" tablet in landscape is wider than `MOBILE_BREAKPOINT_PX` and still needs
+ * finger-sized hit targets, while a narrow desktop window does not. Anything
+ * sizing a TAP TARGET (the 3D hotspot markers) should ask this; anything
+ * sizing a LAYOUT should keep asking `useIsMobile()`.
+ *
+ * `(hover: none)` is paired with `(pointer: coarse)` on purpose — a laptop with
+ * a touchscreen reports a coarse pointer as soon as a finger touches it, but it
+ * still has a mouse, and blowing the markers up there would be wrong.
+ */
+export const COARSE_POINTER_MEDIA_QUERY = "(hover: none) and (pointer: coarse)";
+
+/**
  * Reactive `matchMedia` binding.
  *
  * Implemented with `useSyncExternalStore` so React reads from the matchMedia
@@ -82,6 +98,12 @@ export function usePortrait(): boolean {
   return useMediaQuery(PORTRAIT_MEDIA_QUERY);
 }
 
+/** Reactive hook: `true` on a touch-primary device (phone/tablet). Use for
+ *  hit-target sizing; use `useIsMobile()` for layout. */
+export function useCoarsePointer(): boolean {
+  return useMediaQuery(COARSE_POINTER_MEDIA_QUERY);
+}
+
 // `useSyncExternalStore` compares the subscribe/getSnapshot identities, so a
 // fresh closure per render would resubscribe every render. One memo per query
 // string keeps them stable for the life of the page.
@@ -90,14 +112,25 @@ const stores = new Map<string, [(cb: () => void) => () => void, () => boolean]>(
 function store(query: string): [(cb: () => void) => () => void, () => boolean] {
   const hit = stores.get(query);
   if (hit) return hit;
+  // ONE MediaQueryList per query, shared by both halves. `getSnapshot` runs on
+  // every render of every subscriber (and again after each notification), and
+  // `window.matchMedia()` allocates a fresh object per call — cheap on its own,
+  // wasteful once a per-instance component like the hotspot marker asks twice
+  // per render, once per marker.
+  let mql: MediaQueryList | null = null;
+  const list = () => {
+    if (typeof window === "undefined") return null;
+    if (!mql) mql = window.matchMedia(query);
+    return mql;
+  };
   const made: [(cb: () => void) => () => void, () => boolean] = [
     (onChange) => {
-      if (typeof window === "undefined") return () => {};
-      const mq = window.matchMedia(query);
+      const mq = list();
+      if (!mq) return () => {};
       mq.addEventListener("change", onChange);
       return () => mq.removeEventListener("change", onChange);
     },
-    () => (typeof window === "undefined" ? false : window.matchMedia(query).matches),
+    () => list()?.matches ?? false,
   ];
   stores.set(query, made);
   return made;

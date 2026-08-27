@@ -34,6 +34,8 @@ import {
 import { zoneNameForFloor } from "./navmesh";
 import SceneEnvironment from "./environment";
 import StreamFog from "./environment/stream-fog";
+import { AdaptiveQuality } from "./adaptive-quality";
+import { useStreamVariant, useStreamVariantId } from "@/streaming/variant";
 import {
   detectProfile,
   fogRange,
@@ -568,7 +570,16 @@ export function SceneContent({
   // is stable — then the real device profile once mounted.
   const [deviceProfile, setDeviceProfile] = useState<"mobile" | "desktop">("desktop");
   useEffect(() => setDeviceProfile(detectProfile()), []);
-  const groundStreamConfig = useMemo(() => resolveStreamConfig(deviceProfile), [deviceProfile]);
+  // WHICH BAKE this route streams — `v1` at /, `v2` at /v2. Every stream config
+  // below is resolved against it, and so is the navmesh: the bake emits that
+  // next to the chunks, so a route walking on the other variant's navmesh would
+  // route over geometry it is not rendering.
+  const streamVariantId = useStreamVariantId();
+  const streamVariant = useStreamVariant();
+  const groundStreamConfig = useMemo(
+    () => resolveStreamConfig(streamVariantId, deviceProfile),
+    [streamVariantId, deviceProfile],
+  );
   // The layout cameras are framing shots 54-412 m up and up to 2.8 km out, and
   // the bands above are tuned for someone standing in the terminal — from four
   // of the ten, they resolved 2 chunks of 831 and the shot framed empty sky.
@@ -576,15 +587,29 @@ export function SceneContent({
   // picks between them by camera height and hands the manager the swap. Null
   // when no aerial block is authored, in which case this is a straight
   // pass-through of the ground config.
-  const aerialStreamConfig = useMemo(() => resolveAerialConfig(deviceProfile), [deviceProfile]);
+  const aerialStreamConfig = useMemo(
+    () => resolveAerialConfig(streamVariantId, deviceProfile),
+    [streamVariantId, deviceProfile],
+  );
   const cameraStreamConfig = useStreamConfigForCamera(groundStreamConfig, aerialStreamConfig);
   // The overview is not "an elevated camera" — it is its own strategy (see the
   // `dollhouse` block in site.json), so it is selected by VIEW rather than by
   // the height hook. Absent that block, the hook's answer stands and the
   // dollhouse simply streams like any other camera up at framing height.
-  const dollhouseStreamConfig = useMemo(() => resolveDollhouseConfig(deviceProfile), [deviceProfile]);
+  const dollhouseStreamConfig = useMemo(
+    () => resolveDollhouseConfig(streamVariantId, deviceProfile),
+    [streamVariantId, deviceProfile],
+  );
   const streamConfig =
     viewMode === "dollhouse" && dollhouseStreamConfig ? dollhouseStreamConfig : cameraStreamConfig;
+
+  // THE NAVMESH FOLLOWS THE BAKE. It is emitted next to the chunks, so each
+  // variant ships its own — and the node tree in `scene-data/adapter.ts` is
+  // built once at import, before any route exists, so it can only carry v1's.
+  // Substituting it here is what stops /v2 routing over v1's walkable surface
+  // while rendering v2's geometry: a mismatch that would not look like a bug,
+  // it would look like the floor being subtly in the wrong place.
+  const navmeshUrl = streaming ? streamVariant.navmeshUrl : activeFloor?.navmeshUrl;
 
   // Preview point-cloud is dollhouse-only — first-person floors no longer
   // ship a preview. Past initial load we use blackouts for swaps.
@@ -1050,6 +1075,18 @@ export function SceneContent({
             onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
           />
           <StreamFog config={streamConfig} />
+          {/* Resolution follows the frame rate. `render.maxDpr` is the ceiling
+              it starts at and never exceeds; it steps DOWN when the device
+              cannot hold ~20 fps and climbs back only with real headroom. It
+              lives inside the `streaming` branch because its ceiling is
+              per-VIEW, arriving with the same config swap the bands do.
+
+              NOT MOUNTED AT ALL when `render.adaptiveDpr` is false, which is
+              how / stays frozen at the fixed ceiling it had before this
+              existed — a governor that merely never fires is not the same
+              thing as no governor, because it would still take the first
+              second to decide that. */}
+          {streamConfig.adaptiveDpr && <AdaptiveQuality maxDpr={streamConfig.maxDpr} />}
         </>
       ) : (
         currentModelUrl && (
@@ -1095,11 +1132,11 @@ export function SceneContent({
       )}
 
 
-      {activeFloor?.navmeshUrl && (
+      {activeFloor && navmeshUrl && (
         <SingleNavmesh
-          key={`nav-${activeFloor.id}`}
+          key={`nav-${activeFloor.id}-${navmeshUrl}`}
           floorId={activeFloor.id}
-          url={activeFloor.navmeshUrl}
+          url={navmeshUrl}
           onGeometry={handleFloorGeometry}
           onFloorBounds={handleFloorBounds}
           onRoomZones={handleFloorRoomZones}

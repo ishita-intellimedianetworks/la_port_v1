@@ -1,11 +1,12 @@
-import { FunctionComponent, PropsWithChildren, Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import { FunctionComponent, PropsWithChildren, Suspense, useEffect } from "react";
+import { Canvas, useStore } from "@react-three/fiber";
 import * as THREE from "three";
 
 import { entry } from "@/shared/scene-data/adapter";
 import { FOV_DEFAULT } from "@/shared/stores/camera-store";
 import isLowPower from "@/shared/runtime";
 import { degradeGpuBudget } from "@/streaming/memory";
+import { filterCss, useGradeStore } from "@/shared/stores/grade-store";
 
 const defaultPos = entry.position;
 const defaultRot = entry.rotation;
@@ -20,6 +21,32 @@ THREE.setConsoleFunction((type: string, message: string, ...params: unknown[]) =
   fn(message, ...params);
 });
 
+
+/**
+ * Exposure — the HDR half of the grade. Mounted inside the Canvas because it
+ * needs the renderer; it renders nothing.
+ *
+ * This is the CHEAP knob: `toneMappingExposure` is a uniform in the tone-mapping
+ * step three.js already runs, so it costs nothing extra and it acts while the
+ * full dynamic range is still there, letting highlights roll off through
+ * NeutralToneMapping rather than clipping the way a post-hoc brightness does.
+ */
+const GradeExposure: FunctionComponent = () => {
+  // The renderer is read out of the R3F store INSIDE the effect rather than
+  // subscribed to with `useThree(s => s.gl)`. Two reasons, and the lint rule
+  // that rejects the latter is right about both: writing to a value a hook just
+  // returned is the mutation React cannot see, and depending on the renderer's
+  // identity would re-run this on churn that has nothing to do with exposure.
+  // What is subscribed to is the one number that should re-run it.
+  const store = useStore();
+  const exposure = useGradeStore((s) => s.exposure);
+  useEffect(() => {
+    store.getState().gl.toneMappingExposure = exposure;
+    // The loop runs continuously here, so the next frame picks this up on its
+    // own — no invalidate() needed.
+  }, [store, exposure]);
+  return null;
+};
 
 type Props = PropsWithChildren<{
   initialPosition?: [number, number, number];
@@ -38,6 +65,14 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
   // static, so the map never re-renders and never shimmers while walking. Off on
   // low-power devices. Mirrors the reference exterior's shadow setup.
   const lowPower = isLowPower();
+  // The LDR half of the grade, applied to the canvas ELEMENT rather than inside
+  // WebGL — the same thing the facet_4 study does, and the reason no
+  // post-processing pass had to be introduced for this. `undefined` while the
+  // grade is neutral, which keeps the canvas off its own composited layer.
+  const brightness = useGradeStore((s) => s.brightness);
+  const contrast = useGradeStore((s) => s.contrast);
+  const saturation = useGradeStore((s) => s.saturation);
+  const filter = filterCss({ brightness, contrast, saturation });
 
   return (
     <>
@@ -66,6 +101,11 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             width: "100%",
             position: "relative",
             touchAction: "none",
+            // Only the 3D image is graded. The glass UI and the hotspot
+            // tooltips are siblings of this element (drei portals Html to the
+            // canvas's PARENT), so they are untouched by design — grading the
+            // wrapper instead would tint the whole interface.
+            filter,
           }}
           gl={{
             antialias:  true,
@@ -104,6 +144,7 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             canvas.addEventListener("webglcontextrestored", onRestored);
           }}
         >
+          <GradeExposure />
           <Suspense fallback={null}>
             <group name="dollhouse-model">{children}</group>
           </Suspense>

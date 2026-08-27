@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useScene } from "../../context/scene-context";
 import {
-  ZOOM_FACTOR, MIN_ZOOM, MAX_ZOOM,
+  ZOOM_FACTOR, MIN_ZOOM, MAX_ZOOM, ZOOM_OUT_MARGIN,
   MAP_WINDOW_DEFAULT, MAP_FULL_INSET_X, MAP_FULL_CHROME_Y, SIDE_LEGEND_W,
 } from "../utils/constants";
 import { SHORT_MEDIA_QUERY } from "@/shared/responsive";
 import { BLACKOUT_VISIBLE_MS, FADE_IN_MS, FADE_OUT_MS } from "@/shared/ui/screens/fade-screen";
 import { pixelToWorld, worldToPixel } from "../utils/coord-utils";
 import {
-  drawFloorPlan, drawPath,
+  containRect, contextRect, drawPath,
   drawPlayerFOV, drawClickMarker,
   drawStickers,
   type ImageRect, type MapHotspot,
 } from "../utils/draw";
 import { scene as siteScene } from "@/config";
+import { createStaticLayers } from "../utils/static-layers";
+import isLowPower from "@/shared/runtime";
 import { etaSeconds, fmtEta, fmtMeters } from "../../overlay/nav-hud/format";
 import { navConfig } from "../../navigation-config";
 /** Congestion tiers -> colour. Inlined when the 3D crowd-flow mesh was removed;
@@ -147,6 +149,10 @@ export function useMinimap() {
   const clickMarkerRef = useRef<{ px: number; py: number; alpha: number } | null>(null);
 
   const planRef = useRef<HTMLImageElement | null>(null);
+  /** The optional context layer drawn UNDER the plan. Held separately because
+   *  it is heavier and may still be in flight when the plan is ready — the plan
+   *  never waits for it. */
+  const baseRef = useRef<HTMLImageElement | null>(null);
   /** Where the plan landed inside the canvas (CONTAIN). Clicks are mapped
    *  through this rect, and ones outside it are dropped. */
   const letterboxRef = useRef<ImageRect>({ dx: 0, dy: 0, dw: 0, dh: 0 });
@@ -435,6 +441,16 @@ export function useMinimap() {
   }, [minimapData]);
   const planUrl = planLayer?.url;
 
+  /** The context layer under it, if the site has one. Purely decorative: it
+   *  never defines the letterbox, the click rect or any overlay — see the draw
+   *  call below, which places it THROUGH the plan's transform so the two are
+   *  registered by construction rather than by both being fitted separately. */
+  const baseLayer = useMemo(() => {
+    const b = siteScene.map?.base;
+    return b ? { url: b.imageUrl, bounds: b.bounds } : null;
+  }, []);
+  const baseUrl = baseLayer?.url;
+
   /** The bounds swap both axes, so this is what the marker clamp needs. */
   const planRect = useMemo(() => {
     const b = planLayer?.bounds;
@@ -449,22 +465,126 @@ export function useMinimap() {
   const planRectRef = useRef<typeof planRect>(null);
   useEffect(() => { planRectRef.current = planRect; }, [planRect]);
 
-  // Pan clamp: the plan fills the canvas at zoom 1, so holding the offset
-  // inside [W(1-z), 0] is what stops a zoomed drag exposing blank canvas.
+  /**
+   * Everything drawn, in LOGICAL canvas pixels (before pan and zoom): the
+   * plan's letterbox unioned with the context layer's rect. Published by the
+   * draw loop, which is where the plan's natural size is known, and read by the
+   * clamp below and by the zoomed-out limit.
+   *
+   * Null until the first frame, and both readers fall back to the bare canvas,
+   * which is exactly the geometry this had before a context layer existed.
+   */
+  const contentRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /** Derived from `contentRef` each frame — see ZOOM_OUT_MARGIN. */
+  const minZoomRef = useRef(1);
+
+  /** What the map opens on. Plain world rect; the plan's own extent when a site
+   *  does not author one, which is the old whole-plan framing. */
+  const zoneRect = useMemo(() => siteScene.map?.zone ?? planRect, [planRect]);
+  const zoneRectRef = useRef<typeof zoneRect>(null);
+  useEffect(() => { zoneRectRef.current = zoneRect; }, [zoneRect]);
+
+  /**
+   * The opening transform, published by the draw loop for the same reason the
+   * content rect is: it depends on the plan's letterbox, which depends on the
+   * plan's natural size and the live canvas.
+   *
+   * Home is no longer zoom 1 — that framed the whole plan, leaving the zone
+   * small and the canvas half empty. It is now whatever fits the zone, so the
+   * numbers have to be carried rather than assumed.
+   */
+  const homeRef = useRef<{ z: number; ox: number; oy: number } | null>(null);
+  /** The home actually snapped to, so a resize can re-snap without fighting a
+   *  user who has panned away. */
+  const appliedHomeRef = useRef<{ z: number; ox: number; oy: number } | null>(null);
+  /** Has the user taken the view over? Deliberately NOT the `drifted` state
+   *  below: that one tracks what React has been told, and driving the snap off
+   *  it coupled two things that need to change at different moments. */
+  const userMovedRef = useRef(false);
+
+  /**
+   * Pan clamp. Holds the drawn content over the canvas, so a drag can never
+   * expose blank space beside it.
+   *
+   * Generalised from "the plan fills the canvas" because that stopped being
+   * true once zooming out past 1 was allowed: the content is then SMALLER than
+   * the canvas on at least one axis, the [lo, hi] interval inverts, and the old
+   * two-sided clamp pinned the map flush against an edge. When it inverts the
+   * answer is to centre instead.
+   */
   const clampOffset = useCallback(() => {
     const { w: W, h: H } = mapSizeRef.current;
     const z = zoomRef.current;
-    offsetRef.current.x = Math.max(W * (1 - z), Math.min(0, offsetRef.current.x));
-    offsetRef.current.y = Math.max(H * (1 - z), Math.min(0, offsetRef.current.y));
+    const c = contentRef.current ?? { x0: 0, y0: 0, x1: W, y1: H };
+    const axis = (off: number, c0: number, c1: number, size: number) => {
+      const lo = size - z * c1;
+      const hi = -z * c0;
+      return lo <= hi ? Math.min(hi, Math.max(lo, off)) : (size - z * (c0 + c1)) / 2;
+    };
+    offsetRef.current.x = axis(offsetRef.current.x, c.x0, c.x1, W);
+    offsetRef.current.y = axis(offsetRef.current.y, c.y0, c.y1, H);
   }, []);
 
   useEffect(() => { clampOffset(); }, [mapWidth, mapHeight, clampOffset]);
 
-  // A new plan makes the old pan/zoom meaningless.
+  // A new plan makes the old pan/zoom meaningless. Clearing the applied home
+  // is what re-arms the snap below; the raw values here only matter for the
+  // frame or two before it lands.
   useEffect(() => {
     zoomRef.current = 1;
     offsetRef.current = { x: 0, y: 0 };
+    appliedHomeRef.current = null;
+    userMovedRef.current = false;
   }, [planUrl]);
+
+  /** Drives the recenter button. Ref-guarded so a settled view doesn't dispatch
+   *  a state update every frame. */
+  const [drifted, setDrifted] = useState(false);
+  const driftedRef = useRef(false);
+  const tweenRef = useRef(0);
+
+  // Reopening the map returns to the zone, rather than resuming wherever the
+  // last session was panned to. Refs only — the draw loop dispatches `drifted`
+  // on its next frame, after the snap has landed.
+  useEffect(() => {
+    if (!expanded) return;
+    appliedHomeRef.current = null;
+    userMovedRef.current = false;
+  }, [expanded]);
+
+
+  /**
+   * Back to the framing the map opens on: the zone fitted to the canvas.
+   *
+   * Tweens to whatever the draw loop last published as home, rather than to a
+   * transform of its own, so the button and the opening view cannot disagree
+   * about where "home" is.
+   */
+  const recenter = useCallback(() => {
+    const home = homeRef.current;
+    if (!home) return;
+    userMovedRef.current = false;
+    const fromZ = zoomRef.current;
+    const from = { ...offsetRef.current };
+    const DUR = 320;
+    let start = 0;
+    if (tweenRef.current) cancelAnimationFrame(tweenRef.current);
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const k = Math.min(1, (ts - start) / DUR);
+      // Same easeInOutQuad the small<->full size toggle uses.
+      const t = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      zoomRef.current = fromZ + (home.z - fromZ) * t;
+      offsetRef.current = {
+        x: from.x + (home.ox - from.x) * t,
+        y: from.y + (home.oy - from.y) * t,
+      };
+      if (k < 1) tweenRef.current = requestAnimationFrame(step);
+    };
+    tweenRef.current = requestAnimationFrame(step);
+  }, []);
+
+  useEffect(() => () => { if (tweenRef.current) cancelAnimationFrame(tweenRef.current); }, []);
 
   // Canvas size: a fixed small window or full-screen (fills the viewport beside
   // the left sidebar). Recomputed on viewport resize. The canvas is no longer
@@ -586,6 +706,16 @@ export function useMinimap() {
     img.src = planUrl;
   }, [planUrl]);
 
+  // The context layer loads on its own. The RAF loop draws whatever is ready,
+  // so the map is usable from the moment the plan lands and the surroundings
+  // simply appear behind it a beat later.
+  useEffect(() => {
+    if (!baseUrl) return;
+    const img = new Image();
+    img.onload = () => { baseRef.current = img; };
+    img.src = baseUrl;
+  }, [baseUrl]);
+
   // ── Wheel zoom + drag pan + pinch zoom ────────────────────────────────────
   // All attached as imperative listeners so we can call preventDefault.
   //
@@ -603,12 +733,13 @@ export function useMinimap() {
 
     // Zoom about a canvas-space point, holding the content under it fixed.
     const applyZoom = (factor: number, cx: number, cy: number) => {
-      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomRef.current * factor));
+      const next = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, zoomRef.current * factor));
       if (next === zoomRef.current) return;
       const ratio = next / zoomRef.current;
       offsetRef.current.x = cx - (cx - offsetRef.current.x) * ratio;
       offsetRef.current.y = cy - (cy - offsetRef.current.y) * ratio;
       zoomRef.current = next;
+      userMovedRef.current = true;
       clampOffset();
     };
 
@@ -667,6 +798,7 @@ export function useMinimap() {
       if (!d.moved) return;
       offsetRef.current.x = d.ox + dx;
       offsetRef.current.y = d.oy + dy;
+      userMovedRef.current = true;
       clampOffset();
     };
 
@@ -746,7 +878,7 @@ export function useMinimap() {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= 0) return;
         const target = touch.startZoom * (dist / touch.startDist);
-        applyZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, target)) / zoomRef.current, touch.midX, touch.midY);
+        applyZoom(Math.max(minZoomRef.current, Math.min(MAX_ZOOM, target)) / zoomRef.current, touch.midX, touch.midY);
       } else if (e.touches.length === 1 && touch.panActive) {
         const t = e.touches[0];
         const dx = t.clientX - touch.panSX;
@@ -755,6 +887,7 @@ export function useMinimap() {
           dragRef.current.moved = true;
           offsetRef.current.x = touch.panOX + dx;
           offsetRef.current.y = touch.panOY + dy;
+          userMovedRef.current = true;
           clampOffset();
         }
       }
@@ -798,6 +931,9 @@ export function useMinimap() {
 
     const dpr = window.devicePixelRatio || 1;
     let raf: number;
+    // Owned by this effect, so a canvas swap (floor change, resize remount)
+    // releases the backing store rather than leaking one per remount.
+    const statics = createStaticLayers(isLowPower());
 
     // Track canvas backing-store size so we only resize on actual change.
     // Setting canvas.width/height every frame triggers a buffer realloc and
@@ -839,13 +975,94 @@ export function useMinimap() {
       ctx.translate(ox, oy);
       ctx.scale(zoom, zoom);
 
-      // ONE layer, CONTAIN-fitted. `lb` is where it landed; every overlay below
-      // and every click is resolved against that rect, so the image frame is
-      // both the drawn area and the clickable one.
+      // The PLAN is CONTAIN-fitted and `lb` is where it landed; every overlay
+      // below and every click is resolved against that rect, so the plan's
+      // frame is both the drawn area and the clickable one — the context layer
+      // added under it changes neither.
       const lb = planRef.current
-        ? drawFloorPlan(ctx, planRef.current, W, H)
+        ? containRect(planRef.current, W, H)
         : { dx: 0, dy: 0, dw: W, dh: H };
       letterboxRef.current = lb;
+
+      // Surroundings first, then the plan over them. The context layer is
+      // positioned THROUGH `lb` + the plan's bounds (see contextRect), so
+      // it tracks the plan through every letterbox, pan and zoom instead of
+      // being fitted to the canvas on its own.
+      // What the zoomed-out limit and the pan clamp bound: the plan's letterbox,
+      // grown to include the context layer when one is drawn. Recomputed per
+      // frame because the canvas resizes (small <-> full screen) and `lb` moves
+      // with it.
+      let c = { x0: lb.dx, y0: lb.dy, x1: lb.dx + lb.dw, y1: lb.dy + lb.dh };
+      const baseRect =
+        baseRef.current && planLayer?.bounds && baseLayer
+          ? contextRect(baseLayer.bounds, planLayer.bounds, lb)
+          : null;
+      if (baseRect) {
+        c = {
+          x0: Math.min(c.x0, baseRect.dx), y0: Math.min(c.y0, baseRect.dy),
+          x1: Math.max(c.x1, baseRect.dx + baseRect.dw),
+          y1: Math.max(c.y1, baseRect.dy + baseRect.dh),
+        };
+      }
+      contentRef.current = c;
+      // Zoom out until the whole of it is on screen, and no further. Capped at 1
+      // so the opening framing is always reachable even on a canvas so wide that
+      // the context already fits.
+      minZoomRef.current = Math.max(
+        MIN_ZOOM,
+        Math.min(1, Math.min(W / Math.max(1, (c.x1 - c.x0) * ZOOM_OUT_MARGIN),
+                             H / Math.max(1, (c.y1 - c.y0) * ZOOM_OUT_MARGIN))),
+      );
+
+      // The opening frame: the zone fitted to the canvas. CONTAIN, not cover —
+      // cover would fill the canvas by pushing most of a tall zone off-screen,
+      // and the whole point is that the clickable part is all visible. The band
+      // either side is the context layer now, not blank.
+      const zr = zoneRectRef.current;
+      if (zr && planLayer?.bounds) {
+        const za = worldToPixel(zr.minX, zr.minZ, planLayer.bounds, lb.dw, lb.dh);
+        const zb = worldToPixel(zr.maxX, zr.maxZ, planLayer.bounds, lb.dw, lb.dh);
+        const zx0 = lb.dx + Math.min(za.px, zb.px);
+        const zx1 = lb.dx + Math.max(za.px, zb.px);
+        const zy0 = lb.dy + Math.min(za.py, zb.py);
+        const zy1 = lb.dy + Math.max(za.py, zb.py);
+        const hz = Math.min(
+          MAX_ZOOM,
+          Math.max(minZoomRef.current, Math.min(W / Math.max(1, zx1 - zx0), H / Math.max(1, zy1 - zy0))),
+        );
+        const home = {
+          z: hz,
+          ox: W / 2 - hz * (zx0 + zx1) / 2,
+          oy: H / 2 - hz * (zy0 + zy1) / 2,
+        };
+        homeRef.current = home;
+
+        // Snap on open, and follow a canvas resize — but only while the user is
+        // still at home. Once they have moved, leave them alone.
+        const ap = appliedHomeRef.current;
+        const moved = !ap
+          || Math.abs(ap.z - home.z) > 1e-3
+          || Math.abs(ap.ox - home.ox) > 0.5
+          || Math.abs(ap.oy - home.oy) > 0.5;
+        if (moved && !userMovedRef.current) {
+          zoomRef.current = home.z;
+          offsetRef.current = { x: home.ox, y: home.oy };
+          clampOffset();
+          appliedHomeRef.current = { ...home };
+        }
+      }
+
+      // BOTH static layers in one blit from the pre-composited cache, which is
+      // built at exactly `dpr × zoom` and so consumed 1:1. This replaced two
+      // per-frame `drawImage` calls that rescaled an 18-megapixel pair of
+      // sources with the expensive filter, sixty times a second, for the whole
+      // session. See static-layers.ts for what does and does not invalidate it.
+      statics.draw(ctx, {
+        plan: planRef.current,
+        planRect: lb,
+        base: baseRef.current,
+        baseRect,
+      }, { w: W, h: H, dpr, zoom, ox, oy });
 
       // Overlays live in image-relative space: the plan's bounds map straight
       // onto (0..lb.dw, 0..lb.dh), which is the 1:1 the render guarantees.
@@ -931,12 +1148,26 @@ export function useMinimap() {
 
       ctx.restore(); // undo pan + zoom
 
+      // Anything but the opening framing offers a way back to it. Read from the
+      // refs, not this frame's locals, so the snap above does not read as drift.
+      const hm = homeRef.current;
+      const now = !!hm
+        && (Math.abs(zoomRef.current / hm.z - 1) > 0.02
+          || Math.hypot(offsetRef.current.x - hm.ox, offsetRef.current.y - hm.oy) > 4);
+      if (now !== driftedRef.current) {
+        driftedRef.current = now;
+        setDrifted(now);
+      }
+
       raf = requestAnimationFrame(draw);
     };
 
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [planLayer, minimapData, playerControllerRef, expanded]);
+    return () => {
+      cancelAnimationFrame(raf);
+      statics.dispose();
+    };
+  }, [planLayer, baseLayer, minimapData, playerControllerRef, expanded, clampOffset]);
 
   // ── Click → navigate ─────────────────────────────────────────────────────
   // Ignored on drag, and outside the letterboxed plan: the image frame IS the
@@ -1001,6 +1232,8 @@ export function useMinimap() {
     closeMap,
     fullScreen,
     toggleFullScreen,
+    recenter,
+    drifted,
     handleClick,
     playerControllerRef,
     isMoving,

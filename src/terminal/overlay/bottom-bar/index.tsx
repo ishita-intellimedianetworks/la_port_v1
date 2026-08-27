@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import { Home, Info, Map as MapIcon } from "lucide-react";
+import { Home, Info, Map as MapIcon, PersonStanding } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 
@@ -20,21 +20,39 @@ interface BottomBarProps {
   onDollhouse: () => void;
   onInstructions: () => void;
   onHome: () => void;
+  /** Drop the player at `cameras.firstPerson` — the one authored standpoint
+   *  that is ON the navmesh. Omitted when the site has no such pose, and the
+   *  circle then simply isn't drawn. */
+  onFirstPerson?: () => void;
+  /** Greys the Map circle out and stops it opening the overlay.
+   *
+   *  KEPT IN THE DOCK RATHER THAN REMOVED, deliberately: pulling a circle
+   *  reflows the rest of the row and moves where the muscle memory for Home and
+   *  Dollhouse lands. A greyed circle says "not yet"; a missing one silently
+   *  rearranges the furniture. First Person takes the opposite route — it is
+   *  omitted entirely — because it never shipped, so there is no memory of it
+   *  to preserve and nothing to explain. */
+  mapDisabled?: boolean;
 }
 
 /**
  * The bottom dock: leave the scene (Dollhouse), open the map, re-read the
- * instructions, or return home.
+ * instructions, stand somewhere walkable (First Person), or return home.
  *
- * These are the four actions that work from anywhere, which is why they live
- * here rather than in either edge flap — those are scoped to a layout and its
+ * These are the actions that work from anywhere, which is why they live here
+ * rather than in either edge flap — those are scoped to a layout and its
  * hotspots.
  *
- * Four FREE-STANDING circles, not a pill with buttons inside it: the enclosing
- * dock plus a ring per icon meant two nested glass surfaces reading as one
- * heavy slab. Icons only, no hover label — the tooltip floating above the bar
- * was more chrome than four self-evident glyphs need. `aria-label` still names
- * each one for screen readers.
+ * FREE-STANDING circles, not a pill with buttons inside it: the enclosing dock
+ * plus a ring per icon meant two nested glass surfaces reading as one heavy
+ * slab. Icons only, no hover label — the tooltip floating above the bar was
+ * more chrome than a handful of self-evident glyphs need. `aria-label` still
+ * names each one for screen readers.
+ *
+ * First Person sits next to Home because they are the same KIND of move — a
+ * teleport to an authored pose — and differ only in which: Home returns to the
+ * composed entry shot, First Person to the one standpoint the navmesh actually
+ * covers.
  */
 export function BottomBar({
   visible,
@@ -44,6 +62,8 @@ export function BottomBar({
   onDollhouse,
   onInstructions,
   onHome,
+  onFirstPerson,
+  mapDisabled,
 }: BottomBarProps) {
   const shown = visible && !tucked;
   return (
@@ -64,9 +84,12 @@ export function BottomBar({
     >
       <div className="flex items-center gap-3 short:gap-2">
         <BarButton icon={Home} label="Home" onClick={onHome} />
+        {onFirstPerson && (
+          <BarButton icon={PersonStanding} label="First Person" onClick={onFirstPerson} />
+        )}
         <BarButton icon={DollhouseGlyph} label="Dollhouse" onClick={onDollhouse} />
         <BarButton icon={Info} label="Instructions" onClick={onInstructions} />
-        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} />
+        <BarButton icon={MapIcon} label="Map" onClick={onOpenMap} active={mapOpen} disabled={mapDisabled} />
       </div>
     </div>
   );
@@ -80,11 +103,15 @@ function BarButton({
   label,
   onClick,
   active,
+  disabled,
 }: {
   icon: BarIcon;
   label: string;
   onClick: () => void;
   active?: boolean;
+  /** Sets the NATIVE disabled attribute as well as the styling, so the circle
+   *  leaves the tab order too rather than merely being unclickable. */
+  disabled?: boolean;
 }) {
   // The hover, lifted from the ARCHVIZ dock: the circle grows a bare 5% and its
   // icon warms from 86%-white to pure white over 200ms on the default `ease`.
@@ -98,6 +125,7 @@ function BarButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       className={cn(
@@ -109,6 +137,7 @@ function BarButton({
         "transition-[scale,translate,color,background-color,border-color] duration-200",
         "hover:scale-105 active:translate-y-px",
         !active && "text-[rgba(255,255,255,0.86)] hover:text-white",
+        disabled && "pointer-events-none opacity-40",
       )}
       style={{
         ...NAV_GLASS_PANEL,

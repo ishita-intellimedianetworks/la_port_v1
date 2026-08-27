@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { AERIAL_SWITCH, type StreamingConfig } from "@/streaming/config";
+import { type StreamingConfig } from "@/streaming/config";
+import { useStreamVariant } from "@/streaming/variant";
 
 /**
  * Which streaming strategy the CAMERA needs — the ground bands or the aerial
@@ -53,11 +54,14 @@ export function useStreamConfigForCamera(
  */
 export function useCameraAloft(): boolean {
   const camera = useThree((s) => s.camera);
+  // Per VARIANT, not global: the two bakes author their own aerial block, and
+  // a route reading the other one's thresholds would swap strategy at the
+  // wrong height.
+  const at = useStreamVariant().aerialSwitch;
   const [aloft, setAloft] = useState(false);
   const world = useRef(new THREE.Vector3());
 
   useFrame(() => {
-    const at = AERIAL_SWITCH;
     if (!at) return;
     const y = camera.getWorldPosition(world.current).y;
     // setState with an unchanged value is a no-op in React, so this costs

@@ -124,25 +124,41 @@ export class InstanceLayer {
       for (const pi of this.byEntry[e] ?? []) {
         const p = this.prims[pi];
         if (need === 0) {
-          if (p.mesh) p.mesh.count = 0;
+          // visible=false, not just count=0. three's projectObject() early-outs
+          // on an invisible object; a count-0 InstancedMesh with
+          // frustumCulled=false was still walked, render-listed and sorted every
+          // frame. At a typical ground camera most palette prims have no
+          // resident placement, so this is the bulk of them.
+          if (p.mesh) { p.mesh.count = 0; p.mesh.visible = false; }
           continue;
         }
         // Grow in steps so a wandering camera does not reallocate every tick.
         if (!p.mesh || p.capacity < need) {
           const cap = Math.max(need, Math.ceil(need * 1.5), 8);
+          // Carry the material across a regrow. It does not depend on capacity,
+          // and rebuilding it here LEAKED: InstancedMesh.dispose() frees the
+          // instance buffers ONLY, never the material, so every growth step
+          // orphaned a MeshStandardMaterial — and makeMaterial() also kicks off
+          // a fresh texture load whose promise this call site drops on the
+          // floor. Across a thousand palette prims and several growth steps
+          // each, that was a one-way ratchet for the whole session.
+          const material = p.mesh ? (p.mesh.material as THREE.Material) : this.makeMaterial(p.matIdx);
           if (p.mesh) {
             this.group.remove(p.mesh);
-            p.mesh.dispose(); // instance buffer only — geometry is shared, keep it
+            p.mesh.dispose(); // instance buffer only — geometry and material are reused
           }
-          const mesh = new THREE.InstancedMesh(p.geometry, this.makeMaterial(p.matIdx), cap);
+          const mesh = new THREE.InstancedMesh(p.geometry, material, cap);
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
           // Same shadow contract as the per-chunk meshes.
           mesh.castShadow = true;
           mesh.receiveShadow = true;
-          // Instances are scattered across the world, so a shared bounding
-          // volume is meaningless — let three draw it and rely on chunk-level
-          // culling, which is what bounds the instance list in the first place.
-          mesh.frustumCulled = false;
+          // A shared bounding volume IS meaningful, as long as it is rebuilt
+          // whenever the instance list is — and sync() does exactly that, so the
+          // sphere computed below is tight around the RESIDENT placements only.
+          // three culls an InstancedMesh against object.boundingSphere
+          // (Frustum.intersectsObject). This used to be frustumCulled=false,
+          // which threw that away and submitted every palette prim every frame.
+          mesh.frustumCulled = true;
           this.group.add(mesh);
           p.mesh = mesh;
           p.capacity = cap;
@@ -166,14 +182,18 @@ export class InstanceLayer {
       }
     }
     for (const p of this.prims) {
-      if (!p.mesh) continue;
+      if (!p.mesh || p.mesh.count === 0) continue;
       p.mesh.instanceMatrix.needsUpdate = true;
+      p.mesh.visible = true;
       // The instance list just changed, so the cached bounding sphere no longer
-      // describes it. three's InstancedMesh.raycast uses that sphere as its
-      // early reject, and a stale one that is too SMALL silently drops hits —
-      // the double-click walk-to and the route ribbon's ground probe both
-      // raycast this layer. Recomputed lazily on the next raycast.
-      p.mesh.boundingSphere = null;
+      // describes it — and it is now load-bearing twice over: three culls
+      // against it, and InstancedMesh.raycast uses it as an early reject, where
+      // a stale one that is too SMALL silently drops hits (the double-click
+      // walk-to and the route ribbon's ground probe both raycast this layer).
+      // MUST run after the matrix copy above: computeBoundingSphere() reads
+      // instanceMatrix and honours `count`, so it is only correct once the
+      // matrices are in.
+      p.mesh.computeBoundingSphere();
     }
   }
 

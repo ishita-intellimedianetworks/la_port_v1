@@ -27,9 +27,17 @@ export const MAP_FULL_CHROME_Y = 150;
 export const SIDE_LEGEND_W = 176;
 export const ZOOM_FACTOR = 1.18; // per wheel tick
 
-// Zoom is a plain canvas scale about the letterboxed plan, so 1 is "the whole
-// render fits" and the pan clamp below never lets a blank edge show.
-export const MIN_ZOOM = 1;
+// Zoom is a plain canvas scale about the letterboxed plan, so 1 is exactly "the
+// terminal fills the canvas" — the framing the map opens on and the one the
+// recenter button returns to. Below 1 the context layer comes into view.
+//
+// The zoomed-OUT limit is not a constant: it is derived each frame from how far
+// the context layer actually reaches, so zooming out stops when the whole of it
+// is on screen rather than at some number that happens to suit one site. This
+// is the slack that keeps its edges off the canvas edge.
+export const ZOOM_OUT_MARGIN = 1.06;
+/** Hard floor, in case a site authors a context layer absurdly larger than its plan. */
+export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 8;
 
 // Sticker margin (px). Fixed pixels carved out of the existing canvas — the

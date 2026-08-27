@@ -29,7 +29,7 @@ export function clipRoundedRect(
 
 export interface ImageRect { dx: number; dy: number; dw: number; dh: number; }
 
-// ── Floor plan image — CONTAIN mode, inside the inner rect ────────────────
+// ── Where the floor plan lands — CONTAIN mode, inside the inner rect ──────
 // The canvas (W × H) reserves `marginX` / `marginY` pixels on each side for
 // sticker labels. The floor plan + click-mapping live inside that inner
 // rect; everything outside is dead space (clicks naturally fall outside the
@@ -37,8 +37,11 @@ export interface ImageRect { dx: number; dy: number; dw: number; dh: number; }
 //
 // With marginX = marginY = 0 this collapses to the original full-canvas
 // behaviour so callers that don't need stickers keep working unchanged.
-export function drawFloorPlan(
-  ctx: CanvasRenderingContext2D,
+//
+// Rect only — the caller draws. It used to fit and draw in one call, which
+// stopped working once a layer had to go UNDERNEATH the plan: the rect is what
+// places that layer, so it has to exist before anything is painted.
+export function containRect(
   img: HTMLImageElement,
   W: number,
   H: number,
@@ -60,10 +63,45 @@ export function drawFloorPlan(
     // Relatively taller → fit height, letterbox left/right.
     dh = innerH; dw = innerH * imgAspect;
   }
-  const dx = marginX + (innerW - dw) / 2;
-  const dy = marginY + (innerH - dh) / 2;
-  ctx.drawImage(img, dx, dy, dw, dh);
-  return { dx, dy, dw, dh };
+  return { dx: marginX + (innerW - dw) / 2, dy: marginY + (innerH - dh) / 2, dw, dh };
+}
+
+// ── Context layer — the surroundings, drawn UNDER the plan ────────────────
+// Placed by running its own world rect through the PLAN's world→pixel
+// transform, which is the whole trick: the two images are registered because
+// they are both expressed in world metres and only one transform exists, not
+// because anything was lined up by eye at runtime. The plan's letterbox stays
+// the single source of truth for clicks and overlays; this layer is allowed to
+// spill past the canvas, where it is clipped by the element itself.
+//
+// It is NOT letterboxed on its own. Doing that would fit it to the canvas
+// independently and it would slide off the plan the moment the canvas aspect
+// changed — the bug this arrangement exists to make impossible.
+// Returns WHERE it drew, in the same logical canvas pixels as `lb`, so the
+// caller can bound the pan clamp and the zoomed-out limit by it. Null when
+// nothing was drawn.
+// Returns WHERE it goes, in the same logical canvas pixels as `lb`, so the
+// caller can bound the pan clamp and the zoomed-out limit by it — and so the
+// static-layer cache can lay it out without painting. Null when it cannot be
+// placed.
+//
+// Rect only, like `containRect`: painting moved into `static-layers.ts` once
+// both layers stopped being drawn from source on every frame.
+export function contextRect(
+  baseBounds: MinimapData["bounds"],
+  planBounds: MinimapData["bounds"],
+  lb: ImageRect,
+): ImageRect | null {
+  const a = worldToPixel(baseBounds.minX, baseBounds.minZ, planBounds, lb.dw, lb.dh);
+  const b = worldToPixel(baseBounds.maxX, baseBounds.maxZ, planBounds, lb.dw, lb.dh);
+  const dw = b.px - a.px;
+  const dh = b.py - a.py;
+  // A non-positive extent means the two rects disagree about which way the
+  // axes run — drawImage cannot mirror, and a layer exported against a mirrored
+  // plan needs re-exporting, not flipping here. Report nothing and leave the
+  // plan alone rather than painting it somewhere wrong.
+  if (!(dw > 0) || !(dh > 0)) return null;
+  return { dx: lb.dx + a.px, dy: lb.dy + a.py, dw, dh };
 }
 
 // ── Sticker labels in the margin ──────────────────────────────────────────
@@ -595,10 +633,12 @@ export function drawPlayerFOV(
 
   ctx.save();
   ctx.translate(px, py);
-  // The cone is drawn pointing up in local space. The plan's bounds swap BOTH
-  // axes, so screen X runs against world X and screen Y against world Z, and a
-  // yaw of `rotY` (forward `(-sin, -cos)`) lands at `PI - rotY`.
-  ctx.rotate(Math.PI - rotY);
+  // The cone is drawn pointing up in local space. The plan is rotated 180 on
+  // export and its bounds are plain to match, so screen X runs WITH world X and
+  // screen Y with world Z, and a yaw of `rotY` (forward `(-sin, -cos)`) lands at
+  // `-rotY`. It was `PI - rotY` under the un-rotated pair; leaving it there
+  // points the cone backwards.
+  ctx.rotate(-rotY);
 
   // FOV gradient cone
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledFovLen);

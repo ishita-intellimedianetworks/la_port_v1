@@ -139,15 +139,21 @@ export function toJson(
   );
 }
 
-/** The `map.plan` block: the render's URL plus the rect it was framed to. */
+/**
+ * The `map.plan` block: the render's URL plus the rect it was framed to.
+ *
+ * PLAIN on both axes, because renderTopDown turns the PNG half a turn on export.
+ * The rotation and this rect are one unit — changing either alone puts the map
+ * 180 degrees out.
+ */
 export function planJson(bbox: Bbox, imageUrl: string, pixelW: number, pixelH: number): string {
   return JSON.stringify(
     {
       plan: {
         imageUrl,
         bounds: {
-          minX: r(bbox.maxX), maxX: r(bbox.minX),
-          minZ: r(bbox.maxZ), maxZ: r(bbox.minZ),
+          minX: r(bbox.minX), maxX: r(bbox.maxX),
+          minZ: r(bbox.minZ), maxZ: r(bbox.maxZ),
         },
       },
       _render: { pixelW, pixelH, spanMetres: { x: r(bbox.dx, 1), z: r(bbox.dz, 1) }, aspect: r(bbox.aspect, 4) },

@@ -18,6 +18,60 @@ export interface HoloTwinHudProps {
 }
 
 /**
+ * The background veil, as its own subscriber.
+ *
+ * It used to be `backgroundColor: rgba(3,11,20,a)` written straight onto
+ * `.htl-root`, recomputed every frame from the smoothed progress. That is a
+ * full-screen REPAINT per frame — and it also invalidated the `mix-blend-mode`
+ * radial sitting on top of it, so the compositor re-blended the whole screen
+ * too, all while the main thread was busy decoding chunks. Same pixels, but as
+ * an `opacity` on a dedicated layer, which the compositor can change without
+ * repainting anything.
+ *
+ * Separate component so the rest of the HUD stops re-rendering 60×/s with it.
+ */
+const HtlVeil: React.FC<{ revealVeil: boolean }> = ({ revealVeil }) => {
+  // The point cloud's density tracks the RAW download progress (see
+  // ScenePreview), so the veil thins with the same raw value: dark at 0%,
+  // mostly clear by ~35% downloaded — the silhouette is on show for the whole
+  // download. A floor of 0.22 keeps the HUD text readable against the bright
+  // sky until the whole HUD fades out at 100%.
+  const rawProgress = useProgressStore((s) => s.progress); // 0..100
+  const VEIL_THIN_END = 35; // raw % at which the veil reaches its floor
+  const VEIL_MIN_ALPHA = 0.22;
+  const thin = revealVeil ? Math.min(1, Math.max(0, rawProgress / VEIL_THIN_END)) : 0;
+  return <div className="htl-veil" style={{ opacity: 1 - thin * (1 - VEIL_MIN_ALPHA) }} />;
+};
+
+/**
+ * The bar and its readout, as their own subscriber.
+ *
+ * Reads the SHARED smoothed reveal value from the progress store so the HUD bar
+ * fills in lockstep with the in-scene glow → fade animation. Reading drei's raw
+ * progress here would make the bar hit 100% before the effect finished,
+ * recreating the "effect happens after 100%" complaint.
+ *
+ * Driven by `transform: scaleX()`, not `width`. Width put a 120 ms LAYOUT
+ * animation on the main thread after every one of the hundred-odd steps — so,
+ * in practice, continuously for the whole load, next to the mesh decoding.
+ * scaleX runs on the compositor. The gradient is unchanged by the swap: it is
+ * sized to the element's own box either way, so the same span of it is on
+ * screen at any given percentage.
+ */
+const HtlProgress: React.FC = () => {
+  const revealProgress = useProgressStore((s) => s.revealProgress);
+  const percent = Math.round(revealProgress * 100);
+  return (
+    <div className="htl-progress">
+      <div className="htl-progress-track">
+        <div className="htl-progress-fill" style={{ transform: `scaleX(${percent / 100})` }} />
+      </div>
+      <span className="htl-percent">{percent}%</span>
+    </div>
+  );
+};
+
+/**
  * HoloTwinHud — pure-DOM branded loader overlay.
  *
  * The HUD is *only* HTML — no 3D inside it. The point cloud and the GLB
@@ -33,25 +87,11 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
   unitName,
   revealVeil = false,
 }) => {
-  // Bar reads the SHARED smoothed reveal value from the progress store so the
-  // HUD bar fills in lockstep with the in-scene glow → fade animation. If we
-  // read drei's raw progress here, the bar would hit 100% before the effect
-  // finished, recreating the "effect happens after 100%" complaint.
+  // NOTHING here subscribes to progress any more — the two values that change
+  // every frame live in HtlVeil and HtlProgress above, so this shell renders
+  // once instead of sixty times a second.
   // (The `progress` prop is still accepted for API compatibility but ignored.)
-  const revealProgress = useProgressStore((s) => s.revealProgress);
   void _ignoredProgress;
-  const percent = Math.round(revealProgress * 100);
-
-  // Background veil over the canvas. The point cloud's density tracks the RAW
-  // download progress (see ScenePreview), so the veil thins with the same raw
-  // value: dark at 0%, mostly clear by ~35% downloaded — the silhouette is on
-  // show for the whole download. A floor of 0.22 keeps the HUD text readable
-  // against the bright sky until the whole HUD fades out at 100%.
-  const rawProgress = useProgressStore((s) => s.progress); // 0..100
-  const VEIL_THIN_END  = 35;    // raw % at which the veil reaches its floor
-  const VEIL_MIN_ALPHA = 0.22;
-  const thin = revealVeil ? Math.min(1, Math.max(0, rawProgress / VEIL_THIN_END)) : 0;
-  const veilAlpha = 1 - thin * (1 - VEIL_MIN_ALPHA);
 
   // Residential color theme (hardcoded)
   const residentialTheme = {
@@ -76,15 +116,16 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
       '--htl-color':  residentialTheme.color,
       '--htl-accent': residentialTheme.accentColor,
       '--htl-bg':     residentialTheme.background,
-      // Dynamic veil — residentialTheme.background (#030b14) with the
-      // progress-driven alpha computed above.
-      backgroundColor: `rgba(3, 11, 20, ${veilAlpha})`,
     } as React.CSSProperties
   }
   role="status"
   aria-live="polite"
   aria-label="Loading digital twin"
 >
+  {/* Behind everything else in the root (z-index -1), exactly where the root's
+      own background-color used to sit — so the stacking is unchanged. */}
+  <HtlVeil revealVeil={revealVeil} />
+
   <div className="htl-bg-radial" />
 
   {/* Spacer to push hud to vertical center */}
@@ -96,12 +137,7 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
     <div className="htl-tagline">
       {unitName}
     </div>
-    <div className="htl-progress">
-      <div className="htl-progress-track">
-        <div className="htl-progress-fill" style={{ width: `${percent}%` }} />
-      </div>
-        <span className="htl-percent">{percent}%</span>
-    </div>
+    <HtlProgress />
   </div>
 
   <footer className="htl-footer">

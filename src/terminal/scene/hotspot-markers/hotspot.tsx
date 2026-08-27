@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { useCoarsePointer, useIsMobile } from "@/shared/responsive";
 import { NAV_GLASS } from "../../overlay/glass-theme";
 
 /** Rings in flight at once, evenly staggered through one cycle. */
@@ -43,12 +44,38 @@ const PING_COUNT = 2;
  */
 const BEAD_PX = 24;
 
+/** The same figure for a FINGER. A mouse pointer is one pixel; a fingertip
+ *  covers ~9 mm of glass and you cannot see through it, so the marker has to be
+ *  big enough to aim at with the thing itself hidden under your hand. */
+const BEAD_PX_TOUCH = 34;
+
 /** Bounds on the world radius the rule may ask for, as a multiple of the
  *  authored `size`. The floor keeps a marker from collapsing to nothing at the
  *  far end of a long shot; the ceiling stops one from swelling past the object
- *  it labels when the camera is almost inside it. */
+ *  it labels when the camera is almost inside it.
+ *
+ *  NOTE which end each one binds. `wanted` GROWS with distance, so MIN_SCALE
+ *  bites up close and MAX_SCALE bites far away — i.e. the ceiling is what makes
+ *  a distant marker smaller than BEAD_PX, not larger. At 1 it bound almost
+ *  every shot in this venue (the layout checkpoints stand 370-460 units back),
+ *  which is why the markers read as specks: the constant-screen-size rule was
+ *  being clamped away before it could do anything. Touch gets a ceiling high
+ *  enough for the rule to actually hold at those ranges. */
 const MIN_SCALE = 0.06;
 const MAX_SCALE = 1;
+const MAX_SCALE_TOUCH = 4;
+
+/** Edge of the invisible hit box, as a multiple of the bead RADIUS — so the
+ *  target is `COLLIDER_MULT / 2` times the bead's width on screen, at every
+ *  distance. 3.5 gives a 42 px square around a 24 px bead (fine for a mouse);
+ *  4 around a 34 px bead gives 68 px, comfortably past the ~44 px minimum a
+ *  fingertip needs. */
+const COLLIDER_MULT = 3.5;
+const COLLIDER_MULT_TOUCH = 4;
+
+/** How far a finger may roll between touchdown and lift and still count as a
+ *  tap rather than the start of a camera drag (CSS px). */
+const TAP_SLOP_PX = 16;
 
 interface HotspotProps {
   position: [number, number, number];
@@ -102,6 +129,18 @@ export function Hotspot({
   // Canvas height in CSS pixels — the units BEAD_PX is expressed in, so the
   // marker is the same size on a laptop and on a 4K monitor.
   const viewportHeight = useThree((s) => s.size.height);
+  // Finger or mouse? Both the marker's SIZE and the way a press on it becomes
+  // "open the card" differ between the two — see BEAD_PX_TOUCH and the pointer
+  // handlers on the collider. Width is folded in alongside the pointer
+  // capability so a phone that reports a fine pointer still gets the big
+  // targets; a desktop answers neither question true. Kept as two separate
+  // calls because `a() || b()` would short-circuit the second hook away.
+  const coarsePointer = useCoarsePointer();
+  const narrowViewport = useIsMobile();
+  const touchUi = coarsePointer || narrowViewport;
+  const beadPx = touchUi ? BEAD_PX_TOUCH : BEAD_PX;
+  const maxScale = touchUi ? MAX_SCALE_TOUCH : MAX_SCALE;
+  const colliderMult = touchUi ? COLLIDER_MULT_TOUCH : COLLIDER_MULT;
   const [hovered, setHovered] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(false);
   // Phase, not elapsed time: the pings advance by `delta / period`, so changing
@@ -118,7 +157,30 @@ export function Hotspot({
     if (tapTimer.current) clearTimeout(tapTimer.current);
     tapTimer.current = setTimeout(() => setHovered(false), 2200);
   };
-  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
+
+  // ── Why a tap is opened by hand instead of by `onClick` ────────────────────
+  // R3F turns the DOM `click` into a marker hit by RE-RAYCASTING at the click's
+  // coordinates, and a browser reports those from where the pointer was LIFTED.
+  // A mouse lifts on the pixel it pressed, so on desktop one click always lands.
+  // A finger rolls several pixels between touchdown and lift, and against a
+  // target this size that roll was enough to miss: the PRESS hit (the name pill
+  // appeared — exactly the symptom) while the click behind it raycast into empty
+  // space, so nothing opened. The second tap, now aimed at a marker the user
+  // could finally see, landed. Hence "one click on PC, two on the phone".
+  //
+  // So on touch the press is authoritative: it already proved the finger was on
+  // the marker, so remember it and watch the WINDOW for the lift. Lift nearby =
+  // a tap, and the card opens whatever a fresh raycast would have said; lift far
+  // away = the press was the start of a camera drag, and nothing opens.
+  const tapUnbind = useRef<(() => void) | null>(null);
+  /** When the touch path last opened the card — suppresses the synthesized
+   *  `click` that follows, so one tap never opens twice. */
+  const tapHandledAt = useRef(0);
+
+  useEffect(() => () => {
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapUnbind.current?.();
+  }, []);
   // Pointer cursor while hovering a CLICKABLE marker (one with onHotspotClick).
   const clickable = !!onHotspotClick;
   useEffect(() => {
@@ -165,8 +227,8 @@ export function Hotspot({
       sizer.getWorldPosition(markerWorld.current);
       const dist = cam.position.distanceTo(markerWorld.current);
       const worldPerPx = (2 * Math.tan((cam.fov * Math.PI) / 360) * dist) / viewportHeight;
-      const wanted = (BEAD_PX / 2) * worldPerPx;
-      const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, wanted / size));
+      const wanted = (beadPx / 2) * worldPerPx;
+      const s = Math.min(maxScale, Math.max(MIN_SCALE, wanted / size));
       sizer.scale.setScalar(s);
     }
 
@@ -267,13 +329,35 @@ export function Hotspot({
             // the tap doesn't also register as a scene drag start.
             e.stopPropagation();
             showByTap();
+            if (e.pointerType === "mouse") return;
+            tapUnbind.current?.();
+            const start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+            const onUp = (ev: PointerEvent) => {
+              tapUnbind.current?.();
+              if (ev.pointerId !== start.id) return;
+              if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) return;
+              tapHandledAt.current = performance.now();
+              onHotspotClick?.();
+            };
+            // A cancel means the gesture was taken over (a pinch, a scroll) —
+            // unbind without opening anything.
+            const onCancel = () => tapUnbind.current?.();
+            tapUnbind.current = () => {
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onCancel);
+              tapUnbind.current = null;
+            };
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onCancel);
           }}
           onClick={(e) => {
             e.stopPropagation();
+            // The touch path above already opened this one on the lift.
+            if (performance.now() - tapHandledAt.current < 700) return;
             onHotspotClick?.();
           }}
         >
-          <boxGeometry args={[size * 3.5, size * 3.5, size * 3.5]} />
+          <boxGeometry args={[size * colliderMult, size * colliderMult, size * colliderMult]} />
           <meshBasicMaterial transparent opacity={0} depthTest={depthTest} depthWrite={false} />
         </mesh>
       </group>
@@ -290,11 +374,14 @@ export function Hotspot({
               ...NAV_GLASS,
               opacity: hovered ? 1 : 0,
               transition: "opacity 200ms",
-              transform: "translateY(-26px)",
+              // Lifted clear of the BEAD, so it has to grow with it — at the
+              // touch size the desktop 26 px put the pill's lower edge inside
+              // the marker.
+              transform: `translateY(${touchUi ? -34 : -26}px)`,
               color: "var(--nav-text)",
-              padding: "5px 12px",
+              padding: touchUi ? "6px 14px" : "5px 12px",
               borderRadius: 999,
-              fontSize: 12,
+              fontSize: touchUi ? 13 : 12,
               fontWeight: 600,
               whiteSpace: "nowrap",
               userSelect: "none",
