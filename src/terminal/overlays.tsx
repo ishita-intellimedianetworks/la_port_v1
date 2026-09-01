@@ -26,8 +26,7 @@ import type { DestinationCategory, DestinationsByCategory } from "@/shared/types
 import { useNavUiStore } from "./stores/nav-ui-store";
 import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
 import { HotspotDataCard } from "./overlay/hotspot-card";
-import { SkyDebug } from "./overlay/sky-debug";
-import { GradeDebug } from "./overlay/grade-debug";
+import { DebugPanel } from "./overlay/debug-panel";
 import { tick } from "@/shared/runtime/diagnostics";
 import { scene as siteScene } from "@/config";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
@@ -803,14 +802,10 @@ export default function Overlays() {
 
       <FadeScreen visible={fadeVisible} />
 
-      {/* ?debug=true only — the time-of-day slider, next to PerfMeter's readout
-          so the sky's cost can be watched while it is being driven. */}
-      {ui.sceneContent.debug && <SkyDebug />}
-
-      {/* ?debug=true only — exposure / brightness / contrast / saturation,
-          stacked under the sky slider. Both write a store that config only
-          SEEDS, so a value dialled here is pasted back into `site.json`. */}
-      {ui.sceneContent.debug && <GradeDebug />}
+      {/* ?debug=true only — the whole look in one panel: time of day, where
+          the sun is, every light value and the grade, plus the JSON to paste
+          back into site.json. Parked below PerfMeter in the same corner. */}
+      {ui.sceneContent.debug && <DebugPanel />}
     </>
   );
 }

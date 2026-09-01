@@ -66,6 +66,12 @@ export default function SceneEnvironment({
   const cloudsHidden = useLightsStore((s) => s.cloudsHidden);
   const skyVisible = showEnvMap && !cloudsHidden;
   const t = useSkyStore((s) => s.t);
+  // Where the sun is, when the debug panel has taken it off the arc. Off
+  // everywhere else, and the sun then rides the arc `t` puts it on. SkyDome is
+  // handed the same two angles, so the disk and this light never diverge.
+  const sunUnlinked = useSkyStore((s) => s.sunUnlinked);
+  const sunAzimuth = useSkyStore((s) => s.sunAzimuth);
+  const sunElevation = useSkyStore((s) => s.sunElevation);
 
   // Up at a `layouts[]` framing camera (54–412 m). Same authored thresholds the
   // streamer swaps its bands on — one answer to "how high is the camera".
@@ -80,8 +86,17 @@ export default function SceneEnvironment({
   // tracks the sun in the sky.
   const skyLights = useMemo<Partial<ResolvedLights> | undefined>(() => {
     if (SKY_MODE === "off") return undefined;
-    return { ...lightingForT(t), ...SKY?.lights };
-  }, [t]);
+    // Degrees at the panel (the unit anyone reads a sun angle in), radians here
+    // (the unit the arc is authored in). Null keeps the sun on the arc, which is
+    // every path but the debug one.
+    const aim = sunUnlinked
+      ? {
+          azimuth: (sunAzimuth * Math.PI) / 180,
+          elevation: (sunElevation * Math.PI) / 180,
+        }
+      : null;
+    return { ...lightingForT(t, aim), ...SKY?.lights };
+  }, [t, sunUnlinked, sunAzimuth, sunElevation]);
 
   return (
     <>

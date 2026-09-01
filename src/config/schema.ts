@@ -133,6 +133,23 @@ export type StreamConfig = {
     /** > 0 biases big chunks to load earlier than their surface distance says. */
     radiusScale: number;
     refRadius: number;
+    /**
+     * How GEOMETRY is managed. Omitted → `"streamed"`, the original behaviour.
+     *
+     * `"resident"` loads every chunk ONCE at `residentTier` and never unloads,
+     * re-tiers or culls it. Nothing appears or disappears after the loading
+     * screen; only texture rungs still follow distance. Right whenever the
+     * whole model fits in memory — streaming geometry then buys nothing and
+     * costs chunks arriving one at a time and tier swaps mid-walk.
+     */
+    geometry?: "streamed" | "resident";
+    /** The single LOD `"resident"` mounts. Omitted → `"near"`. */
+    residentTier?: "near" | "mid" | "far";
+    /** Free the JS-heap vertex arrays after GPU upload (`"resident"` only).
+     *  Omitted → FALSE here, unlike the runtime this was ported from: this app
+     *  raycasts streamed geometry (see `streaming/bvh-raycast.ts`) and freeing
+     *  nulls the very array the bounds tree is built from. */
+    freeCpuArrays?: boolean;
   };
   cache: {
     /** SECONDARY cap on the number of decoded chunk groups in the JS heap. The
@@ -567,6 +584,29 @@ export type SkyConfig = {
    *  the shader with a real per-pixel cost, so turn it off to make the sky
    *  nearly free. */
   clouds?: boolean;
+  /**
+   * Take the sun OFF the day arc and park it here.
+   *
+   * Absent (the norm) `t` decides where the sun is, as it decides everything
+   * else. Present, these two angles do instead — for the disk drawn in the dome
+   * AND for the shadow-casting directional light, which read one answer and so
+   * cannot disagree.
+   *
+   * COLOURS ARE UNAFFECTED either way: every stop, the sun tint and the ambient
+   * pair are still functions of the elevation `t` gives, never of this. That is
+   * the point of the field — it is the only way to move the shadows across the
+   * terminal without also repainting the sky, which raising `t` would do.
+   *
+   * Dial it on the `?debug=true` panel and paste the block it prints.
+   */
+  sun?: {
+    /** Compass angle, DEGREES. 0 points the sun toward −Z, positive swings +X. */
+    azimuth: number;
+    /** Height above the horizon, DEGREES. Clamped to 15°..85°: under ~15° the
+     *  shadow map's depth error stops being coverable by `shadowBias` and acne
+     *  takes over, and straight overhead casts nothing you can see. */
+    elevation: number;
+  };
   /**
    * Lighting merged OVER `lights` while the sky is on, so the model is lit for
    * the time of day rather than for noon.

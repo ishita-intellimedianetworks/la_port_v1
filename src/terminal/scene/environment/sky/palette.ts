@@ -65,11 +65,54 @@ export const T_FOR_MODE: Record<Exclude<SkyMode, "off">, number> = {
 const ELEVATION = [-0.05, 0.62] as const;
 const AZIMUTH = [-0.9, 0.9] as const;
 
+/**
+ * An ABSOLUTE place to put the sun, in radians, replacing the one `t` would
+ * have derived.
+ *
+ * By default the whole sky is one scalar: `t` sets the sun's elevation, its
+ * azimuth AND every colour stop at once, which is right for a sky that has to
+ * agree with itself, and useless when the shadows are falling the wrong way
+ * across the terminal. There is no amount of `t` that moves the sun without
+ * also repainting the sky.
+ *
+ * So the sun can be UNLINKED. Given this, `sunAngles` returns it instead of the
+ * arc's, and BOTH consumers read that one answer — the disk drawn in the dome
+ * and the shadow-casting directional light. They cannot disagree; there is only
+ * ever one sun.
+ *
+ * What it does NOT touch is any colour. Every stop in the gradient, the sun
+ * tint and the ambient/hemisphere pair are functions of the elevation `t` puts
+ * the sun at, never of the aim — so the scene keeps the exact time of day it
+ * was authored with while the sun moves across it. That separation is the whole
+ * point: the alternative, raising `t`, repaints the sky on the way.
+ */
+export type SunAim = {
+  /** Compass angle, radians. 0 puts the sun toward −Z; positive swings to +X. */
+  azimuth: number;
+  /** Height above the horizon, radians. Clamped to `SUN_MIN_ELEVATION` ..
+   *  `SUN_MAX_ELEVATION` — one rule for the arc and for an explicit aim, which
+   *  is part of what keeps the two consumers identical. */
+  elevation: number;
+};
+
+/** Highest the sun may be placed — straight overhead casts shadows directly
+ *  under everything, which reads as no shadows at all. */
+const SUN_MAX_ELEVATION = Math.PI / 2 - 0.05;
+
 /** Sun elevation above the horizon in degrees — the readout that tells you why
  *  a palette looks the way it does, since the DUSK → DAY blend keys off this
  *  and not off `t`. Negative means the sun has set. */
 export function sunElevationDeg(t: number): number {
   return (sunElevation(t) * 180) / Math.PI;
+}
+
+/** Where the sun ACTUALLY is, in DEGREES — the arc's angles after the floor.
+ *  What the panel shows and what the unlink control seeds itself from, so
+ *  switching it on never makes the sun or the shadows jump. */
+export function sunAnglesForT(t: number): { azimuth: number; elevation: number } {
+  const a = sunAngles(t);
+  const deg = 180 / Math.PI;
+  return { azimuth: a.azimuth * deg, elevation: a.elevation * deg };
 }
 
 /** The study's own names for the arc, used by the debug slider's readout. */
@@ -83,6 +126,37 @@ export function labelForT(t: number): string {
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const sunElevation = (t: number) => lerp(ELEVATION[0], ELEVATION[1], t);
+const sunAzimuth = (t: number) => lerp(AZIMUTH[0], AZIMUTH[1], t);
+
+/**
+ * WHERE THE SUN IS — the single answer both the dome and the directional light
+ * read, so the sun you see and the sun that casts are one ray by construction
+ * rather than by two call sites agreeing.
+ *
+ * `aim` overrides the arc (see `SunAim`). The clamps apply either way: an
+ * unlinked sun is not a licence to put it somewhere the shadow map cannot cope
+ * with, and having one rule is what keeps the two consumers identical.
+ */
+function sunAngles(t: number, aim?: SunAim | null) {
+  return {
+    elevation: Math.min(
+      Math.max(aim ? aim.elevation : sunElevation(t), SUN_MIN_ELEVATION),
+      SUN_MAX_ELEVATION,
+    ),
+    azimuth: aim ? aim.azimuth : sunAzimuth(t),
+  };
+}
+
+/** The study's world-space sun ray for a given elevation/azimuth (Y up, −Z
+ *  forward). Split out so `sunAngles` has one place to turn into a vector. */
+function sunRay(elevation: number, azimuth: number): THREE.Vector3 {
+  const ce = Math.cos(elevation);
+  return new THREE.Vector3(
+    ce * Math.sin(azimuth),
+    Math.sin(elevation),
+    -ce * Math.cos(azimuth),
+  ).normalize();
+}
 
 const mixRGB = (
   a: [number, number, number],
@@ -124,15 +198,15 @@ export type SkySample = {
  * smoothstep of the sun's ELEVATION (not of `t`), so the colour change tracks
  * the sun clearing the horizon rather than the slider position.
  */
-export function sampleSky(t: number): SkySample {
+export function sampleSky(t: number, aim?: SunAim | null): SkySample {
+  // COLOURS come from `t` and only from `t` — this RAW elevation, not the
+  // clamped one the sun is drawn at. That is what keeps a dusk sky a sunset
+  // even though its sun is lifted to the floor, and what stops an unlinked sun
+  // from dragging a sunset around the sky with it.
   const elevation = sunElevation(t);
-  const azimuth = lerp(AZIMUTH[0], AZIMUTH[1], t);
-  const ce = Math.cos(elevation);
-  const sunDir = new THREE.Vector3(
-    ce * Math.sin(azimuth),
-    Math.sin(elevation),
-    -ce * Math.cos(azimuth),
-  ).normalize();
+  // The DISK, meanwhile, goes exactly where the light goes.
+  const a = sunAngles(t, aim);
+  const sunDir = sunRay(a.elevation, a.azimuth);
 
   const w = smoothstepJS(0.0, 0.42, elevation);
   const zenith = mixRGB(DUSK.zenith, DAY.zenith, w);
@@ -163,24 +237,29 @@ export function sampleSky(t: number): SkySample {
 // ── Scene lighting, derived from the same palette ────────────────────────────
 
 /**
- * Floor on the sun LIGHT's elevation, in radians. 0.26 ≈ 15°.
+ * Floor on the sun's elevation, in radians. 0.26 ≈ 15°.
  *
- * At dusk the sun sits a hair BELOW the horizon — correct for the sky, useless
- * for the light, which would then light the model from underneath. But the
- * bigger problem is shadow acne: a shadow map's depth error goes as
- * `1/tan(elevation)`, so light arriving at 7° slopes ~10.5 m of depth across a
- * texel of this map, and no `shadowBias` small enough to keep shadows attached
- * can cover that. Lifting to 15° roughly HALVES the slope — it is the cheapest
- * fix because it targets the cause, and covering the same error with bias
- * instead would need about -0.006, which detaches every shadow in the scene
- * from the thing casting it.
+ * At dusk the arc puts the sun a hair BELOW the horizon, which would light the
+ * model from underneath. The bigger problem is shadow acne: a shadow map's
+ * depth error goes as `1/tan(elevation)`, so light arriving at 7° slopes
+ * ~10.5 m of depth across a texel of this map, and no `shadowBias` small enough
+ * to keep shadows attached can cover that. Lifting to 15° roughly HALVES the
+ * slope — the cheapest fix, because it targets the cause; covering the same
+ * error with bias instead would need about -0.006, which detaches every shadow
+ * in the scene from the thing casting it.
  *
- * The look survives: this lifts only the light. The sky's own sun is drawn from
- * the unmodified `sampleSky`, so the sunset stays exactly where it is on the
- * horizon — the sun you SEE and the sun that SHADES simply stop being the same
- * ray below 15°.
+ * It applies to the sun ITSELF, not only to the light. The disk in the dome is
+ * drawn from the same `sunAngles`, so the sun you SEE and the sun that SHADES
+ * are never two different rays. Lifting only the light — which is what this
+ * used to do — bought a marginally lower sunset at the price of shadows that
+ * visibly disagreed with the sun above them, and that is the more expensive
+ * tell.
+ *
+ * The COLOURS are untouched by it: they key off the raw `sunElevation(t)` (see
+ * `sampleSky`), so a dusk sky is still a full sunset — drawn with its sun a
+ * little higher up.
  */
-const LIGHT_MIN_ELEVATION = 0.26;
+const SUN_MIN_ELEVATION = 0.26;
 
 /**
  * Where the ambient term samples the dome: 45° up, through the study's own
@@ -213,15 +292,21 @@ export type SkyLighting = {
  * generated sky is exactly the pair that drifts apart. Intensities are not
  * derived: the study is a shader with no scene lights, so it has no opinion on
  * them, and they stay authorable in `site.json › sky.lights`.
+ *
+ * `aim` is the one exception — see `SunAim`. It replaces the sun's DIRECTION
+ * and nothing else, so the sun can be moved without the sky's colours moving
+ * with it. The direction itself comes from `sunAngles`, the same call the dome
+ * draws its disk from, so this light is always under the sun you can see.
  */
-export function lightingForT(t: number): SkyLighting {
+export function lightingForT(t: number, aim?: SunAim | null): SkyLighting {
   const s = sampleSky(t);
 
-  const dir = s.sunDir;
-  if (dir.y < LIGHT_MIN_ELEVATION) {
-    dir.y = LIGHT_MIN_ELEVATION;
-    dir.normalize();
-  }
+  // The SAME ray the dome drew its disk at — one `sunAngles` call answers for
+  // both, so the light cannot end up anywhere the sun is not. Only the
+  // direction responds to `aim`; every colour below is the palette's either
+  // way, which is what keeps an unlinked sun from changing the time of day.
+  const a = sunAngles(t, aim);
+  const dir = sunRay(a.elevation, a.azimuth);
 
   const midSky = hex(s.horizon.clone().lerp(s.zenith, AMBIENT_UP));
 

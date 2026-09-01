@@ -159,6 +159,24 @@ export default function SkyDome({
   // panel can drive them; `site.json` only seeds them.
   const t = useSkyStore((s) => s.t);
   const clouds = useSkyStore((s) => s.clouds);
+  // The unlinked sun, when the debug panel is driving it. It replaces where the
+  // sun is DRAWN and nothing else — every colour uniform below is still `t`'s
+  // (see `sampleSky`) — and `lightingForT` is handed the very same angles, so
+  // the disk and the shadows are one ray.
+  //
+  // Selected as primitives, not as an object: a selector returning a fresh
+  // object would make every unrelated store write look like a change, and the
+  // uniform effect below is keyed on this.
+  const aimed = useSkyStore((s) => s.sunUnlinked);
+  const aimAz = useSkyStore((s) => s.sunAzimuth);
+  const aimEl = useSkyStore((s) => s.sunElevation);
+  const aim = useMemo(
+    () =>
+      aimed
+        ? { azimuth: (aimAz * Math.PI) / 180, elevation: (aimEl * Math.PI) / 180 }
+        : null,
+    [aimed, aimAz, aimEl],
+  );
 
   // Rebuilt only when the cloud band is toggled, because that is a `#define`
   // and so a recompile. Moving the SUN is not: `t` writes uniform values
@@ -200,7 +218,7 @@ export default function SkyDome({
   // Resolve the palette into the existing uniform objects. Their identity never
   // changes, so this costs no recompile and no reallocation on the GPU side.
   useEffect(() => {
-    const s = sampleSky(t);
+    const s = sampleSky(t, aim);
     const u = material.uniforms;
     (u.uZenith.value as THREE.Color).copy(s.zenith);
     (u.uHorizon.value as THREE.Color).copy(s.horizon);
@@ -208,7 +226,7 @@ export default function SkyDome({
     (u.uSun.value as THREE.Color).copy(s.sun);
     (u.uSunDir.value as THREE.Vector3).copy(s.sunDir);
     horizon.current.copy(s.horizon);
-  }, [t, material]);
+  }, [t, aim, material]);
 
   // The material is ours, not R3F's (it comes in as a prop, not a JSX child),
   // so its program is ours to release.

@@ -355,13 +355,17 @@
       "WHAT IS ACTUALLY DIFFERENT, and it is two things, not one.",
       "",
       "1. A DIFFERENT ASSET SET. `stream` streams portla-c5-v5-obj: object chunks,",
+      "1. A DIFFERENT ASSET SET. `stream` streams portla-c5-v5-obj: object chunks,",
       "   instancing OFF, a static ocean, 816 chunks all carrying geometry. This",
-      "   streams portla-c5-v5w-inst: the same zone re-baked with instancing ON and",
-      "   the ocean ANIMATED. 641 chunks of which only 275 carry geometry - the",
-      "   other 366 are pure placement lists costing no download at all - plus a",
-      "   785-entry palette holding 143,970 unique triangles drawn 23,064 times for",
-      "   4.16 M, i.e. it stores 3.5% of what it draws. It reconciles exactly:",
-      "   8,327,661 chunk near + 765,590 lifted animated + 4,155,562 instanced =",
+      "   streams portla-c5-v6wo-inst-mo: the v6 optimized-water zone re-baked with",
+      "   instancing ON and the ocean ANIMATED. 639 chunks of which only 291 carry",
+      "   geometry - the other 348 are pure placement lists costing no download at",
+      "   all - plus a 786-entry palette drawn 23,095 times, and a NEAR tier encoded",
+      "   with meshopt + KHR_mesh_quantization instead of Draco, so positions,",
+      "   normals and UVs stay int16/int8 in VRAM rather than being dequantized to",
+      "   float32 on load. Textures are UASTC KTX2. Near tier: 8,339,157 triangles,",
+      "   56.7 MB encoded - and under `geometry: resident` that IS the session: the",
+      "   near tier is the only tier ever fetched, mid/far are published but dead.",
       "   13,248,813 = source. Because the manifests differ, this needs its own",
       "   `assetBase` and its own dollhouse `hide` list; everything else is shared.",
       "",
@@ -384,13 +388,18 @@
       "until nothing NEARER is still decoding, with a 600 ms escape hatch so one of",
       "them cannot dam everything queued behind it."
     ],
-    "slug": "portla-c5-v5w-inst",
-    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V2, one variable per bake alongside NEXT_PUBLIC_STREAM_BASE for the block above. Both are the COMPLETE published prefix, used verbatim - nothing is appended - and they exist because the published name and the bake's own name diverge (this calls itself portla-c5-v5w-inst and is published under v5w-inst/), so no root + slug can compose either. StreamConfig.assetBase would let a URL be authored here instead and still works, but it is deliberately left unset: two places holding the same URL is two places to drift, and a stale one here would silently win nothing while looking authoritative. UNSET IN .env, this route falls back to NEXT_PUBLIC_ASSET_BASE + `slug` - the local staging copy under public/, which is gitignored - so it 404s loudly rather than quietly streaming the other bake.",
+    "slug": "portla-c5-v6wo-inst-mo",
+    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V2, one variable per bake alongside NEXT_PUBLIC_STREAM_BASE for the block above. Both are the COMPLETE published prefix, used verbatim - nothing is appended - and they exist because the published name and the bake's own name diverge (this calls itself portla-c5-v6wo-inst-mo and is published under v6w-inst-mo/), so no root + slug can compose either. StreamConfig.assetBase would let a URL be authored here instead and still works, but it is deliberately left unset: two places holding the same URL is two places to drift, and a stale one here would silently win nothing while looking authoritative. UNSET IN .env, this route falls back to NEXT_PUBLIC_ASSET_BASE + `slug` - the local staging copy under public/, which is gitignored - so it 404s loudly rather than quietly streaming the other bake.",
     "streaming": {
-      "_note": "THREE NUMBERS, all about hiding the fill rather than about this bake. alwaysLoadRadiusMetres 60 -> 140 and frustumMarginMetres 40 -> 90: both are METRIC, and with frustumCull on a chunk is only fetched ONCE IT IS IN VIEW, so every turn reveals loading happening in front of you and these two are what buy the time to hide it. The values on / were inherited from a 70-degree frustum; at world.fov 30 they cover less than half the angular width they used to, which is why turning showed the fill. THE COST IS MEMORY AND CHURN - a bigger bubble mounts more chunks and evicts more, so if TURNING starts to hitch (an evicted chunk is not re-downloaded, but IS re-decoded through Draco) the fix is more cache headroom, not smaller numbers here. loadsPerTick 16 -> 28 because the DECODER stopped being the ceiling: three's Draco pool defaults to 4 workers and is now sized from hardwareConcurrency - 1, so the per-tick figure is the real throughput knob again. NOTE the browser caps ~6 connections per origin on HTTP/1.1, which is what `next dev` serves; over HTTP/2 from the CDN they do not queue there.",
+      "_note": "THE v6wo-inst-mo RECIPE, ported from LA_PORT_ADAPTIVE's models.config.json. The three metric numbers are unchanged from v5w-inst and are still about hiding the fill: alwaysLoadRadiusMetres 140 and frustumMarginMetres 90 buy time before a turn reveals loading, and loadsPerTick 28 is the real throughput knob now the Draco pool is sized from hardwareConcurrency. WHAT IS NEW IS `geometry: resident`. Every chunk mounts ONCE at `residentTier` and is never unloaded, re-tiered or frustum-culled, so nothing pops in, nothing swaps LOD mid-walk, and the resident-byte governor can no longer evict a chunk that the next tick immediately re-requests. It is affordable because this bake's near tier is the only tier a session ever fetches - mid/far are dead weight in the output. The bake pairs it with meshopt + KHR_mesh_quantization on that near tier, which keeps positions/normals/UVs at int16/int8 in VRAM where Draco dequantizes everything to float32 on load; the decoder for it is already wired in chunk-manager, so nothing here has to ask for it. `freeCpuArrays` IS DELIBERATELY ABSENT and defaults FALSE here, unlike upstream where it is true and is called the thing that makes residency affordable: that runtime raycasts only its navmesh, while this app raycasts streamed geometry for double-click walk-to, the interior portals and the route ribbon's per-frame ground probe - see streaming/bvh-raycast.ts - and freeing nulls the very attribute array those bounds trees are built from. Turning it on would break picking silently, on whichever chunk was clicked.",
       "alwaysLoadRadiusMetres": 140,
       "frustumMarginMetres": 90,
-      "loadsPerTick": 28
+      "hysteresisMetres": 20,
+      "loadsPerTick": 28,
+      "radiusScale": 0,
+      "refRadius": 120,
+      "geometry": "resident",
+      "residentTier": "near"
     },
     "render": {
       "_note": [
@@ -472,14 +481,14 @@
   },
   "world": {
     "eyeHeight": 1.8288,
-    "fov": 30,
+    "fov": 35,
     "shadows": true,
     "grade": {
-      "_note": "COLOUR GRADE, seeded NEUTRAL on purpose — these values change nothing until someone dials them in, and while they are neutral the CSS filter is not emitted at all, so the compositor does no extra work. Ported from the facet_4 study, which drives the same four knobs. `exposure` is the one to reach for first: it multiplies the scene in HDR BEFORE tone mapping (renderer.toneMappingExposure), so highlights roll off through NeutralToneMapping instead of clipping, and it is free — a uniform in a step three.js already runs. The other three are a CSS `filter` on the canvas, which acts on the 8-bit sRGB image AFTER tone mapping: fine for a finishing nudge, prone to banding if pushed hard, and it costs a full-screen composite pass every frame. NOTE the study renders through ACESFilmicToneMapping while this app uses NeutralToneMapping, so its slider values do NOT transfer numerically — re-dial them here rather than copying. Drive them live with ?debug=true (the GRADE panel under the sky slider) and paste what you settle on; this block is only the seed. One canvas serves both the dollhouse and the walking view, so a grade applies to both, and it never touches the glass UI or the hotspot tooltips — those are siblings of the canvas, not children.",
-      "exposure": 1,
+      "_note": "COLOUR GRADE, dialled on the ?debug=true panel. NOTE THE COST: `contrast` and `saturation` are non-zero here, so the CSS filter IS emitted (it takes ALL THREE at zero to skip it — `brightness` alone being 0 does not) — that puts the canvas on its own composited layer and runs a full-screen shader over every pixel each frame. Zero all three and that pass disappears entirely (which is not the same as setting them to 1.0). `exposure` stays at 1 and is the free knob; reach for it first and keep these three as a finishing nudge only. Ported from the facet_4 study, which drives the same four knobs. `exposure` is the one to reach for first: it multiplies the scene in HDR BEFORE tone mapping (renderer.toneMappingExposure), so highlights roll off through NeutralToneMapping instead of clipping, and it is free — a uniform in a step three.js already runs. The other three are a CSS `filter` on the canvas, which acts on the 8-bit sRGB image AFTER tone mapping: fine for a finishing nudge, prone to banding if pushed hard, and it costs a full-screen composite pass every frame. NOTE the study renders through ACESFilmicToneMapping while this app uses NeutralToneMapping, so its slider values do NOT transfer numerically — re-dial them here rather than copying. Drive them live with ?debug=true (the GRADE panel under the sky slider) and paste what you settle on; this block is only the seed. One canvas serves both the dollhouse and the walking view, so a grade applies to both, and it never touches the glass UI or the hotspot tooltips — those are siblings of the canvas, not children.",
+      "exposure": 0.94,
       "brightness": 0,
-      "contrast": 0,
-      "saturation": 0
+      "contrast": 0.04,
+      "saturation": 0.17
     }
   },
   "cameras": {
@@ -544,14 +553,20 @@
     "heroContainerId": "EGHU4829136"
   },
   "sky": {
-    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"afternoon\" is the default, \"dusk\" the open-sea study's sunset palette, \"day\" a flat midday one, \"off\" restores the plain blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: sun direction, sun tint, ambient tint and the sky-fill pair are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on. `hemiIntensity` is the sky fill that keeps the away-from-sun side off black; raising `ambientIntensity` instead would flatten the lit side.",
+    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"afternoon\" is the default, \"dusk\" the open-sea study's sunset palette, \"day\" a flat midday one, \"off\" restores the plain blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: sun direction, sun tint, ambient tint and the sky-fill pair are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on. `hemiIntensity` is the sky fill that keeps the away-from-sun side off black; raising `ambientIntensity` instead would flatten the lit side. `sun` (absent by default) takes the sun OFF the arc and parks it at an absolute azimuth/elevation in degrees. The disk in the dome and the shadow-casting light read that one answer, so they are always the same ray. It moves NO colour: every stop is still a function of the elevation `t` gives. That is the only way to turn the shadows without repainting the sky, and the ?debug=true panel prints the block to paste here.",
     "mode": "afternoon",
     "clouds": true,
+    "sun": {
+      "_note": "Dialled on the ?debug=true panel. The sun is OFF the day arc and parked here: these two angles place the disk in the dome AND aim the shadow-casting light, which read one answer and so cannot disagree. Colours are untouched by it — every stop, the sun tint and the ambient/fill pair are still functions of the elevation `t` gives (0.55, the afternoon stop), which is why none of them is authored below.",
+      "azimuth": -158,
+      "elevation": 18
+    },
     "lights": {
       "sunIntensity": 3.4,
       "ambientIntensity": 0.3,
       "hemiIntensity": 1.6,
-      "envIntensity": 0.55
+      "envIntensity": 1.33,
+      "envRotation": 39
     }
   },
   "map": {

@@ -283,6 +283,21 @@ export type LightsConfig = {
   /** Environment HDRI file (public path) used for image-based lighting +
    *  reflections. Default "/env.hdr"; interiors point at a city HDRI. */
   envFile?: string;
+  /**
+   * Yaw applied to the HDRI, in DEGREES. Default 0.
+   *
+   * The HDRI is a photograph of a sky with its OWN sun baked into it at a fixed
+   * bearing, and it supplies both the reflections and a large share of the fill.
+   * Nothing about moving the procedural sun moves it — so the two suns disagree
+   * by however far apart they happen to be, and the model reads as lit from a
+   * direction with no sun over it. This is the knob that lines them up.
+   *
+   * There is no way to derive the right value: where the HDRI's sun sits is a
+   * property of the image, not of anything the code knows. Dial it once per
+   * HDRI (the debug panel's "match sun" seeds it from the current sun bearing)
+   * and paste it back here.
+   */
+  envRotation?: number;
   /** Sun (directional) intensity. Default 7.9. */
   sunIntensity?: number;
   /** Sun colour (hex). Default "#ffffff". */

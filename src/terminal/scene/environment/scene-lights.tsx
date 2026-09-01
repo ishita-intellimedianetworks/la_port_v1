@@ -22,6 +22,9 @@ const DEFAULT_LIGHTS = {
   hemiGroundColor: '#ffffff',
   envIntensity: 0.65,
   envFile: '/env.hdr',
+  // No yaw by default — every venue that has not been dialled keeps exactly the
+  // HDRI orientation it shipped with. See `LightsConfig.envRotation`.
+  envRotation: 0,
   sunIntensity: 7.9,
   sunColor: '#ffffff',
   // Sun direction (normalised at runtime); the light position + its orthographic
@@ -93,6 +96,22 @@ const FOLLOW_MARGIN = 0.2;
 // that arrived late — walking redraws often enough on its own, standing still
 // does not.
 const FOLLOW_SETTLE = 1.5;
+
+// ── Keeping a frozen map honest while the world streams in ───────────────────
+//
+// The one-shot pump below freezes the shadow map eight frames after the lights
+// are fitted. On a cold load that is long before the port has streamed, so the
+// frozen map holds the shadows of almost nothing — and NOTHING ever redraws it,
+// because `version` tracks the model BOUNDS, which are published once from the
+// manifest and never again. The symptom is a scene that looks wrong until you
+// touch any unrelated control, because a re-render is what re-runs the fit.
+//
+// Chunks mount and unmount straight onto the scene with no store and no event,
+// so the cheapest true signal is how many objects the scene is holding. Sampled
+// every few frames and rate-limited, a burst of arriving chunks costs one depth
+// pass rather than one per chunk.
+const RESTREAM_SAMPLE_FRAMES = 15;
+const RESTREAM_MIN_INTERVAL = 0.5;
 
 /**
  * SceneLights — ambient + a sun fitted to the model bounds, plus HDR image-based
@@ -168,18 +187,48 @@ export default function SceneLights({
   // whichever source is active. It is null everywhere else, and the memo then
   // returns the source object itself — identical identity + values to before.
   const override = useLightsStore((s) => s.override);
+  // The `?debug=true` panel's edits. LAST, above the sky — a field it pins has
+  // to survive the next time-of-day change, and merging it any earlier would
+  // let `sky.lights` quietly put the old value back. Sparse, so untouched
+  // fields still track the palette.
+  const debug = useLightsStore((s) => s.debug);
   const L = useMemo<ResolvedLights>(() => {
     let src = controlsEnabled && liveValues ? liveValues : base;
     // The sky's own lighting comes first so the live panel (and the /lighting
     // presets) can still overrule it.
     if (envOverride) src = { ...src, ...envOverride };
-    return override ? { ...src, ...override } : src;
-  }, [controlsEnabled, liveValues, base, envOverride, override]);
-  const effShadows = controlsEnabled && liveValues ? liveShadows : shadows;
+    if (override) src = { ...src, ...override };
+    return debug ? { ...src, ...debug } : src;
+  }, [controlsEnabled, liveValues, base, envOverride, override, debug]);
+
+  // Hand the fully-merged set back to the store so the debug panel can show
+  // (and export) what is actually on screen rather than only its own edits.
+  // `publishResolved` drops a write that changes nothing, which is what keeps
+  // this from looping through the panel's own subscription.
+  const publishResolved = useLightsStore((s) => s.publishResolved);
+  // Same precedence as `debug`: the panel's toggle wins outright, and null
+  // means it has not been touched, not "off".
+  const debugShadows = useLightsStore((s) => s.debugShadows);
+  const effShadows =
+    debugShadows ?? (controlsEnabled && liveValues ? liveShadows : shadows);
+
+  // Hand the fully-merged set back to the store so the debug panel can show
+  // (and export) what is actually on screen rather than only its own edits.
+  // `publishResolved` drops a write that changes nothing, which is what keeps
+  // this from looping through the panel's own subscription.
+  useEffect(() => {
+    publishResolved(L, effShadows);
+  }, [publishResolved, L, effShadows]);
 
   const lightDir = useMemo(
     () => new THREE.Vector3(...L.sunDirection).normalize(),
     [L.sunDirection],
+  );
+
+  // Degrees in config (how anyone reads a bearing), a Euler here.
+  const envRotation = useMemo(
+    () => new THREE.Euler(0, (L.envRotation * Math.PI) / 180, 0),
+    [L.envRotation],
   );
 
   useEffect(() => {
@@ -481,6 +530,33 @@ export default function SceneLights({
     light.shadow.needsUpdate = true;
   });
 
+  // Redraw the frozen map when the resident set changes. Runs in BOTH fitting
+  // modes: the static fit freezes outright, and the follow fit stops settling
+  // 1.5 s after the last step — so standing still while the world streams in
+  // leaves either of them stale.
+  const sampleTick = useRef(0);
+  const sampleCount = useRef(-1);
+  const sampleNext = useRef(0);
+
+  useFrame(({ clock }) => {
+    if (!effShadows) return;
+    if (++sampleTick.current % RESTREAM_SAMPLE_FRAMES) return;
+
+    const count = scene.children.length;
+    if (count === sampleCount.current) return;
+    // Rate limit WITHOUT recording the count, so a change that arrives inside
+    // the window is redrawn on the next sample rather than dropped.
+    if (clock.elapsedTime < sampleNext.current) return;
+
+    sampleCount.current = count;
+    sampleNext.current = clock.elapsedTime + RESTREAM_MIN_INTERVAL;
+
+    // Whichever light is actually casting here — indoors the sun is blocked by
+    // the ceiling and the spot is the caster.
+    const shadow = interior ? spotRef.current?.shadow : lightRef.current?.shadow;
+    if (shadow) shadow.needsUpdate = true;
+  });
+
   return (
     <>
       <ambientLight intensity={L.ambientIntensity} color={L.ambientColor} />
@@ -534,6 +610,14 @@ export default function SceneLights({
         key={L.envFile}
         files={L.envFile}
         environmentIntensity={L.envIntensity}
+        // Spin the HDRI about Y so its baked-in sun can be brought round to
+        // where OUR sun is. Without it the reflections and the image-based fill
+        // keep arriving from whichever bearing the photograph was taken at,
+        // which is the mismatch that reads as "lit from the wrong side" no
+        // matter where the directional light is pointed. A plain uniform on the
+        // environment sampler — no reload, no extra memory.
+        environmentRotation={envRotation}
+        backgroundRotation={envRotation}
         background={interior}
         backgroundBlurriness={0}
       />

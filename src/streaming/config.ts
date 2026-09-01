@@ -41,6 +41,45 @@ export type TexFormat = "auto" | "webp" | "ktx2";
 export type FogStart = number | "near" | "mid" | "midfar" | "far";
 
 export interface StreamingConfig {
+  /**
+   * How GEOMETRY is managed. Textures adapt by distance either way.
+   *
+   *   "streamed"  the original: chunks mount, re-tier and unload by distance.
+   *   "resident"  every chunk is loaded ONCE at `residentTier` and never
+   *               unloaded, re-tiered or culled. Nothing appears or disappears
+   *               after the loading screen; only texture rungs change, and
+   *               those swap in place so they never flash.
+   *
+   * Ported from the LA_PORT_ADAPTIVE runtime, where it is the default for this
+   * model. Streaming geometry across a site whose entire near tier is a couple
+   * of dozen megabytes buys nothing and costs every visible artefact: chunks
+   * arriving one at a time, tier swaps mid-walk, and a resident-byte governor
+   * evicting geometry that is immediately re-requested.
+   */
+  geometryMode: "streamed" | "resident";
+  /** The single LOD "resident" mounts. Geometry LOD is nearly free on this
+   *  model — the three tiers are within ~5% of each other on triangles — so the
+   *  cheap tiers save download bytes, not frame time. Default "near". */
+  residentTier: Tier;
+  /**
+   * Free the JS-heap copy of a chunk's vertex data once the GPU has it
+   * ("resident" only).
+   *
+   * DEFAULT FALSE HERE, and that is a deliberate divergence from the runtime
+   * this was ported from, where it defaults true and is described as the thing
+   * that makes whole-model residency affordable.
+   *
+   * It cannot be true in this app. There, the only raycast target is the
+   * navmesh; here `bvh-raycast.ts` builds a `MeshBVH` from
+   * `geometry.attributes.position` the first time a ray reaches a chunk, and
+   * that backs double-click walk-to, the interior portals and the route
+   * ribbon's per-frame ground probe. Freeing nulls exactly that array, so
+   * picking would break — silently, and only on whichever chunk the user
+   * happened to click.
+   *
+   * Turn it on only for a build that has given up picking streamed geometry.
+   */
+  freeCpuArrays: boolean;
   nearDist: number;
   midDist: number;
   farDist: number;
@@ -181,6 +220,13 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
 
     cacheLimit: m.cache.limitChunks,
     residentBudgetMB: m.cache.residentBudgetMB,
+
+    geometryMode: s.geometry ?? "streamed",
+    residentTier: s.residentTier ?? "near",
+    // Not `s.freeCpuArrays ?? true` as upstream has it — see the field doc.
+    // A bake that asks for it explicitly still gets it, so the flag stays
+    // usable, but nothing turns it on by omission.
+    freeCpuArrays: s.freeCpuArrays ?? false,
 
     fog: m.fog,
     transmission: m.render.transmission,
@@ -335,6 +381,18 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
     // A smaller bubble mounts fewer chunks, so the cache can be smaller too —
     // but it must still exceed the peak mounted count or the LRU does nothing.
     cacheLimit: Math.max(64, Math.round(c.cacheLimit * 0.4)),
+    // NEVER hold the whole model on a phone. Residency drops the bands, the
+    // frustum gate, the unload pass and the resident-byte governor — which is
+    // every lever this function pulls — so a mobile profile under it would keep
+    // the FULL near tier (8.3 M triangles on this bake) with nothing left to
+    // bound it. Everything above would still be applied and none of it would
+    // do anything.
+    //
+    // Desktop keeps residency and its artefact-free fill; mobile falls back to
+    // exactly the streaming behaviour it has today. This is the one place the
+    // two profiles differ in KIND rather than in degree, which is why it is
+    // here rather than authored per bake.
+    geometryMode: "streamed" as const,
   };
 }
 

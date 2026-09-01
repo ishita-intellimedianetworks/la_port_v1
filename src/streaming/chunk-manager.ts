@@ -216,6 +216,21 @@ export class ChunkManager {
     at: number;
   }[] = [];
 
+  /**
+   * Consecutive failed mounts per chunk id, and the ceiling that stops one dead
+   * URL costing the frame.
+   *
+   * Only "resident" reads them, because only it re-scans for missing chunks
+   * every tick instead of consuming a queue: a chunk whose load throws is
+   * otherwise picked up again immediately, forever, and a manifest entry whose
+   * file is genuinely gone would spin the loader for the whole session.
+   */
+  private mountFails = new Map<string, number>();
+  private static readonly MAX_MOUNT_FAILS = 3;
+
+  /** "resident" only: the instance buffers are built once and never again. */
+  private instSynced = false;
+
   private mode: "adaptive" | "full";
   /** Set by dispose(). Async work started before it (the instance palette, the
    *  animated rig, an in-flight chunk) must not attach anything afterwards. */
@@ -480,9 +495,108 @@ export class ChunkManager {
     return this._frustum.intersectsSphere(this._sphere);
   }
 
+  /**
+   * The texture pass. Shared by both geometry modes and, in "resident" mode,
+   * the only adaptive work left per tick.
+   *
+   * Two things can be out of date on a mounted chunk:
+   *
+   *   a) whether it is textured at all — that follows a distance cutoff rather
+   *      than the tier, so a chunk stays loaded past textureDist but drops to a
+   *      flat material once beyond it;
+   *   b) which RUNG it carries — progressive mounting dresses a chunk at the
+   *      smallest rung so it can appear immediately, and this is where it is
+   *      promoted to the rung its tier actually asks for.
+   *
+   * (a) is unbudgeted: it is a downgrade to a flat material, or a chunk coming
+   * back into the textured zone, and both are rare. (b) is budgeted and
+   * nearest-first, because after a fill EVERY chunk wants an upgrade at once
+   * and an unbounded wave would re-saturate the network the fill just cleared.
+   *
+   * Works unchanged under residency: `st.current` is then always
+   * `residentTier`, so `texRung[st.current]` is that tier's rung for every
+   * chunk and only the distance CUTOFF in (a) still varies.
+   */
+  private updateTextures() {
+    const upgrades: { st: ChunkState; dist: number }[] = [];
+    for (const st of this.states.values()) {
+      if (!st.current || !st.group || st.retexturing) continue;
+      const want = this.isTextured(st.current, st.entry);
+      if (want !== st.textured) { this.retexture(st, want); continue; }
+      if (!want) continue;
+      if (st.texPx !== this.cfg.texRung[st.current]) {
+        upgrades.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
+      }
+    }
+    if (upgrades.length) {
+      upgrades.sort((a, b) => a.dist - b.dist);
+      const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
+      for (let i = 0; i < Math.min(perTick, upgrades.length); i++) {
+        const u = upgrades[i];
+        this.retexture(u.st, true, this.cfg.texRung[u.st.current!]);
+      }
+    }
+  }
+
+  /**
+   * WHOLE-MODEL RESIDENCY — a different strategy, not a setting of the other
+   * one: no distance bands, no frustum gate, no unloading, no memory governor.
+   *
+   * Every chunk is mounted once at `residentTier` and stays. What that buys is
+   * the absence of artefacts rather than a number: nothing pops in, nothing
+   * swaps LOD mid-walk, and the resident-byte governor can no longer evict a
+   * chunk that the very next tick re-requests. It is only affordable because
+   * the near tier of this bake is a few tens of megabytes; `geometryMode` is
+   * the gate that keeps it opt-in per bake.
+   *
+   * Textures still adapt — they are the one thing that genuinely varies with
+   * distance, and they swap in place so they never flash.
+   */
+  private updateResident() {
+    // Show anything that finished decoding since the last tick.
+    this.flushReveals();
+
+    // Anything still missing, nearest-first. RE-SCANNED each tick rather than
+    // consumed from a queue, so a chunk whose load failed is retried instead of
+    // being silently absent for the whole session — bounded by MAX_MOUNT_FAILS
+    // so a genuinely dead URL cannot spin forever.
+    const missing: { st: ChunkState; dist: number }[] = [];
+    for (const st of this.states.values()) {
+      if (st.current || st.loadingTier) continue;
+      if (!st.entry.lods.length) continue; // fully instanced: InstanceLayer draws it
+      if ((this.mountFails.get(st.entry.id) ?? 0) >= ChunkManager.MAX_MOUNT_FAILS) continue;
+      missing.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
+    }
+    if (missing.length) {
+      missing.sort((a, b) => a.dist - b.dist);
+      const n = Math.min(this.cfg.maxLoadsPerTick, missing.length);
+      for (let i = 0; i < n; i++) {
+        const tier = this.resolveTier(missing[i].st.entry, this.cfg.residentTier);
+        if (tier) this.mount(missing[i].st, tier);
+      }
+    }
+
+    this.updateTextures();
+
+    // Every placement, once. The resident set never changes after this, so
+    // sync()'s signature check early-outs on every subsequent tick and the
+    // instance buffers are built exactly one time.
+    if (this.instances && !this.instSynced) {
+      this.instResident = this.manifest.chunks.filter((c) => c.inst);
+      this.instances.sync(this.instResident);
+      this.instSynced = true;
+    }
+  }
+
   /** Main entry — call ~updateHz times/sec with the camera. */
   update(camera: THREE.Camera) {
     camera.getWorldPosition(this._cam);
+    // Residency is a different strategy, not a setting of this one — see
+    // updateResident() for what it drops and why.
+    if (this.mode === "adaptive" && this.cfg.geometryMode === "resident") {
+      this.updateResident();
+      return;
+    }
     // View frustum for this tick (stream culling): only chunks the camera can
     // see are loaded, except a 360° bubble of nearby chunks (alwaysLoadDist).
     const cull = this.mode === "adaptive" && this.cfg.frustumCull;
@@ -576,38 +690,8 @@ export class ChunkManager {
       this.mount(l.st, l.want as Tier);
     }
 
-    // 3. Textures. Two things can be out of date on a mounted chunk:
-    //
-    //    a) whether it is textured at all — that follows a distance cutoff
-    //       rather than the tier, so a chunk stays loaded past textureDist but
-    //       drops to a flat material once beyond it;
-    //    b) which RUNG it carries — progressive mounting dresses a chunk at the
-    //       smallest rung so it can appear immediately, and this is where it is
-    //       promoted to the rung its tier actually asks for.
-    //
-    //    (a) is unbudgeted: it is a downgrade to a flat material, or a chunk
-    //    coming back into the textured zone, and both are rare. (b) is budgeted
-    //    and nearest-first, because after a fill EVERY chunk wants an upgrade at
-    //    once and an unbounded wave would re-saturate the network the fill has
-    //    just cleared.
-    const upgrades: { st: ChunkState; dist: number }[] = [];
-    for (const st of this.states.values()) {
-      if (!st.current || !st.group || st.retexturing) continue;
-      const want = this.isTextured(st.current, st.entry);
-      if (want !== st.textured) { this.retexture(st, want); continue; }
-      if (!want) continue;
-      if (st.texPx !== this.cfg.texRung[st.current]) {
-        upgrades.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
-      }
-    }
-    if (upgrades.length) {
-      upgrades.sort((a, b) => a.dist - b.dist);
-      const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
-      for (let i = 0; i < Math.min(perTick, upgrades.length); i++) {
-        const u = upgrades[i];
-        this.retexture(u.st, true, this.cfg.texRung[u.st.current!]);
-      }
-    }
+    // 3. Textures.
+    this.updateTextures();
 
     // 4. HARD MEMORY CEILING. Distance bands alone can't bound memory (density
     //    varies), so drive the effective unload radius from what's actually
@@ -831,7 +915,18 @@ export class ChunkManager {
       //   near is only a few dozen chunks, so waiting for their real textures
       //   costs almost nothing.
       const isSwap = st.group !== null && st.current !== null;
-      const preview = this.cfg.progressiveTex && textured && !isSwap && tier !== "near";
+      // RESIDENT mode never previews. The preview rung exists to cover a blank
+      // area fast while the camera is already in the scene; under residency the
+      // whole fill happens behind the loading screen, where a blurry-then-sharp
+      // pass buys nothing and only risks the loader lifting mid-upgrade. It is
+      // also nearly free to skip — chunks share images, so after the first
+      // handful every request is a texture-cache hit anyway.
+      const preview =
+        this.cfg.progressiveTex &&
+        textured &&
+        !isSwap &&
+        tier !== "near" &&
+        this.cfg.geometryMode !== "resident";
       const px = preview ? PREVIEW_PX : this.cfg.texRung[tier];
       const owner = `${st.entry.id}#${++this.texSeq}`;
       await this.applyMaterials(group, tier, textured, owner, px);
@@ -847,6 +942,10 @@ export class ChunkManager {
       this.pendingReveal.push({ st, group, tier, owner, textured, px, at: performance.now() });
       queued = true;
     } catch (e) {
+      // Counted so the resident scan can give up on a URL that never resolves;
+      // ignored by the streamed path, which will simply re-evaluate the chunk
+      // next time the camera brings it back into a band.
+      this.mountFails.set(st.entry.id, (this.mountFails.get(st.entry.id) ?? 0) + 1);
       console.error("chunk load failed", url, e);
     } finally {
       // A QUEUED chunk keeps `loadingTier` until flushReveals clears it. Clearing
@@ -1073,6 +1172,10 @@ export class ChunkManager {
    * Never evicts a mounted chunk — that would blank the scene.
    */
   private evictCache() {
+    // Residency never unmounts, so every cached group is still referenced and
+    // the scan can only ever be work with no result. Guarded here rather than
+    // only at the call site because mount() trims the cache too.
+    if (this.cfg.geometryMode === "resident") return;
     const cap = this.budget.cpuMB * 1048576;
     let bytes = this.cpuCacheBytes();
     if (bytes <= cap && this.cpuCache.size <= this.cfg.cacheLimit) return;
