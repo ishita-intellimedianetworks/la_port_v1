@@ -16,22 +16,39 @@ export type CameraState = {
   /** The live three.js camera, registered by the scene on mount. */
   camera: THREE.Camera | null;
   setCamera: (camera: THREE.Camera) => void;
+  /**
+   * The FOV actually in force. Seeded from config and moved only by the
+   * `?debug=true` panel — which is why the seed stays exported separately: it
+   * is what "reset" means, and what the Canvas builds its camera with before
+   * this store has a camera to talk to.
+   */
+  fov: number;
+  setFov: (deg: number) => void;
 };
 
-/** Re-assert the configured FOV on a camera the scene just handed us — R3F's
- *  own default (75°) applies to any camera created outside the Canvas prop. */
-function applyDefaultFov(camera: THREE.Camera) {
-  const perspective = camera as THREE.PerspectiveCamera;
-  if (typeof perspective.fov !== "number") return;
-  if (perspective.fov === FOV_DEFAULT) return;
-  perspective.fov = FOV_DEFAULT;
+/** Push a FOV onto a camera. Perspective-only, and a no-op when it already
+ *  holds that value — `updateProjectionMatrix` is not free and this is called
+ *  on every registration. */
+function applyFov(camera: THREE.Camera | null, deg: number) {
+  const perspective = camera as THREE.PerspectiveCamera | null;
+  if (!perspective || typeof perspective.fov !== "number") return;
+  if (perspective.fov === deg) return;
+  perspective.fov = deg;
   perspective.updateProjectionMatrix();
 }
 
-export const useCameraStore = createStore<CameraState>((set) => ({
+export const useCameraStore = createStore<CameraState>((set, get) => ({
   camera: null,
+  // R3F's own default is 75°, which applies to any camera created outside the
+  // Canvas prop — so the registration below re-asserts ours rather than
+  // trusting whatever arrives.
   setCamera: (camera) => {
     set({ camera });
-    applyDefaultFov(camera);
+    applyFov(camera, get().fov);
+  },
+  fov: FOV_DEFAULT,
+  setFov: (deg) => {
+    set({ fov: deg });
+    applyFov(get().camera, deg);
   },
 }));

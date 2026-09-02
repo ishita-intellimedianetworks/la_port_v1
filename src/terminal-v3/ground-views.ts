@@ -66,14 +66,28 @@ import type { Vec3 } from "@/config/schema";
  *    across the subject so its form reads. The old H05 sat at +0.86 and the old
  *    H21 at +0.71, which is why those two looked flat and grey.
  *
- * 2. OBLIQUE, NOT FLAT-ON — except where the subject is a line. A box viewed
- *    square-on shows one face and reads as a wall; turned 30-60° it shows two
- *    and reads as a box. `obliq` is the angle between the view direction and
- *    the local walkable corridor, which in a port runs parallel to the quay,
- *    the yard blocks and the tracks — so it stands in for the subject's own
- *    axis. Stacks and reefer rows want 30-60°; the gate lane and the rail track
- *    want the opposite, because a train's length only reads when you sight
- *    down it.
+ * 2. THERE MUST BE A PATH ONWARD. Every standpoint can walk at least 15 m
+ *    further, within +/-30° of where it looks — `walk` records how far. This is
+ *    the rule that came last and mattered most: an earlier pass scored
+ *    standpoints by distance to the nearest mesh boundary, which on a road
+ *    corridor just means "the middle of the lane" and never asks whether the
+ *    mesh CONTINUES. It produced arrivals with nowhere to go — H21 could walk
+ *    0.5 m forward and stood in 54 m2 of ground, H17 had 1.0 m. All seven
+ *    failed it.
+ *
+ *    Two metrics were tried as gates first and both were wrong. Open AREA: this
+ *    navmesh is a 48,758 m2 corridor network over an 850x1156 m box, its p90
+ *    for a 30 m box is 257 m2 and its MAX is 317 — a 420 threshold matched
+ *    nothing anywhere on the mesh. Open DIRECTIONS is worse: a road gives few
+ *    by construction, and the gate lane at H21 walks 40 m along itself while
+ *    scoring 2 of 16. Gating on either rejects exactly the corridors that ARE
+ *    paths. A road is a path; it just is not a plaza.
+ *
+ *    This replaced an earlier obliquity rule (approach a stack at 30-60° so two
+ *    faces show). The two could not both hold — a three-quarter view
+ *    deliberately faces ACROSS the road it stands on, so the ground runs out
+ *    ahead of you. Standing where the path leads won, because a handsome angle
+ *    you cannot walk out of is a screenshot, not a viewpoint.
  *
  * 3. THE SUBJECT SITS HIGH, NOT CENTRED. Each camera is pitched slightly BELOW
  *    its marker, by `0.35 x` the marker's own elevation and never more than
@@ -122,25 +136,47 @@ export interface GroundView {
    *  subject in its own shadow. Kept as data so a lighting change can be
    *  re-checked against all seven at once rather than by eye. */
   sunDot: number;
-  /** Angle between the view and the local walkable corridor: 0 sights straight
-   *  down the line, 90 is flat-on to the face. See rule 2. */
-  obliq: number;
+  /** Metres of PATH ONWARD: how far you can keep walking from this standpoint
+   *  within +/-30 deg of where the camera looks, measured on the v8 navmesh.
+   *  This is the number that stops an arrival being marooned — see rule 2. */
+  walk: number;
+  /** Walkable m2 in the 30x30 m box centred on the standpoint. Context for
+   *  `walk`, not a gate: the mesh's own p90 is 257 m2 and its max is 317, so
+   *  anything past ~250 is genuinely open ground and ~70 is a lane. */
+  area: number;
 }
 
 export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
-  // The wharf apron is a ground-level place by nature, and the card is "three
-  // cranes working this quay section" — one frame from down here. Pulled back to
-  // 52 m and swung onto the lit side: the closer standpoints all faced the sun.
-  // Stays level, because the marker is barely above eye height and tilting down
-  // to "compose" it would just fill the frame with apron.
+  // BERTH / QUAY — DELIBERATELY NOT AUTO-COMPOSED. This one is authored to
+  // match what /v2 shows: `rotation` is byte-identical to L02's camera in
+  // `site.json` ([0, -0.4538, 0] — dead level, yaw -26°), so /v3 frames the
+  // berth and the quay exactly as the aerial arrival does, just from standing
+  // height. L02's rotation is authored XYZ with only Y non-zero, and xyzToYxz
+  // is the identity on that, so the triple carries over verbatim.
+  //
+  // THE POSITION COULD NOT BE DIRECTLY BENEATH /v2's CAMERA. That camera sits
+  // at [-1483.2, 22.5, 297.0] and looks out across the water — marching its
+  // view axis 260 m finds no walkable ground at all, because the whole approach
+  // is the berth itself. This stands 30.5 m away on the nearest apron that
+  // holds the same framing: the quay marker lands 5.0° off centre and the berth
+  // marker 3.4°, both well inside the 29.3° half-frame, with 40 m of path
+  // onward and 262 m2 of ground.
+  //
+  // IT FACES THE SUN — sunDot +0.56, the one entry here that breaks rule 1.
+  // That is inherited, not chosen: /v2's own berth camera looks that way, and
+  // matching /v2 was the instruction. The auto-composed alternative faced the
+  // other way at -0.14 but framed the quay obliquely instead of the way /v2
+  // does. If the backlighting reads badly, that alternative is the fallback —
+  // it cannot be had together with /v2's framing.
   H04: {
-    position: [-1356.7126, 0.13, 125.147],
-    rotation: [0.0102, 2.26, 0],
-    intent: "Oblique along the wharf face, cranes working it",
-    range: 52,
-    pitch: 1,
-    sunDot: -0.17,
-    obliq: 32,
+    position: [-1454.5, 0.13, 307.5],
+    rotation: [0, -0.4538, 0],
+    intent: "The /v2 berth-quay framing, taken from ground level",
+    range: 160,
+    pitch: 0,
+    sunDot: 0.56,
+    walk: 40,
+    area: 262,
   },
 
   // A crane reads from below or not at all, and the card is about THIS crane of
@@ -149,13 +185,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // it at 77 m on the wrong side of the machine, sunDot +0.86 — a grey
   // silhouette. At 97 m the whole 30 m of it stands against the sky.
   H05: {
-    position: [-1222.5357, 0.13, -147.9023],
-    rotation: [0.1798, 2.5186, 0],
+    position: [-1219.5, 0.13, -164.5],
+    rotation: [0.1562, 2.5825, 0],
     intent: "Whole crane from the lit side, full height in frame",
-    range: 97,
-    pitch: 10,
-    sunDot: -0.41,
-    obliq: 43,
+    range: 113,
+    pitch: 9,
+    sunDot: -0.47,
+    walk: 23,
+    area: 273,
   },
 
   // The one hotspot whose subject IS the walkable surface — an apron exclusion
@@ -164,13 +201,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // oblique, so the painted ground leads the eye and the crane legs rise out of
   // the top of the frame.
   H07: {
-    position: [-1198.827, 0.13, -190.174],
-    rotation: [0.0733, 2.1875, 0],
+    position: [-1201.5, 0.13, -195.5],
+    rotation: [0.0642, 2.5609, 0],
     intent: "The exclusion zone on the apron, crane legs above it",
-    range: 14,
+    range: 16,
     pitch: 4,
-    sunDot: -0.09,
-    obliq: 29,
+    sunDot: -0.45,
+    walk: 40,
+    area: 283,
   },
 
   // "Your box is that one, stack A12-04, third tier up." Identification is the
@@ -178,13 +216,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // axis so two faces of the stack show and it reads as a solid rather than a
   // painted wall.
   H14: {
-    position: [-1075.1096, 0.13, 101.9414],
-    rotation: [0.198, -1.1747, 0],
+    position: [-1021.5, 0.13, 73.5],
+    rotation: [0.2176, 2.1567, 0],
     intent: "Three-quarter on the stack face, hero box on tier 3",
-    range: 32,
-    pitch: 11,
-    sunDot: -0.13,
-    obliq: 47,
+    range: 29,
+    pitch: 12,
+    sunDot: -0.06,
+    walk: 40,
+    area: 123,
   },
 
   // Same identification job, plus -17.8 °C and POWER: CONNECTED are per-unit
@@ -192,13 +231,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // again, on ground that only exists in v8 — the v2 navmesh stopped at Z 550.9
   // and this stands at Z 514 with the reach behind it.
   H17: {
-    position: [-1359.9656, 0.13, 514.4705],
-    rotation: [0.1743, -1.5259, 0],
+    position: [-1298.5, 0.13, 478.5],
+    rotation: [0.1206, 2.424, 0],
     intent: "Three-quarter on the reefer row, plugs visible",
-    range: 31,
-    pitch: 10,
-    sunDot: -0.46,
-    obliq: 61,
+    range: 46,
+    pitch: 7,
+    sunDot: -0.32,
+    walk: 18,
+    area: 221,
   },
 
   // One lane, one portal, one plate read. Turned to look back DOWN the lane —
@@ -208,13 +248,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // it. v8 widened the apron here enough that the corridor-axis estimate stops
   // meaning much, which is why this one is scored on sun and range, not shape.
   H21: {
-    position: [-767.9969, 0.13, 235.5922],
-    rotation: [0.123, 2.7221, 0],
+    position: [-773.5, 0.13, 225.5],
+    rotation: [0.0742, -3.1377, 0],
     intent: "Down the lane at the OCR portal",
-    range: 13,
-    pitch: 7,
-    sunDot: -0.59,
-    obliq: 55,
+    range: 22,
+    pitch: 4,
+    sunDot: -0.87,
+    walk: 40,
+    area: 68,
   },
 
   // 52 railcars over 2,150 ft. Sighting down the track is what makes that read
@@ -222,13 +263,14 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // rule 2 inverted, because a three-quarter view of a train is just a wall of
   // containers.
   H23: {
-    position: [-695.5373, 0.13, -369.8412],
-    rotation: [0.0589, 3.0737, 0],
+    position: [-698.5, 0.13, -362.5],
+    rotation: [0.0721, -3.1344, 0],
     intent: "Sight down the loading track, train receding",
-    range: 40,
-    pitch: 3,
-    sunDot: -0.83,
-    obliq: 22,
+    range: 33,
+    pitch: 4,
+    sunDot: -0.87,
+    walk: 40,
+    area: 116,
   },
 };
 

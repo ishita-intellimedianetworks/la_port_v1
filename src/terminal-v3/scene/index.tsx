@@ -51,6 +51,7 @@ import { setupFurnitureToggle } from "./model-loader/furniture-swap";
 import { useSceneNavigation } from "./hooks/use-scene-navigation";
 import { usePortalRaycast } from "./hooks/use-portal-raycast";
 import { useNavUiStore } from "../stores/nav-ui-store";
+import { useDebugStore } from "../stores/debug-store";
 import { HoloTwinPreview } from "@/shared/ui/screens/loading-screen/reveal";
 import type { SharedUniforms } from "@/shared/ui/screens/loading-screen/reveal";
 import { useProgressStore } from "@/shared/stores/progress-store";
@@ -503,6 +504,11 @@ export function SceneContent({
     setActiveRoomId,
     viewMode,
   } = useScene();
+
+  // The debug panel's "show navmesh" switch. Only ever true when the URL
+  // carries ?debug=true — the overlay geometry is not even captured otherwise.
+  const showNavmesh = useDebugStore((s) => s.showNavmesh);
+  const navmeshDepth = useDebugStore((s) => s.navmeshDepth);
 
   const pathfinding = useMemo(() => new Pathfinding(), []);
   const { camera, raycaster, gl, scene } = useThree();
@@ -1120,6 +1126,8 @@ export function SceneContent({
           onFloorBounds={handleFloorBounds}
           onRoomZones={handleFloorRoomZones}
           debug={debug}
+          show={showNavmesh}
+          depthTest={navmeshDepth}
         />
       )}
 

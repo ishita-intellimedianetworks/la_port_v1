@@ -5,6 +5,7 @@ import { useGLTF, Bvh } from "@react-three/drei";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime";
+import { useDebugStore } from "../../../stores/debug-store";
 
 // Room zone: one named mesh in the navmesh GLB
 // Convention: mesh.name in the GLB matches the LayoutsConfig.id in scene-config
@@ -78,8 +79,18 @@ interface SingleNavmeshProps {
   onRoomZones?: (floorId: string, zones: RoomZone[]) => void;
   /** Fired after geometry has been delivered to the parent. */
   onLoaded?: () => void;
-  /** Render navmesh as a translucent overlay for debugging. */
+  /**
+   * `?debug=true`. Keeps a reference to the merged geometry so the overlay
+   * below CAN be drawn — separate from `show`, because the merge happens once
+   * in a layout effect that has already run by the time anyone reaches for the
+   * toggle. Capturing is a reference, not a copy; it costs nothing.
+   */
   debug?: boolean;
+  /** Actually draw the overlay. The debug panel's "show navmesh" switch. */
+  show?: boolean;
+  /** Let the world occlude the overlay. Off, it is drawn straight through —
+   *  see `navmeshDepth` in the debug store for why that is the default. */
+  depthTest?: boolean;
 }
 
 // The navmesh ships inside the baked asset set, where it is Draco-compressed
@@ -90,7 +101,7 @@ interface SingleNavmeshProps {
 const DRACO_PATH = "/draco/";
 
 function SingleNavmeshContent({
-  floorId, url, onGeometry, onFloorBounds, onRoomZones, onLoaded, debug,
+  floorId, url, onGeometry, onFloorBounds, onRoomZones, onLoaded, debug, show, depthTest = false,
 }: SingleNavmeshProps) {
   const { scene } = useGLTF(url, DRACO_PATH);
   const done = useRef(false);
@@ -124,7 +135,14 @@ function SingleNavmeshContent({
       onRoomZones(floorId, result.roomZones);
     }
 
-    if (debug) setDebugGeo(result.geo);
+    if (debug) {
+      setDebugGeo(result.geo);
+      // Reported to the panel as a readout. Without it, "the toggle is off" and
+      // "the toggle is on but you are looking through an overlay that never
+      // captured a mesh" are the same blank screen.
+      const position = result.geo.getAttribute("position");
+      useDebugStore.getState().setNavmeshTriangles(position ? position.count / 3 : 0);
+    }
     onLoaded?.();
   }, [scene, floorId, onGeometry, onFloorBounds, onRoomZones, onLoaded, debug]);
 
@@ -141,14 +159,21 @@ function SingleNavmeshContent({
       <Bvh firstHitOnly={false}>
         <primitive object={scene} visible={false} />
       </Bvh>
-      {debugGeo && (
+      {debugGeo && show && (
         <>
-          {/* Walkable surface — bright green fill, DEPTH-TESTED so the mesh
-              renders at its ACTUAL position in the scene (occluded by geometry
-              in front of it, floating/sunken spots read as such) instead of
-              being painted on top of everything. Double-sided + polygonOffset
-              so it stays readable from any viewpoint and wins the z-fight
-              against the floor it lies on. */}
+          {/* Walkable surface — bright green fill. `depthTest` decides which
+              question it answers, and the default is the FIRST one:
+
+                off  painted over everything, so you always see the mesh. The
+                     navmesh lies within centimetres of the apron it describes
+                     over a kilometre of site, and depth-tested most of it
+                     loses that z-fight — which reads as the toggle doing
+                     nothing at all.
+                on   drawn at its ACTUAL depth, so a patch floating above or
+                     sunk below the floor reads as such.
+
+              Double-sided either way, so it stays readable from any viewpoint,
+              and polygonOffset still helps the depth-tested case. */}
           <mesh geometry={debugGeo} renderOrder={999}>
             <meshBasicMaterial
               color="#00ff88"
@@ -156,15 +181,15 @@ function SingleNavmeshContent({
               opacity={0.5}
               side={THREE.DoubleSide}
               depthWrite={false}
-              depthTest
+              depthTest={depthTest}
               polygonOffset
               polygonOffsetFactor={-4}
               polygonOffsetUnits={-4}
             />
           </mesh>
           {/* Triangle edges — shows the actual mesh structure (where corridors
-              end, what the bowl coverage really is). Depth-tested like the fill
-              so edges sit exactly on the walkable surface. */}
+              end, what the coverage really is). Follows the fill's depth mode
+              so the edges sit on the same surface the fill is drawn at. */}
           <mesh geometry={debugGeo} renderOrder={1000}>
             <meshBasicMaterial
               color="#006644"
@@ -172,7 +197,7 @@ function SingleNavmeshContent({
               transparent
               opacity={0.6}
               depthWrite={false}
-              depthTest
+              depthTest={depthTest}
               polygonOffset
               polygonOffsetFactor={-6}
               polygonOffsetUnits={-6}

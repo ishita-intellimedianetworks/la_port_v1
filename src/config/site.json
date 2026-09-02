@@ -389,7 +389,7 @@
       "them cannot dam everything queued behind it."
     ],
     "slug": "portla-c5-v6wo-inst-mo",
-    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V2, one variable per bake alongside NEXT_PUBLIC_STREAM_BASE for the block above. Both are the COMPLETE published prefix, used verbatim - nothing is appended - and they exist because the published name and the bake's own name diverge (this calls itself portla-c5-v6wo-inst-mo and is published under v6w-inst-mo/), so no root + slug can compose either. StreamConfig.assetBase would let a URL be authored here instead and still works, but it is deliberately left unset: two places holding the same URL is two places to drift, and a stale one here would silently win nothing while looking authoritative. UNSET IN .env, this route falls back to NEXT_PUBLIC_ASSET_BASE + `slug` - the local staging copy under public/, which is gitignored - so it 404s loudly rather than quietly streaming the other bake.",
+    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V2, one variable per bake alongside NEXT_PUBLIC_STREAM_BASE for the block above. Both are the COMPLETE published prefix, used verbatim - nothing is appended - and they exist because the published name and the bake's own name diverge (this calls itself portla-c5-v6wo-inst-mo and is published under v6w-inst-mo-01/), so no root + slug can compose either. StreamConfig.assetBase would let a URL be authored here instead and still works, but it is deliberately left unset: two places holding the same URL is two places to drift, and a stale one here would silently win nothing while looking authoritative. UNSET IN .env, this route falls back to NEXT_PUBLIC_ASSET_BASE + `slug` - the local staging copy under public/, which is gitignored - so it 404s loudly rather than quietly streaming the other bake.",
     "streaming": {
       "_note": "THE v6wo-inst-mo RECIPE, ported from LA_PORT_ADAPTIVE's models.config.json. The three metric numbers are unchanged from v5w-inst and are still about hiding the fill: alwaysLoadRadiusMetres 140 and frustumMarginMetres 90 buy time before a turn reveals loading, and loadsPerTick 28 is the real throughput knob now the Draco pool is sized from hardwareConcurrency. WHAT IS NEW IS `geometry: resident`. Every chunk mounts ONCE at `residentTier` and is never unloaded, re-tiered or frustum-culled, so nothing pops in, nothing swaps LOD mid-walk, and the resident-byte governor can no longer evict a chunk that the next tick immediately re-requests. It is affordable because this bake's near tier is the only tier a session ever fetches - mid/far are dead weight in the output. The bake pairs it with meshopt + KHR_mesh_quantization on that near tier, which keeps positions/normals/UVs at int16/int8 in VRAM where Draco dequantizes everything to float32 on load; the decoder for it is already wired in chunk-manager, so nothing here has to ask for it. `freeCpuArrays` IS DELIBERATELY ABSENT and defaults FALSE here, unlike upstream where it is true and is called the thing that makes residency affordable: that runtime raycasts only its navmesh, while this app raycasts streamed geometry for double-click walk-to, the interior portals and the route ribbon's per-frame ground probe - see streaming/bvh-raycast.ts - and freeing nulls the very attribute array those bounds trees are built from. Turning it on would break picking silently, on whichever chunk was clicked.",
       "alwaysLoadRadiusMetres": 140,
@@ -1624,7 +1624,7 @@
     {
       "id": "H09",
       "layoutId": "L04",
-      "name": "Hero Container",
+      "name": "Current Container",
       "popupTitle": "Container EGHU4829136",
       "icon": "container",
       "position": [
@@ -1781,7 +1781,7 @@
         },
         {
           "name": "hero_container",
-          "label": "Hero Container",
+          "label": "Current Container",
           "type": "string",
           "value": "EGHU4829136",
           "ref": "hero"
@@ -2047,7 +2047,7 @@
     {
       "id": "H14",
       "layoutId": "L06",
-      "name": "Hero Container",
+      "name": "Current Container",
       "popupTitle": "EGHU4829136 - Movement History",
       "icon": "container",
       "position": [
@@ -3336,7 +3336,7 @@
     {
       "id": "H30",
       "layoutId": "L10",
-      "name": "Hero Container Journey",
+      "name": "Current Container Journey",
       "popupTitle": "EGHU4829136 - Complete Cargo Journey",
       "icon": "journey",
       "position": [

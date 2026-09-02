@@ -1169,6 +1169,14 @@ export function useMinimap() {
     const world = pixelToWorld(ipx, ipy, bounds, lb.dw, lb.dh);
     clickMarkerRef.current = { px: ipx, py: ipy, alpha: 1 };
 
+    // Committed — so the window gets out of the way rather than sitting over
+    // the walk it just ordered. Everything past this point navigates, and a
+    // click is the whole interaction: there is nothing left to do on the plan
+    // afterwards. Teleport already closes on commit (`teleportSelectedDest`);
+    // this makes click-to-walk match. The close only drops the route PREVIEW
+    // (see the open/close effect) — the walk itself is unaffected.
+    setMapExpanded(false);
+
     // Every layout here is a fly camera, hundreds of metres up and off the
     // navmesh, so a walk from one has no start node and simply does nothing.
     // Drop to the nearest walkable point first, then walk from there — the
@@ -1189,7 +1197,7 @@ export function useMinimap() {
     }
 
     navigateFromMinimap(world.x, world.z);
-  }, [planLayer, mapWidth, mapHeight, navigateFromMinimap, playerControllerRef, triggerFloorTransition]);
+  }, [planLayer, mapWidth, mapHeight, navigateFromMinimap, playerControllerRef, triggerFloorTransition, setMapExpanded]);
 
   return {
     canvasRef,

@@ -27,6 +27,7 @@ import { useNavUiStore } from "./stores/nav-ui-store";
 import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
 import { HotspotDataCard } from "./overlay/hotspot-card";
 import { DebugPanel } from "./overlay/debug-panel";
+import { DebugCameraEditor } from "./overlay/debug-panel/camera-editor";
 import { tick } from "@/shared/runtime/diagnostics";
 import { scene as siteScene } from "@/config";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
@@ -785,10 +786,19 @@ export default function Overlays() {
 
       <FadeScreen visible={fadeVisible} />
 
-      {/* ?debug=true only — the whole look in one panel: time of day, where
-          the sun is, every light value and the grade, plus the JSON to paste
-          back into site.json. Parked below PerfMeter in the same corner. */}
-      {ui.sceneContent.debug && <DebugPanel />}
+      {/* ?debug=true only — the whole look AND the whole framing in one panel:
+          time of day, where the sun is, every light value, the grade, the field
+          of view, the navmesh overlay and a live binding to the camera, plus
+          the JSON to paste back into site.json. Parked below PerfMeter in the
+          same corner. The card is the framing loop — it names the row the
+          camera landed on, arms the inputs, and copies or SAVES the pose back
+          into site.json behind a confirmation. */}
+      {ui.sceneContent.debug && (
+        <>
+          <DebugPanel />
+          <DebugCameraEditor />
+        </>
+      )}
     </>
   );
 }
