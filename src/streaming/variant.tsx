@@ -3,11 +3,16 @@
 /**
  * Which BAKE this tree streams.
  *
- * There are two, served side by side so they can be compared in the same
- * browser on the same machine: `/` streams `site.json > stream` and `/v2`
- * streams `streamV2` merged over it. Everything else about the two routes —
- * the cameras, the hotspots, the map, the layouts — is the same zone and the
- * same data.
+ * Three, served side by side so they can be compared in the same browser on the
+ * same machine: `/` streams `site.json > stream`, `/v2` streams `streamV2`
+ * merged over it, and `/v3` streams `streamV3` — falling back to v2's resolved
+ * bake while that block is unauthored, because `/v3` is a fork of `/v2` and
+ * starts identical to it. Everything else about the routes — the cameras, the
+ * hotspots, the map, the layouts — is the same zone and the same data.
+ *
+ * The id is about the BAKE, not the code. `/` and `/v2` share one component
+ * tree (`@/terminal`) and differ only by this value; `/v3` has its own fork
+ * (`@/terminal-v3`) so its rendering can change without touching theirs.
  *
  * WHY A CONTEXT AND NOT A MODULE-LEVEL SWITCH. The resolved configs used to be
  * module-level constants over the single `stream` block, which is precisely

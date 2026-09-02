@@ -1,0 +1,150 @@
+"use client";
+
+import { useCallback } from "react";
+import { HOTSPOT_BY_ID, LAYOUT_BY_ID, poseForHotspot } from "@/config";
+import type { Destination, DestinationCategory } from "@/shared/types";
+import { useScene } from "../context/scene-context";
+import { useNavUiStore } from "../stores/nav-ui-store";
+
+/** A layout as the engine holds it: the destination plus the zone it sits in. */
+export interface LayoutEntry {
+  destination: Destination;
+  category: DestinationCategory;
+}
+
+/**
+ * Travel between layouts.
+ *
+ * A layout IS a destination in the engine, and its zone is the category it is
+ * filed under — so finding one means scanning the active floor's categories.
+ *
+ * Travel is always a TELEPORT — a blackout swap. Ten layouts across a 205-acre
+ * terminal made walking between them a very long trip, and half the cameras are
+ * aerial with no navmesh under them, so the walk was unavailable exactly where
+ * the distances were worst. Walking still exists in the SCENE (double-click the
+ * floor); it is just not how you cross the terminal.
+ */
+export function useLayoutNavigation() {
+  const { playerControllerRef, triggerFloorTransition, activeFloor } = useScene();
+  const currentDest = useNavUiStore((s) => s.currentDest);
+
+  const entries = useCallback((): LayoutEntry[] => {
+    const dests = activeFloor?.dests;
+    if (!dests) return [];
+    return (Object.keys(dests) as DestinationCategory[]).flatMap((category) =>
+      (dests[category] ?? []).map((destination) => ({ destination, category })),
+    );
+  }, [activeFloor]);
+
+  const find = useCallback(
+    (layoutId: string) => entries().find((e) => e.destination.id === layoutId) ?? null,
+    [entries],
+  );
+
+  const goToLayout = useCallback(
+    (layoutId: string, onArrive?: () => void) => {
+      const controller = playerControllerRef.current;
+      const entry = find(layoutId);
+      const camera = entry?.destination.camera;
+      if (!controller || !entry || !camera) return;
+
+      // Travelling to a LAYOUT drops any resource selection: the request was
+      // for the place, so arriving must show every bead filed there rather than
+      // the one left over from a previous pick.
+      useNavUiStore.getState().setHotspotInfo(null);
+      useNavUiStore.getState().setSelectedHotspotId(null);
+
+      triggerFloorTransition(() => {
+        const [x, authoredY, z] = camera.position;
+        // Elevated layouts keep their authored eye height (teleportTo re-adds
+        // the camera height); ground ones snap to the navmesh probed AT that
+        // height, so both land where the pose was authored.
+        const cameraHeight = controller.getPosition().y - controller.getFootPosition().y;
+        const footGuess = authoredY ? authoredY - cameraHeight : 0;
+        const y =
+          entry.destination.exactPose && authoredY
+            ? authoredY - cameraHeight
+            : controller.probeFloorY(x, z, footGuess) ?? footGuess;
+
+        controller.teleportTo([x, y, z], camera.rotation);
+        // Latch immediately rather than waiting for the position poll, so the
+        // markers and the hotspot list update with the move, not after it.
+        useNavUiStore.getState().setCurrentDest({
+          id: entry.destination.id,
+          label: entry.destination.label,
+          category: entry.category,
+          option: entry.destination.option,
+        });
+
+        // Runs INSIDE the swap, at full black — so a caller never has to guess
+        // how long the blackout takes.
+        onArrive?.();
+      });
+    },
+    [playerControllerRef, triggerFloorTransition, find],
+  );
+
+  /**
+   * Travel to a resource's OWN camera and select it.
+   *
+   * A hotspot now frames itself rather than borrowing its layout's wide shot,
+   * so this does NOT route through `goToLayout` — that would land on the group
+   * pose and clear the very selection being made. The two differ on purpose:
+   *
+   *   layout   its camera frames the GROUP; arriving shows every bead in it.
+   *   hotspot  its camera frames ITSELF; arriving shows that one bead.
+   *
+   * `currentDest` is still latched to the PARENT layout, because that is where
+   * the player physically is — the tree, the map and the marker set all read it.
+   * The data card is not opened here: arriving should leave the operator looking
+   * at the bead in context, and clicking it is what opens the data.
+   */
+  const goToHotspot = useCallback(
+    (hotspotId: string) => {
+      const controller = playerControllerRef.current;
+      const hotspot = HOTSPOT_BY_ID[hotspotId];
+      const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+      if (!controller || !hotspot || !layout) return;
+
+      const entry = find(layout.id);
+      const pose = poseForHotspot(hotspotId);
+
+      useNavUiStore.getState().setHotspotInfo(null);
+
+      triggerFloorTransition(() => {
+        const [x, authoredY, z] = pose.position;
+        // Same seating rule as a layout: an aerial pose keeps its authored
+        // height, a ground one snaps to the navmesh probed AT that height.
+        const cameraHeight = controller.getPosition().y - controller.getFootPosition().y;
+        const footGuess = authoredY ? authoredY - cameraHeight : 0;
+        const y =
+          layout.walkable === false && authoredY
+            ? authoredY - cameraHeight
+            : controller.probeFloorY(x, z, footGuess) ?? footGuess;
+
+        controller.teleportTo([x, y, z], pose.rotation);
+
+        if (entry) {
+          useNavUiStore.getState().setCurrentDest({
+            id: entry.destination.id,
+            label: entry.destination.label,
+            category: entry.category,
+            option: entry.destination.option,
+          });
+        }
+        // Inside the swap, at full black, so the bead is already placed and
+        // its siblings already gone by the time the picture comes back.
+        useNavUiStore.getState().setSelectedHotspotId(hotspotId);
+      });
+    },
+    [playerControllerRef, triggerFloorTransition, find],
+  );
+
+  return {
+    goToLayout,
+    goToHotspot,
+    entries,
+    find,
+    currentLayoutId: currentDest?.id ?? null,
+  };
+}

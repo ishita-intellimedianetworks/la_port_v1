@@ -156,6 +156,7 @@ export interface StreamingConfig {
 // undefined.
 const STREAM_BASE_V1 = process.env.NEXT_PUBLIC_STREAM_BASE;
 const STREAM_BASE_V2 = process.env.NEXT_PUBLIC_STREAM_BASE_V2;
+const STREAM_BASE_V3 = process.env.NEXT_PUBLIC_STREAM_BASE_V3;
 const ASSET_ROOT = (process.env.NEXT_PUBLIC_ASSET_BASE ?? "/assets").replace(/\/+$/, "");
 
 const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
@@ -184,7 +185,12 @@ const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
  * Whichever wins must allow cross-origin GET.
  */
 function assetBaseFor(id: StreamVariantId, block: { slug: string; assetBase?: string }): string {
-  const fromEnv = id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
+  // v3 starts life as a COPY of v2 and falls through to its base, so the route
+  // is a true clone the day it is added — one variable to set, later, when the
+  // two are meant to diverge. v1 is the last resort for the same reason it is
+  // the default variant: the frozen route is the safe thing to land on.
+  const fromEnv =
+    id === "v3" ? (STREAM_BASE_V3 ?? STREAM_BASE_V2) : id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
   if (fromEnv) return withSlash(fromEnv);
   if (block.assetBase) return withSlash(block.assetBase);
   return `${ASSET_ROOT}/${block.slug}/assets/`;
@@ -277,8 +283,11 @@ function mergeVariant(base: StreamConfig, v: StreamVariantConfig): StreamConfig 
 }
 
 /** Which bake a route streams. `v1` is `stream`; `v2` is `streamV2` merged
- *  over it, and falls back to `v1` when no such block is authored. */
-export type StreamVariantId = "v1" | "v2";
+ *  over it, and falls back to `v1` when no such block is authored; `v3` is
+ *  `streamV3` merged over `stream`, and falls back to whatever `v2` resolved
+ *  to — so a `/v3` with nothing authored for it is an exact clone of `/v2`
+ *  rather than a third thing nobody tuned. */
+export type StreamVariantId = "v1" | "v2" | "v3";
 
 /**
  * One bake, fully resolved: where it is served from, and the three strategies
@@ -321,12 +330,18 @@ function buildVariant(id: StreamVariantId, raw: StreamConfig): StreamVariant {
 
 const V1_RAW = scene.stream;
 const V2_RAW = scene.streamV2 ? mergeVariant(V1_RAW, scene.streamV2) : V1_RAW;
+// Note the fallback: V2_RAW, not V1_RAW. `/v3` exists to be forked FROM `/v2`,
+// so until a `streamV3` block is authored it resolves to the same bake with the
+// same overrides — the route is new, the content is not.
+const V3_RAW = scene.streamV3 ? mergeVariant(V1_RAW, scene.streamV3) : V2_RAW;
 
-/** Both bakes, resolved once. `/` reads v1, `/v2` reads v2; with no `streamV2`
- *  block authored the two are the same object and `/v2` is simply an alias. */
+/** Every bake, resolved once. `/` reads v1, `/v2` reads v2, `/v3` reads v3;
+ *  with no `streamV2` block authored v1 and v2 are the same object and `/v2` is
+ *  simply an alias, and the same holds for `streamV3` against v2. */
 export const STREAM_VARIANTS: Record<StreamVariantId, StreamVariant> = {
   v1: buildVariant("v1", V1_RAW),
   v2: buildVariant("v2", V2_RAW),
+  v3: buildVariant("v3", V3_RAW),
 };
 
 export function streamVariant(id: StreamVariantId): StreamVariant {
