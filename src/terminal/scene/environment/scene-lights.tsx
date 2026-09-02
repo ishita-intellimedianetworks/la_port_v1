@@ -45,7 +45,6 @@ const DEFAULT_LIGHTS = {
   // derives it from where its fog closes instead — see `followExtent` below,
   // and the type doc for why this is not simply the visible radius.
   shadowFollowExtent: 420,
-  // Interior spot light (only used on interior floors — see below).
   spotIntensity: 12,
   spotColor: '#fff4e0',
   spotHeight: 0.6,
@@ -55,7 +54,7 @@ const DEFAULT_LIGHTS = {
   spotDecay: 2,
 } as const;
 
-// ── Shadow-camera geometry ───────────────────────────────────────────────────
+// Shadow-camera geometry
 // Scratch, reused across re-fits so walking allocates nothing.
 const _corner = new THREE.Vector3();
 const _snap = new THREE.Vector3();
@@ -97,15 +96,13 @@ const FOLLOW_MARGIN = 0.2;
 // does not.
 const FOLLOW_SETTLE = 1.5;
 
-// ── Keeping a frozen map honest while the world streams in ───────────────────
-//
+// Keeping a frozen map honest while the world streams in
 // The one-shot pump below freezes the shadow map eight frames after the lights
 // are fitted. On a cold load that is long before the port has streamed, so the
 // frozen map holds the shadows of almost nothing — and NOTHING ever redraws it,
 // because `version` tracks the model BOUNDS, which are published once from the
 // manifest and never again. The symptom is a scene that looks wrong until you
 // touch any unrelated control, because a re-render is what re-runs the fit.
-//
 // Chunks mount and unmount straight onto the scene with no store and no event,
 // so the cheapest true signal is how many objects the scene is holding. Sampled
 // every few frames and rate-limited, a burst of arriving chunks costs one depth
@@ -163,9 +160,7 @@ export default function SceneLights({
   const spotTargetRef = useRef(new THREE.Object3D());
   const version = useWorldStore((s) => s.version);
 
-  // Resolve this venue's config over the shared defaults once per lights change.
   const base = useMemo<ResolvedLights>(() => {
-    // Drop the `controls` flag — it isn't a renderable light value.
     const overrides: LightsConfig = { ...lights };
     delete overrides.controls;
     return { ...DEFAULT_LIGHTS, ...overrides };
@@ -225,7 +220,6 @@ export default function SceneLights({
     [L.sunDirection],
   );
 
-  // Degrees in config (how anyone reads a bearing), a Euler here.
   const envRotation = useMemo(
     () => new THREE.Euler(0, (L.envRotation * Math.PI) / 180, 0),
     [L.envRotation],
@@ -248,30 +242,25 @@ export default function SceneLights({
   // AND logs a warning every single frame. So we no longer switch it; interiors
   // and exteriors share PCFShadowMap (soft edges come from `shadowRadius`/bias).
 
-  // -- Fitting the sun's shadow camera ---------------------------------------
+  // Fitting the sun's shadow camera
   // The sun's orthographic shadow camera covers a SQUARE of world, and its
   // resolution is that square's width divided by `shadowMapSize`. The reference
   // exterior fits that square to the whole model and freezes it, which is right
   // there because the whole model is a 140 m building - 2048 px across 140 m is
   // 7 cm per texel.
-  //
   // Doing the same here fits the square to a 2 km port: 1024 px across its
   // 2.8 km diagonal is 2.7 m per texel, so every shadow edge is a six-metre
   // staircase and most of the map is empty water. Nothing in the reference's
   // settings makes its shadows sharp; its site being small does.
-  //
   // So the square is fitted differently per view:
-  //
   //   dollhouse / interior -> the whole model, once, then frozen. Correct: the
   //     view frames the entire site, so at that zoom a texel is under a screen
   //     pixel anyway, and the scene is static.
-  //
   //   on foot (`follow`) -> +/-`shadowFollowExtent` around the camera. On foot
   //     the streamed world only EXISTS out to the unload radius (~330 m), so a
   //     square just past that loses nothing and gains ~4x finer texels at the
   //     same map size - no extra memory. It is re-fitted, and the map redrawn,
   //     only when the camera leaves the square's inner margin.
-  //
   // Both fit near/far to the geometry that can actually cast into the square
   // rather than to the bounding sphere, which is what lets shadows touch the
   // ground: `shadowBias` is normalised depth, so the old 2.8 km range turned
@@ -337,7 +326,6 @@ export default function SceneLights({
   const followActive = follow && effShadows && !interior;
 
   // How wide the follow square has to be.
-  //
   // Sizing it to the visible radius alone is NOT enough, and the failure is
   // subtle: the square only re-centres once the camera has crossed
   // `FOLLOW_MARGIN` of it, so between re-fits the camera sits up to that far
@@ -345,7 +333,6 @@ export default function SceneLights({
   // square that is 68 m of drift - shadows stopped 281 m out while fog does not
   // close until 323 m, leaving a ring of bright, unshadowed ground sweeping
   // ahead of you. Dividing by (1 - margin) is exactly the amount that closes it.
-  //
   // Derived from the streaming fog rather than authored, so retuning the bands
   // can never silently re-open that ring. `shadowFollowExtent` is only the
   // fallback for a first-person floor that streams nothing.
@@ -357,12 +344,10 @@ export default function SceneLights({
     [followRadius, L.shadowFollowExtent],
   );
 
-  // -- Static fit: the whole model, drawn once, then frozen -------------------
   useLayoutEffect(() => {
     const light = lightRef.current;
     if (!light) return;
     const bounds = useWorldStore.getState().bounds;
-    // Fall back to a sane framing before the first model bounds arrive.
     const center = bounds ? new THREE.Vector3(...bounds.center) : new THREE.Vector3();
     const radius = bounds ? bounds.radius : 50;
 
@@ -460,7 +445,7 @@ export default function SceneLights({
     // below and back.
   }, [version, effShadows, lightDir, L, interior, followActive, aimSun, basis]);
 
-  // -- Follow fit: a square that walks with you -------------------------------
+  // Follow fit: a square that walks with you
   // Re-centre on the camera and redraw the map only after it has left the
   // square's inner margin, plus once more a beat later to catch chunks that
   // streamed in after that redraw. Every other frame costs nothing: the map

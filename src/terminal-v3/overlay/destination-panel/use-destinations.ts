@@ -51,7 +51,6 @@ export function useDestinations(
   fromTeleportOnly = false,
 ): { rows: DestinationRow[]; refresh: () => void } {
   const [rows, setRows] = useState<DestinationRow[]>([]);
-  // Bumped to cancel an in-flight deferred measure (new refresh / sheet closed).
   const runIdRef = useRef(0);
   const cacheRef = useRef<RowCache | null>(null);
 
@@ -108,7 +107,6 @@ export function useDestinations(
   const refresh = useCallback(() => {
     const runId = ++runIdRef.current;
 
-    // Instant path: the pre-warmed (or previous-open) cache is still valid.
     const key = posKey();
     const c = cacheRef.current;
     if (c && key && c.posKey === key && c.dests === dests) {
@@ -120,7 +118,7 @@ export function useDestinations(
     // them all in one deferred batch measure (single Dijkstra, ~a frame).
     setRows(dests.map((dest) => ({ dest, meters: null, distLabel: "…", etaLabel: "" })));
     setTimeout(() => {
-      if (runId !== runIdRef.current) return; // superseded or sheet closed
+      if (runId !== runIdRef.current) return;
       const out = computeRows();
       if (!out) return;
       cacheRef.current = { posKey: posKey(), dests, rows: out };
@@ -130,7 +128,7 @@ export function useDestinations(
 
   useEffect(() => {
     if (active) refresh();
-    else runIdRef.current++; // cancel an in-flight measure when the sheet closes
+    else runIdRef.current++;
   }, [active, refresh]);
 
   // Pre-warm: while the sheet is closed, measure once in the background —
@@ -140,9 +138,9 @@ export function useDestinations(
     if (active || !dests.length) return;
     const t = setTimeout(() => {
       const key = posKey();
-      if (!key) return; // controller not mounted yet
+      if (!key) return;
       const c = cacheRef.current;
-      if (c && c.posKey === key && c.dests === dests) return; // still fresh
+      if (c && c.posKey === key && c.dests === dests) return;
       const out = computeRows();
       if (out) cacheRef.current = { posKey: posKey(), dests, rows: out };
     }, 800);

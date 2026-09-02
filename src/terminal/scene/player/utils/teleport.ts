@@ -32,12 +32,10 @@ export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }:
     state.initPos.current.set(p[0], y, p[2]);
 
     if (smooth) {
-      // Snapshot current state; useWalkFrame interpolates while prog.t → 1
       state.transition.start.current.copy(state.pos.current);
       state.transition.end.current.set(p[0], y, p[2]);
       state.transition.startYaw.current = state.rot.current.y;
 
-      // Shortest-arc yaw delta (never spins the wrong way)
       const raw   = r[1] - state.rot.current.y;
       const delta = ((raw % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
       state.transition.endYaw.current = state.rot.current.y + delta;
@@ -67,7 +65,7 @@ export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }:
         duration,
         ease: "power2.inOut",
         onUpdate: () => {
-          const t = state.transition.prog.current.t; // already eased
+          const t = state.transition.prog.current.t;
           state.rot.current.x = startPitch + (r[0] - startPitch) * t;
           state.rot.current.z = startRoll  + (r[2] - startRoll)  * t;
         },

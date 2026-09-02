@@ -18,7 +18,6 @@ import { NAV_GLASS_PANEL } from "../glass-theme";
 import { useNavInfo } from "./use-nav-info";
 import { fmtEta, fmtMeters } from "./format";
 
-// Match the route's end to the nearest destination within this radius to name it.
 const NAME_MATCH_METERS = 4;
 
 export function NavHud({
@@ -45,7 +44,6 @@ export function NavHud({
         ? "Turn right"
         : "Continue";
 
-  // Destination name resolved from the route's end (nearest destination), or null.
   const [destName, setDestName] = useState<string | null>(null);
   const lastEndRef = useRef("");
   useEffect(() => {
@@ -75,7 +73,6 @@ export function NavHud({
     return () => clearInterval(id);
   }, [ctrlRef, visible, dests]);
 
-  // Distance to the NEXT maneuver (the turn), split for big-number styling.
   const [turnVal, turnUnit = ""] = fmtMeters(info.turnMeters).split(" ");
 
   return (

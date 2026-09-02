@@ -30,7 +30,6 @@ const ForceLandscape = () => {
   // would put the rotate screen in the server HTML.
   const portrait = usePortrait();
 
-  // Mirror the live orientation into the shared store for other consumers.
   useEffect(() => {
     setLandscape(!portrait);
   }, [portrait, setLandscape]);

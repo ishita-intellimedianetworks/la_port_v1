@@ -168,7 +168,6 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
       openLabel: isOpen ? null : category,
       lastLabel: category,
       selectedId: isOpen ? selectedId : null,
-      // Opening any category closes the event feed.
       eventsOpen: false,
     });
   },
@@ -230,7 +229,6 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
   setAtHome: (value) => set({ atHome: value }),
 
   setMapExpanded: (value) =>
-    // Opening the map closes the event feed; closing it leaves the feed alone.
     set(value ? { mapExpanded: true, eventsOpen: false } : { mapExpanded: false }),
 
   setEventsOpen: (value) => set({ eventsOpen: value }),

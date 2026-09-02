@@ -33,7 +33,6 @@ export interface InstructionGroup {
 export interface InstructionsOverlayProps {
   visible: boolean;
   title: string;
-  /** Optional line under the title. */
   subtitle?: string;
   /** Flat tile list. Ignored when `groups` is given. */
   instructions?: InstructionItem[];

@@ -136,7 +136,6 @@ export function createStaticLayers(lowPower = false) {
     draw(ctx: CanvasRenderingContext2D, src: StaticLayerInput, v: StaticLayerView) {
       if (!src.plan || !src.planRect) return;
 
-      // The union of the layers: there is never anything to cache outside it.
       const p = src.planRect;
       const b = src.baseRect;
       const ux0 = b ? Math.min(p.dx, b.dx) : p.dx;
@@ -144,7 +143,6 @@ export function createStaticLayers(lowPower = false) {
       const ux1 = b ? Math.max(p.dx + p.dw, b.dx + b.dw) : p.dx + p.dw;
       const uy1 = b ? Math.max(p.dy + p.dh, b.dy + b.dh) : p.dy + p.dh;
 
-      // What the canvas can currently see, back in logical content space.
       const vx0 = (0 - v.ox) / v.zoom;
       const vy0 = (0 - v.oy) / v.zoom;
       const vx1 = (v.w - v.ox) / v.zoom;
@@ -162,7 +160,6 @@ export function createStaticLayers(lowPower = false) {
       want.h = Math.min(uy1, vy1 + my) - want.y;
       if (!(want.w > 0) || !(want.h > 0)) return;
 
-      // Exact scale first; back off only if it would breach the budget.
       const ideal = v.dpr * v.zoom;
       const cap = Math.sqrt(budget / (want.w * want.h));
       const s = Math.min(ideal, cap);
@@ -183,12 +180,10 @@ export function createStaticLayers(lowPower = false) {
         key !== nextKey ||
         ratio < SCALE_LO ||
         ratio > SCALE_HI ||
-        // Panned past what was cached — the margin ran out.
         vx0 < cov.x - 1e-6 ||
         vy0 < cov.y - 1e-6 ||
         vx1 > cov.x + cov.w + 1e-6 ||
         vy1 > cov.y + cov.h + 1e-6 ||
-        // Came to rest on an approximate cache: refresh it to exact.
         (settled && !exact && wantExact);
 
       if (stale) {

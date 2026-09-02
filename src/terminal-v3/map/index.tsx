@@ -42,7 +42,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
   const destSeen = new Set<string>();
   const dests = listMode ? mapDests.filter((p) => !destSeen.has(p.id) && (destSeen.add(p.id), true)) : [];
   const short = useShortViewport();
-  // Phone: the legend renders as a side column next to the canvas.
   const sideLegend = listMode && short;
 
   useEffect(() => {

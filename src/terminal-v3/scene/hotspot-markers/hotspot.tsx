@@ -167,7 +167,7 @@ export function Hotspot({
     tapTimer.current = setTimeout(() => setHovered(false), 2200);
   };
 
-  // ── Why a tap is opened by hand instead of by `onClick` ────────────────────
+  // Why a tap is opened by hand instead of by `onClick`
   // R3F turns the DOM `click` into a marker hit by RE-RAYCASTING at the click's
   // coordinates, and a browser reports those from where the pointer was LIFTED.
   // A mouse lifts on the pixel it pressed, so on desktop one click always lands.
@@ -176,7 +176,6 @@ export function Hotspot({
   // appeared — exactly the symptom) while the click behind it raycast into empty
   // space, so nothing opened. The second tap, now aimed at a marker the user
   // could finally see, landed. Hence "one click on PC, two on the phone".
-  //
   // So on touch the press is authoritative: it already proved the finger was on
   // the marker, so remember it and watch the WINDOW for the lift. Lift nearby =
   // a tap, and the card opens whatever a fresh raycast would have said; lift far
@@ -190,7 +189,6 @@ export function Hotspot({
     if (tapTimer.current) clearTimeout(tapTimer.current);
     tapUnbind.current?.();
   }, []);
-  // Pointer cursor while hovering a CLICKABLE marker (one with onHotspotClick).
   const clickable = !!onHotspotClick;
   useEffect(() => {
     if (!clickable || !hovered) return;
@@ -198,7 +196,6 @@ export function Hotspot({
     return () => { document.body.style.cursor = ""; };
   }, [clickable, hovered]);
 
-  // Keep the tooltip mounted briefly after hover ends so it can fade out.
   useEffect(() => {
     if (hovered) {
       setTooltipVisible(true);
@@ -210,21 +207,18 @@ export function Hotspot({
 
   // The pulse: rings that GROW OUT of the bead and fade as they go, the way a
   // radar ping reads, plus a gentle breath on the bead itself.
-  //
   // It used to be one shell scaling on a sine between 0.95x and 1.14x. At the
   // distance these markers are actually seen from — their layout checkpoint is
   // 370-460 units back — a 14% wobble on a 3-unit bead is under a pixel of
   // travel, so every marker read as a dead white dot. A ring that leaves the
   // bead and dies at 2-3x its radius is visible at any distance the bead is,
   // because the motion is proportional to the marker, not to a fixed fraction.
-  //
   // TWO rings, half a cycle apart: one ring alone is a blink with a long gap
   // after it, and the eye reads the gap as the marker having stopped.
-  //
   // Three strengths — resting / selected / hovered — so "which of these did I
   // pick?" is answered by motion rather than by another colour.
   useFrame((_, delta) => {
-    // ── Constant screen size ────────────────────────────────────────────────
+    // Constant screen size
     // At `dist` from a perspective camera, one CSS pixel spans
     // `2·tan(fov/2)·dist / viewportHeight` world units. Solving that for the
     // radius that draws BEAD_PX across gives the scale below, so the bead is
@@ -251,7 +245,6 @@ export function Hotspot({
     for (let i = 0; i < PING_COUNT; i++) {
       const ring = pingRefs.current[i];
       if (!ring) continue;
-      // Stagger the rings evenly through the cycle.
       const t = (phase.current + i / PING_COUNT) % 1;
       // Ease-out on the travel so the ring leaves the bead quickly and drifts
       // to a stop, and a squared fade so it is gone well before it turns over.
@@ -274,17 +267,14 @@ export function Hotspot({
   // the same whichever way the frame is turned, and everything that would care
   // (the tooltip anchor) is deliberately outside it. Applying it costs nothing
   // and means an oriented marker drops straight in later.
-  //
   // What is NOT done is displacing the bead along that frame. An earlier
   // version rotated the group and pushed the bead one radius along its local +Z
   // to make it rest on a wall — with these poses that normal points straight
   // DOWN, so the nudge buried it instead.
-  //
   // `size` is only the BASE radius the screen-size rule scales from (see
   // BEAD_PX): what reaches the screen is BEAD_PX across at every distance, and
   // `size` sets where in the clamp range that lands. The ping reach, the breath
   // and the collider are all multiples of it, so they follow automatically.
-  //
   // Drawn unlit in the transparent pass with depthTest off, so it stays legible
   // through geometry the way the disc did. Hover shows the name; a CLICK (when
   // the parent passes onHotspotClick) opens the info overlay.
@@ -361,7 +351,6 @@ export function Hotspot({
           }}
           onClick={(e) => {
             e.stopPropagation();
-            // The touch path above already opened this one on the lift.
             if (performance.now() - tapHandledAt.current < 700) return;
             onHotspotClick?.();
           }}

@@ -79,8 +79,6 @@ export const ui: UiConfig = {
   ...site.copy,
 };
 
-// ── The two content tables ────────────────────────────────────────────────────
-
 export const hotspots: HotspotConfig[] = site.hotspots;
 
 /**
@@ -95,8 +93,6 @@ export const layouts: LayoutConfig[] = site.layouts.map((row) => ({
   ...row,
   hotspots: site.hotspots.filter((h) => h.layoutId === row.id).map((h) => h.id),
 }));
-
-// ── Derived lookups ───────────────────────────────────────────────────────────
 
 export const LAYOUT_BY_ID: Record<string, LayoutConfig> = Object.fromEntries(
   layouts.map((l) => [l.id, l]),
@@ -178,11 +174,9 @@ function xyzToYxz([x, y, z]: Vec3): Vec3 {
   const cx = Math.cos(x), sx = Math.sin(x);
   const cy = Math.cos(y), sy = Math.sin(y);
   const cz = Math.cos(z), sz = Math.sin(z);
-  // R = Rx·Ry·Rz, the matrix an XYZ euler builds.
   const m11 = cy * cz, m13 = sy;
   const m21 = sx * sy * cz + cx * sz, m22 = -sx * sy * sz + cx * cz, m23 = -sx * cy;
   const m31 = -cx * sy * cz + sx * sz, m33 = cx * cy;
-  // YXZ reads pitch off m23, then yaw and roll from the columns either side.
   const px = Math.asin(-Math.min(1, Math.max(-1, m23)));
   return Math.abs(m23) < 0.9999999
     ? [px, Math.atan2(m13, m33), Math.atan2(m21, m22)]
@@ -229,18 +223,14 @@ const ORIGIN_POSE: CameraPose = { position: [0, 0, 0], rotation: [0, 0, 0] };
  */
 export const startLayoutId: string = site.startLayoutId;
 
-/**
- * Where the experience begins: the start layout's own camera. Everything that
- * needs "the default pose" — the Canvas camera, the first-person start, the
- * fallback for an unauthored layout or hotspot — reads THIS.
- */
+/** Where the experience begins. Every "default pose" — the Canvas camera, the
+ *  first-person start, the fallback for an unauthored layout — reads THIS. */
 export const startPose: CameraPose = (() => {
   const layout = LAYOUT_BY_ID[startLayoutId];
   if (!layout || isPlaceholder(layout.camera.position)) return ORIGIN_POSE;
   return authoredPose(layout);
 })();
 
-/** The pose to actually navigate to for a layout. */
 export function poseForLayout(layoutId: string): CameraPose {
   const layout = LAYOUT_BY_ID[layoutId];
   if (!layout || isPlaceholder(layout.camera.position)) return startPose;
@@ -266,8 +256,6 @@ export function poseForHotspot(hotspotId: string): CameraPose {
   return poseForCamera(camera, eyeOffset);
 }
 
-// ── Field tone resolution ─────────────────────────────────────────────────────
-
 const TONE_LOOKUP: Record<string, Tone> = (() => {
   const map: Record<string, Tone> = {};
   (Object.keys(ui.tones) as Tone[]).forEach((tone) => {
@@ -285,15 +273,10 @@ export function toneFor(value: string | number | boolean, explicit?: Tone): Tone
   return TONE_LOOKUP[value.toUpperCase()];
 }
 
-
-// ── Load-time validation (dev only) ───────────────────────────────────────────
-//
+// Load-time validation (dev only)
 // The checks a database would enforce with constraints, run here for as long as
 // the tables live in a file: primary-key format, primary-key uniqueness,
 // foreign-key integrity, and the demo's one cross-row invariant.
-//
-// The check that used to sit here for the two parentage lists agreeing is gone —
-// with the child list derived, there is nothing left for it to disagree with.
 
 if (process.env.NODE_ENV !== "production") {
   const problems: string[] = [];
@@ -301,12 +284,10 @@ if (process.env.NODE_ENV !== "production") {
   const layoutIdRe = /^L(0[1-9]|10)$/;
   const hotspotIdRe = /^H(0[1-9]|[12]\d|30)$/;
 
-  // FOREIGN KEY — the site record names a layout that exists.
   if (!LAYOUT_BY_ID[startLayoutId]) {
     problems.push(`startLayoutId "${startLayoutId}" is not a layout`);
   }
 
-  // PRIMARY KEY — well-formed and unique across the table.
   const seenLayout = new Set<string>();
   site.layouts.forEach((l) => {
     if (!layoutIdRe.test(l.id)) problems.push(`layout id "${l.id}" is not L01-L10`);
@@ -320,7 +301,6 @@ if (process.env.NODE_ENV !== "production") {
     if (seenHotspot.has(h.id)) problems.push(`duplicate hotspot id "${h.id}"`);
     seenHotspot.add(h.id);
 
-    // FOREIGN KEY — every child names a layout that exists.
     if (!LAYOUT_BY_ID[h.layoutId]) {
       problems.push(`hotspot ${h.id} references unknown layout "${h.layoutId}"`);
     }

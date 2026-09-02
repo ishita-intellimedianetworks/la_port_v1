@@ -54,7 +54,6 @@ export function probeFloorY(
 
       const ty = a * v0.y + b * v1.y + c * v2.y;
       if (expectedY === undefined) {
-        // No disambiguator — first containing triangle wins.
         return ty;
       }
       const diff = Math.abs(ty - expectedY);
@@ -113,7 +112,6 @@ export function closestNavmeshPoint(
       const c = vertices[ids[2]];
       if (!a || !b || !c) continue;
 
-      // Closest point on triangle abc to p (Real-Time Collision Detection §5.1.5).
       const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
       const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
       const apx = px - a.x, apy = py - a.y, apz = pz - a.z;

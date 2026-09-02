@@ -1,7 +1,5 @@
 import { nodes } from "@/shared/scene-data/adapter";
 
-// ── Core data types ───────────────────────────────────────────────────────────
-
 export type NodeCamera = {
   name: string;
   label?: string;
@@ -13,7 +11,6 @@ export type DestinationCategory =
   | "restaurants"
   | "practice"
   | "transport"
-  // Village-specific categories (the stadium has no entries for these).
   | "wellness"
   | "hostel"
   // Stadium-specific categories (the village has no entries for these, so its
@@ -24,10 +21,8 @@ export type DestinationCategory =
   | "seating"
   | "accessibility"
   | "discovery"
-  // Stadium transit + IT/Security command categories.
   | "transit"
   | "cctv"
-  // Village seat-view + services categories (imported from the village UI).
   | "services"
   | "seatviews"
   | "safety"
@@ -39,7 +34,7 @@ export type DestinationCategory =
   | "crowdflow"
   | "eventupdates"
   | "infra"
-  // ── HoloTwin LA Port zones ────────────────────────────────────────────────
+  // HoloTwin LA Port zones
   // The terminal's five operating areas. Each groups the layouts (L01-L10)
   // that sit in it; see src/shared/scene-data/adapter.ts.
   | "waterside"
@@ -328,7 +323,7 @@ export type LightsConfig = {
    *  visible radius exactly, a ring of unshadowed ground sweeps ahead of you.
    *  Default 420 (a 323 m visible radius plus that drift). */
   shadowFollowExtent?: number;
-  // ── Interior spot light ───────────────────────────────────────────────────
+  // Interior spot light
   // A shadow-casting ceiling spot placed INSIDE the room, aimed down at the
   // floor. Used on interior venues where the directional sun is blocked by the
   // ceiling and can't cast indoor shadows. Only rendered for interior floors;
@@ -551,8 +546,6 @@ export type NodeData = {
   layouts?: LayoutsConfig[];
 };
 
-// ── Node registry — built once at module load ──────────────────────────────────
-
 export const NODE_BY_ID: Record<string, NodeData> = {};
 export const PARENT_OF:  Record<string, string>   = {};
 
@@ -563,14 +556,11 @@ function register(node: NodeData, parentId?: string) {
 }
 (nodes as NodeData[]).forEach(n => register(n));
 
-// ── Utility functions ─────────────────────────────────────────────────────────
-
 export function canExploreInterior(node: NodeData): boolean {
   return !!(node.floors?.some(f => f.modelUrl && f.navmeshUrl));
 }
 
 export const fmt = (raw: string | string[]) => {
-  // raycastName can be an array of group names — use the first as the label.
   const s = Array.isArray(raw) ? (raw[0] ?? "") : raw;
   return s.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 };

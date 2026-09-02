@@ -73,7 +73,7 @@ export function useSceneNavigation({
   // per-frame scan is pure waste. Floor changes now go exclusively through
   // the FloorTransitionPortal cinematic and the UI selector.
 
-  // ── Navigation: SAME-FLOOR ONLY ─────────────────────────────────────────
+  // Navigation: SAME-FLOOR ONLY
   // Only one floor's navmesh exists at a time, so all walks are confined to
   // the active floor. Floor transitions happen exclusively via the
   // FloorTransitionPortal cinematic. A single A* pass in the player's
@@ -90,7 +90,6 @@ export function useSceneNavigation({
     ctrl.navigateToPoint({ x: pt.x, y: pt.y, z: pt.z });
   }, []);
 
-  // ── Zone auto-sync: keep UI selector in sync when player walks upstairs ───
   const handleZoneChange = useCallback((newZone: string) => {
     const idx = floors.findIndex(f => zoneNameForFloor(f.id) === newZone);
     if (idx >= 0 && floors[idx].id !== prevFloor.current) {
@@ -99,11 +98,10 @@ export function useSceneNavigation({
     }
   }, [floors, setActiveFloorIndex]);
 
-  // ── Floor switch via UI selector — teleport only (blackout is owned by HTML tree) ──
+  // Floor switch via UI selector — teleport only (blackout is owned by HTML tree)
   // triggerFloorTransition is called by handleFloorSelect in TerminalExperience (HTML tree)
   // BEFORE setActiveFloorIndex fires. By the time activeFloor changes here, the screen
   // is already black, so we just teleport the player and the HTML tree fades back out.
-  //
   // Skipped during a portal cinematic: the cinematic itself changes
   // activeFloorIndex at fade peak and owns the post-swap teleport. Running
   // this effect on top would fight the cinematic for the player's pose.
@@ -159,7 +157,7 @@ export function useSceneNavigation({
     ctrl.teleportTo(snappedP, r);
   }, [activeFloor, startPosition, startRotation, playerControllerRef, pathfinding, floors, cinematicActive, navReady, pendingLayoutEntryRef]);
 
-  // ── Minimap click navigation ──────────────────────────────────────────────
+  // Minimap click navigation
   // The minimap is a top-down projection of the active floor's navmesh, so a
   // click carries only an XZ intent — there is no Y to read off. The previous
   // implementation routed the click through findBestFloorForPoint, which scores
@@ -168,7 +166,6 @@ export function useSceneNavigation({
   // a metre away in XZ but at dy=0 always beats the stair node directly under
   // the cursor (dy ≈ step-height × N). The visible symptom is "clicking on
   // stairs walks me beside them instead of up them".
-  //
   // Fix: search by XZ distance only, against the active floor's zone. Tie-break
   // (≤ 1 cm in XZ) by picking the HIGHER Y, because where the click XZ stacks
   // two triangles — typically the floor under a staircase landing — the upper
@@ -190,7 +187,7 @@ export function useSceneNavigation({
     let bestDXZ = Infinity;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let bestNode: any = null;
-    const TIE_EPS = 0.01; // 1 cm — anything closer than this counts as a tie
+    const TIE_EPS = 0.01;
     for (let g = 0; g < groups.length; g++) {
       const group = groups[g];
       for (let i = 0; i < group.length; i++) {
@@ -206,7 +203,6 @@ export function useSceneNavigation({
           Math.abs(dXZ - bestDXZ) <= TIE_EPS &&
           node.centroid.y > bestNode.centroid.y
         ) {
-          // XZ tie: prefer the higher tri (stair over the floor it covers).
           bestDXZ = dXZ;
           bestNode = node;
         }
@@ -220,7 +216,7 @@ export function useSceneNavigation({
       bestNode.centroid.z,
     );
 
-    // ── Stair stickers: rotate to face the lookAt target on arrival ──
+    // Stair stickers: rotate to face the lookAt target on arrival
     // When a click lands within ~0.8m of a sticker that has `lookAt`, the
     // sticker is treated as a stair point — after the walk completes, the
     // player turns (yaw only) to face the lookAt XZ. The existing yaw lerp
@@ -260,7 +256,6 @@ export function useSceneNavigation({
     setNavigateFromMinimap(navigateFromMinimap);
   }, [navigateFromMinimap, setNavigateFromMinimap]);
 
-  // ── Double-click raycast navigation ──────────────────────────────────────
   useDoubleClickNav({ gl, camera, raycaster, scene, navReady, enabled: dblClickEnabled, floors, pathfinding, playerControllerRef, navigateToFloor });
 
   return { handleZoneChange };

@@ -17,8 +17,6 @@ const TONE_COLOR: Record<Tone, string> = {
   alert: "var(--tone-alert, #ff5c5c)",
 };
 
-// ── Value formatting ──────────────────────────────────────────────────────────
-
 function formatValue(field: HotspotField): string {
   const { type, value, unit } = field;
   if (value === "" || value === null || value === undefined) return "-";

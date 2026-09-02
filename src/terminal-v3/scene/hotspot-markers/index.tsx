@@ -28,11 +28,9 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
   const currentLayoutId = useNavUiStore((s) => s.currentDest?.id ?? null);
-  // The hotspot whose data card is currently open, if any.
   const openHotspotId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
 
   // EITHER / OR, never both — the marker set answers "what did you ask for?"
-  //
   //   a resource was picked   exactly that one disc, nothing else. Narrowing to
   //                           a single resource is the whole point of picking
   //                           it; leaving its siblings up made the selection
@@ -43,7 +41,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   //                           terminal from 180 up, so ranking by distance
   //                           would arrive somewhere and show nothing that
   //                           belongs to it — the opposite of travelling there.
-  //
   // Distance plays no part any more: proximity used to add whatever happened to
   // be close, which meant arriving at one layout surfaced a neighbour's discs.
   const own = currentLayoutId ? (LAYOUT_BY_ID[currentLayoutId]?.hotspots ?? []) : [];

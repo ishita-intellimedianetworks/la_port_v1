@@ -8,10 +8,6 @@ import type { FloorConfig } from "@/shared/types";
 import { useWorldStore } from "@/shared/stores/world-store";
 import { FADE_MS } from "@/shared/ui/screens/fade-screen";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tuning constants
-// ─────────────────────────────────────────────────────────────────────────────
-
 // Orbit damping: expressed as a decay constant (per second), not per frame.
 // This makes behaviour identical regardless of monitor refresh rate.
 // 6 = snappy  |  3 = floaty  |  12 = near-instant
@@ -20,10 +16,8 @@ import { FADE_MS } from "@/shared/ui/screens/fade-screen";
 const ORBIT_DAMPING_RATE = 5;
 
 const ORBIT_ROTATE_SPEED = 0.005;
-// Wheel zoom multiplier (applied to the spherical orbit radius).
 const ORBIT_ZOOM_SPEED   = 0.0015;
 
-// Orbit radius (zoom) bounds — distance from the model centre.
 const ZOOM_MIN = 2;
 const ZOOM_MAX = 80;
 // The dollhouse opens this fraction of the authored pose's distance. Was 0.72
@@ -49,8 +43,6 @@ const BLACKOUT_CUE_FRAC = 1 - BLACKOUT_LEAD_SEC / FLY_DURATION_SEC;
 
 const DBLCLICK_MAX_MS = 300;
 const DBLCLICK_MAX_PX = 10;
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface DollhouseCameraProps {
   dollHousePosition: [number, number, number];
@@ -81,7 +73,7 @@ export default function DollhouseCamera({
 }: DollhouseCameraProps) {
   const { camera, gl, scene } = useThree();
 
-  // ── Where the orbit pivots ────────────────────────────────────────────────
+  // Where the orbit pivots
   // A STREAMED floor cannot be measured by traversing the scene: on the frame
   // the pivot is seeded only a handful of chunks have landed, and it is seeded
   // exactly ONCE — so the orbit would latch onto whichever corner downloaded
@@ -93,8 +85,6 @@ export default function DollhouseCamera({
   const streamed = !!activeFloor?.streamed;
   const worldBounds = useWorldStore((s) => s.bounds);
 
-  // ── Fly-in animation ──────────────────────────────────────────────────────
-  // Driven directly in useFrame — no tween library, no per-frame allocations.
   const isTransitioning = useRef(false);
   const handedOff       = useRef(false);
   const flyElapsed      = useRef(0);
@@ -106,7 +96,7 @@ export default function DollhouseCamera({
   const flyTargetPos    = useRef<[number, number, number]>([0, 0, 0]);
   const blackoutCued    = useRef(false);
 
-  // ── Orbit around the model centre ──────────────────────────────────────────
+  // Orbit around the model centre
   // The pivot is the dollhouse model's bounding-box centre; dragging turntables
   // the camera around it (spherical theta/phi), the wheel/pinch changes radius.
   const orbitCenter   = useRef(new THREE.Vector3());
@@ -122,7 +112,6 @@ export default function DollhouseCamera({
   const zoomMin       = useRef(ZOOM_MIN);
   const zoomMax       = useRef(ZOOM_MAX);
 
-  // ── Input helpers ─────────────────────────────────────────────────────────
   const isDragging  = useRef(false);
   const lastPointer = useRef({ x: 0, y: 0 });
   const dragMoved   = useRef(false);
@@ -132,15 +121,12 @@ export default function DollhouseCamera({
   const interactiveRef = useRef(interactive);
   useEffect(() => {
     interactiveRef.current = interactive;
-    // If the lock lands mid-drag, kill the drag so it can't keep steering.
     if (!interactive) isDragging.current = false;
   }, [interactive]);
 
-  // ── Authoring aid ─────────────────────────────────────────────────────────
   // The live camera pose in `site.json` › `cameras.dollhouse` format (rotation
   // as the YXZ euler seatAtHome applies), so a framing found by dragging can be
   // copied straight into the config.
-  //
   // TWO cadences, because finding a framing and recording it are different
   // jobs. WHILE the view moves it prints at 5 Hz, so the numbers can be read as
   // the model turns — that is what makes it possible to aim at something rather
@@ -150,7 +136,6 @@ export default function DollhouseCamera({
   const poseDirty = useRef(false);
   const liveLogAt = useRef(0);
   const logPose = useCallback((settled: boolean) => {
-    // Authoring aid only — opt-in via ?debug=true like the rest of the logs.
     if (typeof window === "undefined" ||
         new URLSearchParams(window.location.search).get("debug") !== "true") return;
     const r = (v: number) => Math.round(v * 10000) / 10000;
@@ -161,7 +146,6 @@ export default function DollhouseCamera({
     );
   }, [camera]);
 
-  // ── Stable refs for props used inside callbacks ────────────────────────────
   const onEnterRef      = useRef(onEnterFirstPerson);
   const onCueRef        = useRef(onTransitionCue);
   const activeFloorRef  = useRef(activeFloor);
@@ -199,7 +183,6 @@ export default function DollhouseCamera({
     seatAtHome();
   }, [dollHousePosition, dollHouseRotation, seatAtHome]);
 
-  // ── Fly-in ────────────────────────────────────────────────────────────────
   // Just captures start/end pose and flips the transition flag. The actual
   // motion happens in useFrame below — one position lerp + one slerp per frame.
   const startFlyIn = useCallback(
@@ -220,7 +203,6 @@ export default function DollhouseCamera({
       flyEndQuat.current.setFromEuler(
         new THREE.Euler(targetRot[0], targetRot[1], targetRot[2], "YXZ"),
       );
-      // Slerp picks the short arc only if dot >= 0; flip if needed.
       if (flyStartQuat.current.dot(flyEndQuat.current) < 0) {
         flyEndQuat.current.set(
           -flyEndQuat.current.x,
@@ -239,7 +221,6 @@ export default function DollhouseCamera({
     [camera, cameraHeight],
   );
 
-  // ── Zoom ──────────────────────────────────────────────────────────────────
   // Scale the orbit radius (distance from the model centre) by `factor`, clamped
   // to [ZOOM_MIN, ZOOM_MAX]. factor < 1 = zoom in, > 1 = zoom out.
   const zoomBy = useCallback((factor: number) => {
@@ -248,7 +229,6 @@ export default function DollhouseCamera({
     );
   }, []);
 
-  // ── Pointer + wheel input ──────────────────────────────────────────────────
   useEffect(() => {
     const canvas = gl.domElement;
     let lastTapTime  = 0;
@@ -283,7 +263,6 @@ export default function DollhouseCamera({
         dragMoved.current = true;
       }
 
-      // Orbit around the model centre ("the model follows the drag").
       sphTarget.current.theta -= dx * ORBIT_ROTATE_SPEED;
       sphTarget.current.phi    = Math.max(
         TILT_MIN,
@@ -318,7 +297,6 @@ export default function DollhouseCamera({
       if (isDoubleTap) {
         lastTapTime = 0;
         const floor = activeFloorRef.current;
-        // Dollhouse-only floors (e.g. the stadium) never enter first-person.
         if (floor.dollhouseOnly) return;
         startFlyIn(
           (floor.startPosition ?? [0, 0, 0]) as [number, number, number],
@@ -337,10 +315,9 @@ export default function DollhouseCamera({
       if (isTransitioning.current || !interactiveRef.current) return;
       e.preventDefault();
       const norm =
-        e.deltaMode === 1 ? e.deltaY * 16 :  // lines → pixels
-        e.deltaMode === 2 ? e.deltaY * 400 : // pages → pixels
-        e.deltaY;                             // already pixels
-      // Scroll down (norm > 0) → zoom OUT (larger radius).
+        e.deltaMode === 1 ? e.deltaY * 16 :
+        e.deltaMode === 2 ? e.deltaY * 400 :
+        e.deltaY;
       zoomBy(1 + norm * ORBIT_ZOOM_SPEED);
       poseDirty.current = true;
     };
@@ -353,7 +330,7 @@ export default function DollhouseCamera({
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
     };
 
-    // ─ Touch — single-finger orbit + two-finger pinch zoom ──────────────
+    // Touch — single-finger orbit + two-finger pinch zoom
     // Without these handlers the dollhouse view has NO zoom path on mobile.
     let pinchLastDist = 0;
     let pinchActive = false;
@@ -426,8 +403,6 @@ export default function DollhouseCamera({
     };
   }, [gl, camera, startFlyIn, zoomBy]);
 
-
-  // ── Per-frame update ───────────────────────────────────────────────────────
   useFrame((_state, delta) => {
     if (handedOff.current) return;
 
@@ -439,12 +414,10 @@ export default function DollhouseCamera({
       flyElapsed.current += delta;
       let t = flyElapsed.current / FLY_DURATION_SEC;
       if (t >= 1) t = 1;
-      const k = t * t * t * (t * (t * 6 - 15) + 10); // smootherstep
+      const k = t * t * t * (t * (t * 6 - 15) + 10);
 
       camera.position.lerpVectors(flyStartPos.current, flyEndPos.current, k);
       camera.quaternion.slerpQuaternions(flyStartQuat.current, flyEndQuat.current, k);
-
-      // logCameraState("fly-in", { t: t.toFixed(3) });
 
       // Fire the blackout cue once when we cross the threshold — TerminalExperience
       // starts the FadeScreen so it reaches full opacity right at fly-in end.
@@ -468,7 +441,7 @@ export default function DollhouseCamera({
     if (!orbitReady.current) {
       sceneBounds.current.makeEmpty();
       if (streamed) {
-        if (!worldBounds) { seatAtHome(); return; } // bounds not published yet
+        if (!worldBounds) { seatAtHome(); return; }
         sceneBounds.current.set(
           new THREE.Vector3(...worldBounds.min),
           new THREE.Vector3(...worldBounds.max),
@@ -481,7 +454,7 @@ export default function DollhouseCamera({
           while (n) { if (!n.visible) return; n = n.parent; }
           sceneBounds.current.expandByObject(mesh);
         });
-        if (sceneBounds.current.isEmpty()) { seatAtHome(); return; } // model not ready
+        if (sceneBounds.current.isEmpty()) { seatAtHome(); return; }
       }
 
       sceneBounds.current.getCenter(orbitCenter.current);
@@ -490,7 +463,6 @@ export default function DollhouseCamera({
       // starting view is exactly the configured one — the clamps only bound live
       // drag/zoom input, so there's no jump on the first frame.
       sphTarget.current.setFromVector3(camPos.clone().sub(orbitCenter.current));
-      // Open a bit closer to the model than the authored pose.
       sphTarget.current.radius *= DOLLHOUSE_START_SCALE;
       sphTarget.current.makeSafe();
       sphCurrent.current.copy(sphTarget.current);
@@ -509,7 +481,6 @@ export default function DollhouseCamera({
       return;
     }
 
-    // Frame-rate-independent exponential damping (same feel at any refresh rate).
     const alpha = 1 - Math.exp(-ORBIT_DAMPING_RATE * delta);
     sphCurrent.current.theta  += (sphTarget.current.theta  - sphCurrent.current.theta)  * alpha;
     sphCurrent.current.phi    += (sphTarget.current.phi    - sphCurrent.current.phi)    * alpha;
@@ -535,7 +506,6 @@ export default function DollhouseCamera({
         logPose(false);
       }
     } else if (poseDirty.current) {
-      // Settled after an interaction: the paste-ready line.
       poseDirty.current = false;
       logPose(true);
     }

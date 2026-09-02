@@ -96,7 +96,7 @@ export default function TerminalProvider({
   const startPosition = node?.startPosition;
   const startRotation = node?.startRotation;
   const dollHouseCamera     = node?.dollHouseCamera;
-  const dollHouseModelUrl   = node?.dollHouseModelUrl; // removed from config — dollhouse now reuses the single floor model
+  const dollHouseModelUrl   = node?.dollHouseModelUrl;
   const dollHousePreviewUrl = node?.dollHousePreviewUrl;
   const hasDollHouse        = !!dollHouseCamera;
   const unitName            = node?.unitName;
@@ -307,7 +307,6 @@ export default function TerminalProvider({
   // sceneMode) because `active` flips at the swap, i.e. UNDER the full
   // blackout — so the floor swap + UI change happen out of sight. Keying off
   // sceneMode reset too early, while the interior was still visible.
-  //
   // The provider is NO LONGER keyed by nodeId (keying remounted the shared
   // Canvas/WebGL context and crashed on apartment→apartment switches), so this
   // effect is the ONLY thing that returns interior state to a clean slate
@@ -402,7 +401,6 @@ export default function TerminalProvider({
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>;
     if (isReady && phase !== "overlay" && sceneRevealed) {
-      // Hold a beat after the scene is visible, then slide the UI in.
       t = setTimeout(() => setUiEntered(true), tokens.uiEntrance.delayMs);
     } else {
       t = setTimeout(() => setUiEntered(false), 0);
@@ -431,7 +429,6 @@ export default function TerminalProvider({
   // initial loading screen, and report when done via `othersCached`. The loader
   // gates on this so it only completes once BOTH models are downloaded. The
   // initial model itself is loaded (parsed + mounted) by <SingleModel>.
-  //
   // Progress is BYTE-accurate (streamed reads + content-length) and written to
   // the store's `prefetchProgress` — ProgressSmoother blends it 50/50 with the
   // active model's drei progress (ARCHVIZ ProgressBridge style), so the loader

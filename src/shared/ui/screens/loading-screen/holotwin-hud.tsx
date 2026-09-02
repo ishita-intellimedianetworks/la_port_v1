@@ -36,8 +36,8 @@ const HtlVeil: React.FC<{ revealVeil: boolean }> = ({ revealVeil }) => {
   // mostly clear by ~35% downloaded — the silhouette is on show for the whole
   // download. A floor of 0.22 keeps the HUD text readable against the bright
   // sky until the whole HUD fades out at 100%.
-  const rawProgress = useProgressStore((s) => s.progress); // 0..100
-  const VEIL_THIN_END = 35; // raw % at which the veil reaches its floor
+  const rawProgress = useProgressStore((s) => s.progress);
+  const VEIL_THIN_END = 35;
   const VEIL_MIN_ALPHA = 0.22;
   const thin = revealVeil ? Math.min(1, Math.max(0, rawProgress / VEIL_THIN_END)) : 0;
   return <div className="htl-veil" style={{ opacity: 1 - thin * (1 - VEIL_MIN_ALPHA) }} />;
@@ -93,7 +93,6 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
   // (The `progress` prop is still accepted for API compatibility but ignored.)
   void _ignoredProgress;
 
-  // Residential color theme (hardcoded)
   const residentialTheme = {
     color: '#0fb7ff',
     accentColor: '#00FFCC',

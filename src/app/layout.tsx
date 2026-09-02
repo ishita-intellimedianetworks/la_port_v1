@@ -7,7 +7,6 @@ import "./globals.css";
 // Barlow carries body copy. Self-hosted rather than next/font/google so a
 // compile never waits on the network.
 const saira = localFont({
-  // Variable font — one file covers every weight the overlays use.
   src: "./fonts/saira-latin.woff2",
   weight: "300 700",
   variable: "--font-saira",
@@ -34,7 +33,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#030b14",
-  // The experience fills the viewport and handles its own gestures.
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

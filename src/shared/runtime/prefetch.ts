@@ -32,7 +32,6 @@ async function pump(): Promise<void> {
       await fetch(url, { priority: "low", cache: "force-cache" } as RequestInit);
       done.add(url);
     } catch {
-      // Non-fatal — when the actual GLB load happens it'll retry on its own.
     } finally {
       inFlight.delete(url);
     }

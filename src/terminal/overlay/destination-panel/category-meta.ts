@@ -56,7 +56,7 @@ export interface CategoryMeta {
 
 /** Canonical order + presentation for the three destination labels. */
 export const DEST_CATEGORIES: CategoryMeta[] = [
-  // ── HoloTwin LA Port ──────────────────────────────────────────────────────
+  // HoloTwin LA Port
   // The terminal's operating areas, in the order the demo walks them:
   // waterside → yard → landside → rail → executive overview. Categories with
   // no entries on the active floor are filtered out of the rail, so these stay
@@ -67,7 +67,7 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
   { key: "rail",      label: "Rail",           short: "Rail",      icon: TrainFront, unit: "layouts" },
   { key: "executive", label: "Executive",      short: "Executive", icon: Gauge,      unit: "layouts" },
 
-  // ── LA2028 HoloTwin demo categories (memorial / stadium) ────────────────────
+  // LA2028 HoloTwin demo categories (memorial / stadium)
   // Lead the rail on those venues; each renders a distinct panel with option
   // sub-category chips. "seating" (Seat View), "accessibility" and "services"
   // (Nearby Services) below are reused as the remaining three demo categories.
@@ -99,7 +99,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
     // No list segmentation — the venue's sports show as pills in the directions
     // card, not as filter chips above the list.
   },
-  // ── Village categories ──────────────────────────────────────────────────────
   {
     key: "wellness",
     label: "Wellness",
@@ -114,7 +113,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
     icon: BedDouble,
     unit: "locations",
   },
-  // ── Stadium categories — each shows sub-category tabs via segmentBy "option" ──
   {
     key: "entrance",
     label: "Entrances",
@@ -160,7 +158,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
     unit: "points",
     segmentBy: "option",
   },
-  // Legacy seat-map route key — unused by the current stadium (kept harmless).
   {
     key: "seatviews",
     label: "Seat Views",

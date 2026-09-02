@@ -92,7 +92,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const onStatsRef = useRef(onStats);
   onStatsRef.current = onStats;
 
-  // ── Readiness ──────────────────────────────────────────────────────────────
   // A streamed scene is never "loaded" in the sense a GLB is — it keeps filling
   // in for as long as you walk. What the entry blackout needs to know is when
   // the LANDING view has stopped filling in, which is what these track.
@@ -113,7 +112,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
       ]);
       if (!alive) return;
 
-      // Bounds come from the manifest, not from a traversal — see the header.
       onBoundsRef.current?.(
         new THREE.Box3(
           new THREE.Vector3(...manifest.worldMin),
@@ -130,7 +128,7 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
         mode: "adaptive",
         config: cfgRef.current,
         dracoPath: "/draco/",
-        renderer: gl as THREE.WebGLRenderer, // enables KTX2 transcode-support detection
+        renderer: gl as THREE.WebGLRenderer,
         ktx2Path: "/basis/",
         // Memory ceilings are a property of the DEVICE, not of the scene, so
         // they are resolved here rather than read from site.json's bands — and
@@ -138,7 +136,7 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
         profile: detectProfile(),
       });
       mgr.current = created;
-      created.setConfig(cfgRef.current); // a view swap that landed mid-construction
+      created.setConfig(cfgRef.current);
 
       // Both are no-ops for an asset set baked without them, and neither is
       // awaited into the critical path: the scene streams normally while the

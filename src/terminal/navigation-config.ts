@@ -7,40 +7,36 @@
  */
 
 export const navConfig = {
-  // ── Shared route colours (used by BOTH the 3D line and the 2D minimap) ──
   color: {
-    routeCore: "#2684ff", // bright blue centre of the route line
-    routeCasing: "#0d4fb5", // darker blue outline/edge
-    pillBg: "#0d4fb5", // minimap ETA pill background
+    routeCore: "#2684ff",
+    routeCasing: "#0d4fb5",
+    pillBg: "#0d4fb5",
     pillText: "#ffffff",
-    destRed: "#e8453c", // destination pin + ground ring
+    destRed: "#e8453c",
   },
 
   // ── 3D route (sizes in REAL-WORLD METRES; auto-scaled to world units so the
   //    visuals stay human-scale regardless of how big the model's units are) ──
   scene3d: {
-    lineWidthM: 0.18, // route line width
-    liftM: 0.04, // raise off the floor (z-fight guard)
-    pinHeadM: 0.09, // pin head radius (drives the whole pin size) — kept small
-    pinFloatM: 0.16, // how high the pin floats above the spot (low, not hovering)
-    pinBobM: 0.04, // bob (up/down) amplitude
-    ringOuterM: 0.2, // ground ring outer radius
+    lineWidthM: 0.18,
+    liftM: 0.04,
+    pinHeadM: 0.09,
+    pinFloatM: 0.16,
+    pinBobM: 0.04,
+    ringOuterM: 0.2,
   },
 
-  // ── 2D minimap route (canvas pixels, before the map's markerScale) ──
   minimap: {
-    coreWidthPx: 3.5, // bright core line width
-    casingWidthPx: 6, // darker casing line width
-    destPinHeadPx: 6.5, // destination pin head radius
-    pillFontPx: 11, // ETA pill text size
+    coreWidthPx: 3.5,
+    casingWidthPx: 6,
+    destPinHeadPx: 6.5,
+    pillFontPx: 11,
   },
 
-  // ── Turn HUD (glass banner) ──
   hud: {
-    tileColor: "#1a73e8", // maneuver-arrow tile background
+    tileColor: "#1a73e8",
   },
 
-  // ── Seat-view simulation ──
   seatView: {
     /** Eye height (world Y) for EVERY seat view — a seated spectator's eye in
      *  the lower bowl. Applied in code at teleport time (the seat destinations carry
@@ -48,16 +44,12 @@ export const navConfig = {
     eyeY: 0.1,
   },
 
-  // ── Navigation maths ──
   logic: {
-    // ════════════════════════════════════════════════════════════════════
     // THE TWO KNOBS that drive every distance + time readout.
-    //
     // Distance itself is measured from real coordinates — the navmesh A* path
     // between the player's live position and the destination. These two
     // constants turn that path into metres + walking minutes. Change either and
     // ALL readouts (destination cards AND the turn HUD) recompute. Nothing else to edit.
-    // ════════════════════════════════════════════════════════════════════
     /** Whole-site size: the model's longest extent presented as this many
      *  metres. The Everport zone-C5 model is authored 1:1 in metres — its
      *  navmesh spans ~990 units and the terminal really is ~1 km end to end —
@@ -74,7 +66,6 @@ export const navConfig = {
      *  number is the whole default. */
     defaultSpeedMult: 10,
 
-    // ── Fixed model fact (not a tuning knob) ──
     /** The walkable site's longest extent in WORLD UNITS, measured from the
      *  navmesh bounding box (X 840, Z 990 for zone C5 — the MODEL box is far
      *  larger, but it carries the surrounding harbour and city, which nobody
@@ -87,8 +78,8 @@ export const navConfig = {
       return this.siteSpanMeters / this.siteSpanUnits;
     },
 
-    realEyeHeightM: 1.6, // avatar eye height in metres (3D-sizing only)
-    turnMinDeg: 18, // a bend sharper than this counts as a turn
-    rightIsPositiveCross: false, // flip if left/right read inverted in-app
+    realEyeHeightM: 1.6,
+    turnMinDeg: 18,
+    rightIsPositiveCross: false,
   },
 };

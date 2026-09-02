@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { HOTSPOT_BY_ID, layouts, ui as uiCopy } from "@/config";
 import { EdgeFlap } from "../edge-flap";
+import { hasGroundView } from "../../ground-views";
 import { PanelSearch } from "../panel-search";
 import { TravelRow } from "../travel-row";
 import { useLayoutNavigation } from "../use-layout-navigation";
@@ -16,9 +17,6 @@ interface HotspotsFlapProps {
   /** Tuck the flap off-edge (walking, or an overlay owns the view). */
   tucked?: boolean;
 }
-
-/** Stable empty map, so "no overrides for this query" is not a new object each render. */
-const EMPTY_OVERRIDES: Record<string, boolean> = {};
 
 /**
  * The LEFT edge flap: the single "Resources" panel. Per the handoff, a
@@ -46,7 +44,7 @@ const EMPTY_OVERRIDES: Record<string, boolean> = {};
  * disc in the scene, so reading them means arriving and clicking the disc.
  */
 export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsFlapProps) {
-  const { goToHotspot, goToLayout } = useLayoutNavigation();
+  const { goToHotspot, goToHotspotGround, goToLayout } = useLayoutNavigation();
   // The chevron is drawn by an SVG component, not a class, so the short
   // viewport has to be read in JS to shrink it alongside its button.
   const chevronSize = useShortViewport() ? 15 : 18;
@@ -54,24 +52,27 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
-  // Which layout rows are unfolded. An OVERRIDE map, not the truth: an absent
-  // entry means "whatever the current search implies", so a hit inside a layout
-  // can unfold it without fighting a stored value.
-  //
+  // Which layout row is unfolded — AT MOST ONE. Opening a second folds the
+  // first away, so the tree stays one screenful instead of growing into a
+  // column the operator has to scroll past to reach the next layout.
+  // An OVERRIDE, not the truth: `undefined` means "whatever the current search
+  // implies", so a hit inside a layout can unfold it without fighting a stored
+  // value. Once a chevron is tapped the choice wins — a layout id, or null for
+  // "the one that was open is now closed".
   // TAGGED with the query it was made under, and read only while that query is
   // still the live one. The alternative — clearing it from an effect on every
   // keystroke — is the same behaviour a render later, with a wasted render and
-  // a frame where the old overrides are still on screen.
-  const [expanded, setExpanded] = useState<{ query: string; map: Record<string, boolean> }>({
+  // a frame where the old choice is still on screen.
+  const [expanded, setExpanded] = useState<{ query: string; openId?: string | null }>({
     query: "",
-    map: {},
   });
-  const overrides = expanded.query === q ? expanded.map : EMPTY_OVERRIDES;
+  const openId = expanded.query === q ? expanded.openId : undefined;
   const toggleExpanded = useCallback(
     (layoutId: string, fallback: boolean) => {
       setExpanded((prev) => {
-        const map = prev.query === q ? prev.map : {};
-        return { query: q, map: { ...map, [layoutId]: !(map[layoutId] ?? fallback) } };
+        const current = prev.query === q ? prev.openId : undefined;
+        const isOpen = current === undefined ? fallback : current === layoutId;
+        return { query: q, openId: isOpen ? null : layoutId };
       });
     },
     [q],
@@ -147,8 +148,7 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
         )}
         {rows.map(({ layout, children, autoOpen }) => {
           const hasChildren = children.length > 0;
-          // The override wins where it exists; otherwise the search decides.
-          const isOpen = overrides[layout.id] ?? autoOpen;
+          const isOpen = openId === undefined ? autoOpen : openId === layout.id;
           return (
             <li key={layout.id} className="flex flex-col gap-1.5 short:gap-1">
               <div className="flex items-center gap-1.5 short:gap-1">
@@ -193,10 +193,19 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                 <ul className="mb-1 ml-[52px] mt-0.5 flex list-none flex-col gap-1.5 short:mb-0.5 short:ml-[38px] short:gap-1">
                   {children.map((hp) => (
                     <li key={hp.id}>
+                      {/* The standing figure appears only on resources that
+                          have an authored ground standpoint — a minority, and
+                          deliberately so: it marks the ones worth seeing on
+                          foot rather than implying every resource can be. */}
                       <TravelRow
                         name={hp.name}
                         showChevron={false}
                         onSelect={() => travel(() => goToHotspot(hp.id))}
+                        onWalk={
+                          hasGroundView(hp.id)
+                            ? () => travel(() => goToHotspotGround(hp.id))
+                            : undefined
+                        }
                       />
                     </li>
                   ))}

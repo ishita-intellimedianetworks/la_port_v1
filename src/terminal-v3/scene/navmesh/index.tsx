@@ -82,8 +82,6 @@ export function useNavmeshManager({ pathfinding, onReady }: NavmeshManagerProps)
     try {
       const { zoneData } = weldToSingleGroup(geometry);
 
-
-      // Drop the previously-registered zone before installing the new one.
       const prev = lastFloorIdRef.current;
       if (prev && prev !== floorId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

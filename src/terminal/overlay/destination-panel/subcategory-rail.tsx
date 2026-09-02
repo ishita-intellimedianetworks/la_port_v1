@@ -69,14 +69,12 @@ export function SubcategoryRail({ segments, active, onSelect }: SubcategoryRailP
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Anchor the portaled menu to the control, in viewport (fixed) coordinates.
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
     setRect({ left: r.left, top: r.bottom + 6, width: r.width });
   }, [open]);
 
-  // Close on outside click (button + portaled menu are both "inside") or resize.
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: PointerEvent) => {

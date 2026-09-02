@@ -89,7 +89,7 @@ export function useMinimap() {
 
   const stopNav = useCallback(() => playerControllerRef.current?.stopNavigation(), [playerControllerRef]);
 
-  // ── destination label hotspots on the map ──────────────────────────────────────────
+  // destination label hotspots on the map
   // `destLabel` = the label whose destinations are shown (null = none).
   // `selectedDestId` = a tapped hotspot → preview route + info card + Start.
   // Seat views are intentionally NOT a map category: they're a teleport-only
@@ -115,7 +115,6 @@ export function useMinimap() {
     const d = activeFloor?.dests?.[currentDestCat]?.find((x) => x.id === currentDestId);
     return !!d?.teleportOnly;
   })();
-  // Compact list design (memorial) vs classic labelled-hotspot map (village).
   const listMode = !!activeFloor?.mapListMode;
   // Sub-category (Destination.option) filter for the shown label — null = All. Backed
   // by the SHARED per-category memory (nav store), so the map and the panel
@@ -138,7 +137,6 @@ export function useMinimap() {
   const expanded = useNavUiStore((s) => s.mapExpanded);
   const setMapExpanded = useNavUiStore((s) => s.setMapExpanded);
   const [mapDests, setMapDestinations] = useState<MapDestination[]>([]);
-  // Refs the RAF draw loop reads (so selection/label changes don't re-arm it).
   const destLabelRef = useRef<DestinationCategory | null>(null);
   const selectedDestIdRef = useRef<string | null>(null);
   const hotspotsRef = useRef<MapHotspot[]>([]);
@@ -157,26 +155,20 @@ export function useMinimap() {
    *  through this rect, and ones outside it are dropped. */
   const letterboxRef = useRef<ImageRect>({ dx: 0, dy: 0, dw: 0, dh: 0 });
 
-  // The RAF loop reads these directly, so pan/zoom never re-renders React.
   const zoomRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
   const dragRef = useRef({ active: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0 });
-  // Kept for the click/pan guards; always false now that drag-resize is gone.
   const resizingRef = useRef(false);
 
-  // Always-current canvas size for event handlers (avoids stale closure)
   const mapSizeRef = useRef({ w: 0, h: 0 });
 
-  // Canvas dimensions — driven by the small/full toggle (no free drag-resize).
   const [mapDims, setMapDims] = useState({ w: MAP_WINDOW_DEFAULT.w, h: MAP_WINDOW_DEFAULT.h });
-  // Small floating window vs. full-screen (fills the viewport beside the sidebar).
   const [fullScreen, setFullScreen] = useState(false);
   const toggleFullScreen = useCallback(() => setFullScreen((v) => !v), []);
   // Width (px) of the right-hand category-radio column (20% of the window; the
   // canvas takes the other 80%).
   const [radioWidth, setRadioWidth] = useState(0);
 
-  // Collapse minimap when layouts panel or FOV opens
   useEffect(() => {
     if (layoutsOpen || fovOpen) setMapExpanded(false);
   }, [layoutsOpen, fovOpen, setMapExpanded]);
@@ -230,13 +222,12 @@ export function useMinimap() {
     }
   }, [expanded, destLabel, destCats, toggleLabel, setLayoutsOpen, setFovOpen, playerControllerRef, listMode, activeFloor]);
 
-  // ── destination hotspots: compute, select, start ───────────────────────────────────
+  // destination hotspots: compute, select, start
   // Recompute each hotspot's live distance/ETA from the player's current
   // position (navmesh path × the shared display scale).
   const computeHotspots = useCallback(() => {
     const ctrl = playerControllerRef.current;
     const all = destLabel && destLabel !== "seatviews" ? (activeFloor?.dests?.[destLabel] ?? []) : [];
-    // Sub-category filter (map-side "show sub-categories wise") — null = All.
     const list = mapOption ? all.filter((p) => (p.option ?? "") === mapOption) : all;
     const dests = activeFloor?.transportDestinations ?? [];
     const mpu = navConfig.logic.displayMetersPerUnit;
@@ -271,7 +262,6 @@ export function useMinimap() {
               .map((d) => `${d.label} · ${d.accessible === false ? "not accessible" : "accessible"}`)
               .join("  ·  ")
           : "Transit hub";
-        // A hub is reachable only if it serves at least one accessible venue.
         accessible = served.length === 0 || served.some((d) => d.accessible !== false);
       }
       return pins.map((hs, i) => ({
@@ -282,9 +272,7 @@ export function useMinimap() {
         etaLabel: wu == null ? "" : fmtEta(etaSeconds(wu, mpu)),
         detail: destLabel === "practice" ? [dest.label, detail].filter(Boolean).join(" · ") : detail,
         accessible,
-        // Classic design: only the first pin carries the name pill.
         labeled: i === 0,
-        // List-mode: every pin of a destination shares its list-row number.
         num: destIdx + 1,
         here: dest.id === currentDestId,
         walkable: wu != null,
@@ -294,7 +282,6 @@ export function useMinimap() {
     setMapDestinations(next);
   }, [destLabel, mapOption, activeFloor, playerControllerRef, currentDestId, atTeleportOnly]);
 
-  // Mirror state into the refs the RAF draw loop reads.
   const listModeRef = useRef(listMode);
   useEffect(() => { listModeRef.current = listMode; }, [listMode]);
   useEffect(() => { destLabelRef.current = destLabel; }, [destLabel]);
@@ -320,7 +307,6 @@ export function useMinimap() {
     playerControllerRef.current?.clearPreview();
   }, [setSelectedDestId, playerControllerRef]);
 
-  // Radio toggle: pick a label (switching drops any selection), or unpick to hide.
   const pickDestLabel = useCallback((key: DestinationCategory) => {
     playerControllerRef.current?.clearPreview();
     toggleLabel(key);
@@ -386,7 +372,6 @@ export function useMinimap() {
       const footGuess = eyeY ? eyeY - ch : 0;
       const y = full.exactPose && eyeY ? eyeY - ch : ctrl.probeFloorY(x, z, footGuess) ?? footGuess;
       ctrl.teleportTo([x, y, z], cam.rotation, true);
-      // Latch "currently at" immediately on arrival (don't wait for the poll).
       if (destLabel) {
         useNavUiStore.getState().setCurrentDest({ id: full.id, label: full.label, category: destLabel, option: full.option });
       }
@@ -426,7 +411,6 @@ export function useMinimap() {
 
   const mapWidth  = mapDims.w;
   const mapHeight = mapDims.h;
-  // Sync mapSizeRef after render so event handlers always read the latest size
   useLayoutEffect(() => {
     mapSizeRef.current = { w: mapWidth, h: mapHeight };
   }, [mapWidth, mapHeight]);
@@ -461,7 +445,6 @@ export function useMinimap() {
     };
   }, [planLayer]);
 
-  // The draw loop binds once, so it reads the rect through a ref.
   const planRectRef = useRef<typeof planRect>(null);
   useEffect(() => { planRectRef.current = planRect; }, [planRect]);
 
@@ -552,7 +535,6 @@ export function useMinimap() {
     userMovedRef.current = false;
   }, [expanded]);
 
-
   /**
    * Back to the framing the map opens on: the zone fitted to the canvas.
    *
@@ -572,7 +554,6 @@ export function useMinimap() {
     const step = (ts: number) => {
       if (!start) start = ts;
       const k = Math.min(1, (ts - start) / DUR);
-      // Same easeInOutQuad the small<->full size toggle uses.
       const t = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       zoomRef.current = fromZ + (home.z - fromZ) * t;
       offsetRef.current = {
@@ -600,7 +581,7 @@ export function useMinimap() {
       // Landscape-phone viewport: a slimmer left rail + tighter chrome, and a
       // smaller default window so the whole thing fits on screen.
       const short = window.matchMedia(SHORT_MEDIA_QUERY).matches;
-      const insetX = short ? 72 : MAP_FULL_INSET_X;   // left rail + side margins
+      const insetX = short ? 72 : MAP_FULL_INSET_X;
       // List-mode (memorial) adds the selector row above the plan AND the
       // destination list below it → the chrome is taller. On phones the
       // legend sits BESIDE the plan, so the vertical chrome is just the
@@ -632,7 +613,6 @@ export function useMinimap() {
       // the window to ~290px and wrapped the dropdown labels; and full-screen
       // must actually expand to the viewport.
       if (listMode && short && !fullScreen) winW = Math.min(winW, winH + 28);
-      // Measure the widest label so the column fits the whole text on one line.
       let maxText = 0;
       const cv = document.createElement("canvas");
       const cx = cv.getContext("2d");
@@ -659,15 +639,13 @@ export function useMinimap() {
     const commitRadio = (w: number) => setRadioWidth(w);
 
     const t = targetDims();
-    commitRadio(t.radioW); // column width is mode-independent → never tween it
+    commitRadio(t.radioW);
 
     if (tweenRaf.current) cancelAnimationFrame(tweenRaf.current);
     if (!sizedOnce.current) {
-      // First sizing (map open) → snap, no animation.
       sizedOnce.current = true;
       commitSize(t.w, t.h);
     } else {
-      // small↔full toggle (or floor change) → ease the canvas to its new size.
       const from = { ...mapSizeRef.current };
       const to = { w: t.w, h: t.h };
       const DUR = 320;
@@ -682,7 +660,6 @@ export function useMinimap() {
       tweenRaf.current = requestAnimationFrame(step);
     }
 
-    // Window resize snaps (no animation) to avoid lag while dragging the window.
     const onResize = () => {
       if (tweenRaf.current) cancelAnimationFrame(tweenRaf.current);
       const r = targetDims();
@@ -716,9 +693,8 @@ export function useMinimap() {
     img.src = baseUrl;
   }, [baseUrl]);
 
-  // ── Wheel zoom + drag pan + pinch zoom ────────────────────────────────────
+  // Wheel zoom + drag pan + pinch zoom
   // All attached as imperative listeners so we can call preventDefault.
-  //
   // The canvas in the JSX is keyed by the floor-plan URL so the slide-in
   // animation can re-fire on every floor swap — which means React unmounts
   // the old <canvas> and mounts a brand-new one whenever the active floor
@@ -731,7 +707,6 @@ export function useMinimap() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Zoom about a canvas-space point, holding the content under it fixed.
     const applyZoom = (factor: number, cx: number, cy: number) => {
       const next = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, zoomRef.current * factor));
       if (next === zoomRef.current) return;
@@ -743,7 +718,6 @@ export function useMinimap() {
       clampOffset();
     };
 
-    // Map a client-space point to canvas-space (matches the visual size).
     const clientToCanvas = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
       const { w: W, h: H } = mapSizeRef.current;
@@ -753,7 +727,7 @@ export function useMinimap() {
       };
     };
 
-    // ─ Mouse wheel ───────────────────────────────────────────────────────
+    // Mouse wheel
     // Normalize deltaY across browsers/devices. Pixel mode is the common
     // case (trackpads). Some old browsers/mice report in lines or pages —
     // map those to a reasonable pixel-equivalent so a single notch zooms
@@ -761,8 +735,8 @@ export function useMinimap() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;       // lines → px
-      else if (e.deltaMode === 2) dy *= 100; // pages → px
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= 100;
       // Map dy magnitude to a smooth multiplicative factor. Capped at one
       // ZOOM_FACTOR per event so very large trackpad deltas don't blow past
       // MAX_ZOOM in a single tick.
@@ -774,7 +748,6 @@ export function useMinimap() {
       applyZoom(factor, cx, cy);
     };
 
-    // ─ Mouse drag ────────────────────────────────────────────────────────
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0 || resizingRef.current) return;
       dragRef.current = {
@@ -785,7 +758,6 @@ export function useMinimap() {
         ox: offsetRef.current.x,
         oy: offsetRef.current.y,
       };
-      // List-mode plan is non-interactive → keep the plain cursor.
       if (!listModeRef.current) canvas.style.cursor = "grabbing";
     };
 
@@ -807,7 +779,7 @@ export function useMinimap() {
       canvas.style.cursor = listModeRef.current ? "default" : "crosshair";
     };
 
-    // ─ Touch — single-finger pan + two-finger pinch zoom ─────────────────
+    // Touch — single-finger pan + two-finger pinch zoom
     // Mobile had no zoom path at all (no wheel event on touch devices). The
     // pinch handler tracks the distance between two fingers and feeds the
     // ratio into applyZoom() centered on the midpoint.
@@ -863,7 +835,6 @@ export function useMinimap() {
         touch.panSY = t.clientY;
         touch.panOX = offsetRef.current.x;
         touch.panOY = offsetRef.current.y;
-        // Reset the moved flag so handleClick won't think this tap is a drag.
         dragRef.current.moved = false;
       }
     };
@@ -918,7 +889,6 @@ export function useMinimap() {
     };
   }, [planUrl, clampOffset]);
 
-  // ── Draw loop ─────────────────────────────────────────────────────────────
   // Skipped entirely while the minimap is collapsed (off-screen via CSS
   // translate). No point burning a full canvas redraw + player-FOV/path
   // sampling each frame when the user can't see it.
@@ -1075,7 +1045,6 @@ export function useMinimap() {
       // Fixed, small marker size (Google-Maps style) — path / ripple must NOT
       // scale up with the canvas.
       const markerScale = MARKER_SCALE;
-      // Taper on a small (phone) canvas, where the fixed 1.25 reads oversized.
       const playerScale = MARKER_SCALE * Math.max(0.55, Math.min(1, W / 360));
       if (ctrl && bounds) {
         const pos = ctrl.getPosition();
@@ -1107,7 +1076,7 @@ export function useMinimap() {
               ctx.lineTo(p2.px, p2.py);
               ctx.closePath();
             }
-            ctx.fillStyle = CROWD_FLOW_COLOR[z.level] + "50"; // ~30% alpha
+            ctx.fillStyle = CROWD_FLOW_COLOR[z.level] + "50";
             ctx.fill();
           }
         }
@@ -1137,7 +1106,7 @@ export function useMinimap() {
         if (cm.alpha <= 0) clickMarkerRef.current = null;
       }
 
-      ctx.restore(); // undo the image-area translate
+      ctx.restore();
 
       // Stickers label points on the plan but render in the canvas margin, so
       // they are drawn after that translate is undone and before the pan/zoom
@@ -1146,7 +1115,7 @@ export function useMinimap() {
         drawStickers(ctx, minimapData.stickers, bounds, lb, W, H);
       }
 
-      ctx.restore(); // undo pan + zoom
+      ctx.restore();
 
       // Anything but the opening framing offers a way back to it. Read from the
       // refs, not this frame's locals, so the snap above does not read as drift.
@@ -1169,7 +1138,7 @@ export function useMinimap() {
     };
   }, [planLayer, baseLayer, minimapData, playerControllerRef, expanded, clampOffset]);
 
-  // ── Click → navigate ─────────────────────────────────────────────────────
+  // Click → navigate
   // Ignored on drag, and outside the letterboxed plan: the image frame IS the
   // clickable area, so there is no second rect to gate against.
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1238,7 +1207,6 @@ export function useMinimap() {
     playerControllerRef,
     isMoving,
     stopNav,
-    // destination label hotspots
     destCats,
     destLabel,
     pickDestLabel,

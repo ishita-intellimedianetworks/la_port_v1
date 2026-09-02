@@ -47,7 +47,6 @@ function dist(a: Pt, b: Pt): number {
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-// ── Min-heap on f-score (the library's BinaryHeap isn't exported) ─────────
 interface HeapEntry { n: ZoneNode; f: number }
 
 class MinHeap {
@@ -85,7 +84,6 @@ class MinHeap {
   }
 }
 
-// ── A* with metric costs. Returns the polygon corridor start→end inclusive. ──
 function searchCorridor(nodes: ZoneNode[], start: ZoneNode, end: ZoneNode): ZoneNode[] {
   const g = new Map<number, number>();
   const parent = new Map<number, ZoneNode>();
@@ -123,7 +121,6 @@ function searchCorridor(nodes: ZoneNode[], start: ZoneNode, end: ZoneNode): Zone
   return [];
 }
 
-// ── Funnel / string pull — port of three-pathfinding's Channel.stringPull ──
 function triarea2(a: Pt, b: Pt, c: Pt): number {
   return (c.x - a.x) * (b.z - a.z) - (b.x - a.x) * (c.z - a.z);
 }
@@ -185,7 +182,6 @@ function stringPull(portals: Portal[]): Pt[] {
   return pts;
 }
 
-// Corridor → portal list → string-pulled world-space path (start omitted).
 function corridorToPath(
   corridor: ZoneNode[],
   funnelStart: Pt,
@@ -206,7 +202,7 @@ function corridorToPath(
   }
   portals.push({ left: funnelEnd, right: funnelEnd });
   const path = stringPull(portals).map((c) => new THREE.Vector3(c.x, c.y, c.z));
-  path.shift(); // match findPath: the caller already knows its start position
+  path.shift();
   return path;
 }
 
@@ -276,7 +272,6 @@ export function findPathsWeighted(
     (t) => pathfinding.getClosestNode(t, zoneID, groupID) as ZoneNode | null,
   );
 
-  // ── Dijkstra with early exit once every target node is settled ──────────
   const remaining = new Set<number>();
   for (const n of targetNodes) if (n) remaining.add(n.id);
 
@@ -290,7 +285,7 @@ export function findPathsWeighted(
 
   while (heap.size > 0 && remaining.size > 0) {
     const cur = heap.pop();
-    if (closed.has(cur.id)) continue; // stale lazy-deletion entry
+    if (closed.has(cur.id)) continue;
     closed.add(cur.id);
     remaining.delete(cur.id);
 
@@ -308,13 +303,12 @@ export function findPathsWeighted(
     }
   }
 
-  // ── Per-target: corridor from the shortest-path tree → funnel ───────────
   return targetNodes.map((endNode) => {
-    if (!endNode || !closed.has(endNode.id)) return null; // off-island
+    if (!endNode || !closed.has(endNode.id)) return null;
     const corridor: ZoneNode[] = [];
     for (let n: ZoneNode | undefined = endNode; n; n = parent.get(n.id)) corridor.push(n);
     corridor.reverse();
-    if (corridor[0] !== startNode) return null; // orphaned parent chain (shouldn't happen)
+    if (corridor[0] !== startNode) return null;
     return corridorToPath(corridor, funnelStart, endNode.centroid, zone!.vertices);
   });
 }

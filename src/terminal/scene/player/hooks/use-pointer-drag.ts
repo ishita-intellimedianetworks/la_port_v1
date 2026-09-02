@@ -38,7 +38,6 @@ export function usePointerDrag({ gl, state }: UsePointerDragOptions) {
       if (e.button !== 0) return;
       armed = true;
       state.idleOn.current = false;
-      // Kill any lookAt rotation tween — user is taking manual control.
       state.lookAtTween.current?.kill();
       state.lookAtTween.current = null;
       dragging = false;
@@ -79,6 +78,5 @@ export function usePointerDrag({ gl, state }: UsePointerDragOptions) {
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup",   onUp);
     };
-    // state contains only refs — always-current, intentionally excluded from deps
   }, [gl, state.idleOn, state.moving, state.rot, state.yawT]);
 }

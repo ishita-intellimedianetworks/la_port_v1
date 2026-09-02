@@ -36,7 +36,6 @@ interface MapSelectProps {
 
 export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps) {
   const [open, setOpen] = useState(false);
-  // Fixed-viewport rect for the portaled popover, measured from the pill.
   const [pop, setPop] = useState<{ left: number; top: number; width: number; maxH: number; side: boolean } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -58,7 +57,7 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
         cx.font = "600 11.5px system-ui, -apple-system, sans-serif";
         for (const it of items) maxText = Math.max(maxText, cx.measureText(it.label).width);
       }
-      const w = Math.max(150, Math.ceil(maxText) + 58); // icon + gaps + padding
+      const w = Math.max(150, Math.ceil(maxText) + 58);
       const top = Math.max(8, r.top);
       setPop({
         left: Math.min(r.right + 8, window.innerWidth - w - 10),
@@ -72,7 +71,6 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
         left: r.left,
         top: r.bottom + 4,
         width: r.width,
-        // All the space down to the bottom edge — ONE scroll, no nesting.
         maxH: Math.max(110, window.innerHeight - r.bottom - 14),
         side: false,
       });
@@ -153,7 +151,6 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
               maxHeight: pop.side ? pop.maxH : Math.min(280, pop.maxH),
               zIndex: 400,
               WebkitOverflowScrolling: "touch",
-              // Opaque — backdrop blur is unreliable over the WebGL canvas.
               background: "rgb(38,38,42)",
               border: "1px solid rgba(255,255,255,0.1)",
               boxShadow: "0 20px 50px rgba(0,0,0,0.5)",

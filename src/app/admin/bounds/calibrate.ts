@@ -50,11 +50,10 @@ export function calibrate(
   const mppX = bbox.dx / p.ow;
   const mppZ = bbox.dz / p.oh;
 
-  // Inside the overlay pixel ox maps to maxX and ox+ow to minX; extrapolate out.
-  const minX = bbox.maxX + p.ox * mppX;                 // world at pixel x = 0
-  const maxX = bbox.maxX - (siteW - p.ox) * mppX;       // world at pixel x = siteW
-  const minZ = bbox.maxZ + p.oy * mppZ;                 // world at pixel y = 0
-  const maxZ = bbox.maxZ - (siteH - p.oy) * mppZ;       // world at pixel y = siteH
+  const minX = bbox.maxX + p.ox * mppX;
+  const maxX = bbox.maxX - (siteW - p.ox) * mppX;
+  const minZ = bbox.maxZ + p.oy * mppZ;
+  const maxZ = bbox.maxZ - (siteH - p.oy) * mppZ;
 
   const ratio = mppX < mppZ ? mppX / mppZ : mppZ / mppX;
 
@@ -119,7 +118,6 @@ export function toJson(
       site: {
         imageUrl,
         pixels: { w: siteW, h: siteH },
-        // Runtime convention: minX holds the world MAX. Feeds worldToPixel directly.
         bounds: {
           minX: r(c.bounds.minX), maxX: r(c.bounds.maxX),
           minZ: r(c.bounds.minZ), maxZ: r(c.bounds.maxZ),

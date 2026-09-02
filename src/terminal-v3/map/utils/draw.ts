@@ -10,7 +10,6 @@ import {
 import { worldToPixel } from "./coord-utils";
 import { navConfig } from "../../navigation-config";
 
-// ── Rounded-rect clip path ─────────────────────────────────────────────────
 export function clipRoundedRect(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -29,15 +28,13 @@ export function clipRoundedRect(
 
 export interface ImageRect { dx: number; dy: number; dw: number; dh: number; }
 
-// ── Where the floor plan lands — CONTAIN mode, inside the inner rect ──────
+// Where the floor plan lands — CONTAIN mode, inside the inner rect
 // The canvas (W × H) reserves `marginX` / `marginY` pixels on each side for
 // sticker labels. The floor plan + click-mapping live inside that inner
 // rect; everything outside is dead space (clicks naturally fall outside the
 // returned letterbox rect and are dropped by use-minimap.ts).
-//
 // With marginX = marginY = 0 this collapses to the original full-canvas
 // behaviour so callers that don't need stickers keep working unchanged.
-//
 // Rect only — the caller draws. It used to fit and draw in one call, which
 // stopped working once a layer had to go UNDERNEATH the plan: the rect is what
 // places that layer, so it has to exist before anything is painted.
@@ -57,23 +54,20 @@ export function containRect(
   // CONTAIN: scale so the WHOLE image is visible (no crop), then centre it so
   // the spare space is balanced on all sides.
   if (imgAspect > innerAspect) {
-    // Relatively wider → fit width, letterbox top/bottom.
     dw = innerW; dh = innerW / imgAspect;
   } else {
-    // Relatively taller → fit height, letterbox left/right.
     dh = innerH; dw = innerH * imgAspect;
   }
   return { dx: marginX + (innerW - dw) / 2, dy: marginY + (innerH - dh) / 2, dw, dh };
 }
 
-// ── Context layer — the surroundings, drawn UNDER the plan ────────────────
+// Context layer — the surroundings, drawn UNDER the plan
 // Placed by running its own world rect through the PLAN's world→pixel
 // transform, which is the whole trick: the two images are registered because
 // they are both expressed in world metres and only one transform exists, not
 // because anything was lined up by eye at runtime. The plan's letterbox stays
 // the single source of truth for clicks and overlays; this layer is allowed to
 // spill past the canvas, where it is clipped by the element itself.
-//
 // It is NOT letterboxed on its own. Doing that would fit it to the canvas
 // independently and it would slide off the plan the moment the canvas aspect
 // changed — the bug this arrangement exists to make impossible.
@@ -84,7 +78,6 @@ export function containRect(
 // caller can bound the pan clamp and the zoomed-out limit by it — and so the
 // static-layer cache can lay it out without painting. Null when it cannot be
 // placed.
-//
 // Rect only, like `containRect`: painting moved into `static-layers.ts` once
 // both layers stopped being drawn from source on every frame.
 export function contextRect(
@@ -104,7 +97,7 @@ export function contextRect(
   return { dx: lb.dx + a.px, dy: lb.dy + a.py, dw, dh };
 }
 
-// ── Sticker labels in the margin ──────────────────────────────────────────
+// Sticker labels in the margin
 // Each sticker tags a world XZ point (already visualised as a dot baked into
 // the floor-plan PNG). We project the world point into image-pixel space,
 // pick the nearest canvas edge, and draw a rounded-rect label there with a
@@ -112,7 +105,6 @@ export function contextRect(
 // transform as the floor plan so they track when the user zooms — they will
 // slide off-canvas at high zoom, but the relevant ones near the player stay
 // visible, which matches how the floor plan itself behaves.
-//
 // Coordinates here are in canvas-local space (the caller has already applied
 // pan+zoom + the image-area translate is NOT applied — we work in raw W×H).
 export function drawStickers(
@@ -137,7 +129,6 @@ export function drawStickers(
   const padInner = Math.max(4, Math.round(7  * scale));
   const boxH     = Math.max(11, Math.round(15 * scale));
   const edgeGap  = Math.max(2, Math.round(3  * scale));
-  // Pill shape — fully rounded to match PillBtn's rounded-full.
   const radius   = boxH / 2;
 
   ctx.save();
@@ -146,12 +137,10 @@ export function drawStickers(
   ctx.lineCap = "round";
 
   for (const s of stickers) {
-    // World → pixel inside the floor image area, then to canvas-space.
     const p = worldToPixel(s.x, s.z, bounds, lb.dw, lb.dh);
     const anchorX = lb.dx + p.px;
     const anchorY = lb.dy + p.py;
 
-    // Closest margin edge by raw distance from anchor.
     const dTop    = anchorY;
     const dBottom = H - anchorY;
     const dLeft   = anchorX;
@@ -173,7 +162,6 @@ export function drawStickers(
       // "distance from anchor" feel.
       const lenScaled = s.length * scale;
       const cxS = anchorX + lenScaled * Math.sin(rad);
-      // Canvas Y grows downward, so up (angle=0) is -Y.
       const cyS = anchorY - lenScaled * Math.cos(rad);
       sx = cxS - boxW / 2;
       sy = cyS - boxH / 2;
@@ -196,7 +184,6 @@ export function drawStickers(
     sx = Math.max(edgeGap, Math.min(W - boxW - edgeGap, sx));
     sy = Math.max(edgeGap, Math.min(H - boxH - edgeGap, sy));
 
-    // Leader line: anchor → nearest point on the sticker rect border.
     const lineX = Math.max(sx, Math.min(sx + boxW, anchorX));
     const lineY = Math.max(sy, Math.min(sy + boxH, anchorY));
     ctx.beginPath();
@@ -206,7 +193,6 @@ export function drawStickers(
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Sticker rect (rounded). Corner radius scales with canvas (`radius` above).
     const r = radius;
     ctx.beginPath();
     ctx.moveTo(sx + r, sy);
@@ -230,7 +216,7 @@ export function drawStickers(
   ctx.restore();
 }
 
-// ── Navigation path + destination marker ──────────────────────────────────
+// Navigation path + destination marker
 // Drawn like a Google-Maps route: a darker-blue casing under a brighter-blue
 // core (rounded caps/joins), an ETA pill sitting on the line, and a blue
 // destination dot. `label` (e.g. "3 min") is the maps-style time-to-arrive.
@@ -251,7 +237,6 @@ export function drawPath(
   // of scaling up with the map.
   const scale = markerScale ?? W / DEFAULT_MAP_SIZE;
 
-  // Build the pixel polyline once (player → waypoints).
   const px: number[] = [];
   const py: number[] = [];
   const start = worldToPixel(playerPos.x, playerPos.z, bounds, W, H);
@@ -273,7 +258,6 @@ export function drawPath(
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  // Casing (darker, wider) then bright core on top.
   ctx.strokeStyle = ROUTE_CASING;
   ctx.lineWidth = Math.max(1.2, navConfig.minimap.casingWidthPx * scale);
   stroke();
@@ -282,10 +266,8 @@ export function drawPath(
   stroke();
   ctx.restore();
 
-  // Destination red pin (tip on the point) — matches the maps reference.
   drawDestPin(ctx, px[px.length - 1], py[py.length - 1], scale);
 
-  // ETA pill on the route — placed at the polyline's length-midpoint.
   if (label) drawRoutePill(ctx, px, py, label, scale);
 }
 
@@ -293,11 +275,11 @@ export function drawPath(
 // downward cone whose tip rests on the point), instead of the old flat teardrop,
 // so the map and the 3D scene read as the same marker.
 function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
-  const red = navConfig.color.destRed; // same red the 3D pin + ring use
-  const headR = Math.max(2.5, navConfig.minimap.destPinHeadPx * scale); // sphere head radius
-  const coneH = headR * 2.0;   // cone height (tip → base)
-  const coneHW = headR * 0.62; // cone half-width at the base
-  const cy = y - coneH - headR * 0.7; // sphere head centre, floating above the cone
+  const red = navConfig.color.destRed;
+  const headR = Math.max(2.5, navConfig.minimap.destPinHeadPx * scale);
+  const coneH = headR * 2.0;
+  const coneHW = headR * 0.62;
+  const cy = y - coneH - headR * 0.7;
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -308,7 +290,6 @@ function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.shadowBlur = 5 * scale;
   ctx.shadowOffsetY = 1.5 * scale;
 
-  // Downward cone — apex (tip) on the point, base up under the head.
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x - coneHW, y - coneH);
@@ -317,7 +298,6 @@ function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.fill();
   ctx.stroke();
 
-  // Sphere head — filled circle floating above the cone.
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   ctx.beginPath();
@@ -325,7 +305,6 @@ function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.fill();
   ctx.stroke();
 
-  // Soft top-left highlight so the head reads as a 3D sphere.
   ctx.beginPath();
   ctx.arc(x - headR * 0.32, cy - headR * 0.34, headR * 0.36, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.42)";
@@ -333,7 +312,6 @@ function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.restore();
 }
 
-// Rounded "time" pill sitting on the route at its mid-length point.
 function drawRoutePill(
   ctx: CanvasRenderingContext2D,
   px: number[],
@@ -341,7 +319,6 @@ function drawRoutePill(
   label: string,
   scale: number,
 ) {
-  // Total length + midpoint along the polyline.
   let total = 0;
   for (let i = 1; i < px.length; i++) total += Math.hypot(px[i] - px[i - 1], py[i] - py[i - 1]);
   let target = total / 2;
@@ -393,7 +370,7 @@ function drawRoutePill(
   ctx.restore();
 }
 
-// ── destination hotspots (label destinations) ─────────────────────────────────────
+// destination hotspots (label destinations)
 // Drawn in image-relative space (same as the player/path), each as a dot + a
 // small pill showing the name and live distance. The selected hotspot is cyan.
 export interface MapHotspot {
@@ -440,7 +417,6 @@ export function drawHotspots(
     ctx.font = `700 ${fontPx}px system-ui, -apple-system, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    // Selected drawn last so its ring sits on top.
     const ordered = [...hotspots].sort((a, b) =>
       (a.id === selectedId ? 1 : 0) - (b.id === selectedId ? 1 : 0));
 
@@ -462,7 +438,7 @@ export function drawHotspots(
           let dx = b.px - a.px, dy = b.py - a.py;
           let d = Math.hypot(dx, dy);
           if (d >= minDist) continue;
-          if (d < 1e-3) { dx = 1; dy = 0; d = 1; } // coincident → split sideways
+          if (d < 1e-3) { dx = 1; dy = 0; d = 1; }
           const push = (minDist - d) / 2;
           a.px -= (dx / d) * push; a.py -= (dy / d) * push;
           b.px += (dx / d) * push; b.py += (dy / d) * push;
@@ -522,13 +498,11 @@ export function drawHotspots(
   const padX = Math.max(5, 7 * scale) / zoom;
   const leader = Math.max(12, 16 * scale) / zoom; // vertical line from dot → pill
 
-  // Project every hotspot to pixels once.
   const dots = hotspots.map((h) => {
     const { px, py } = worldToPixel(h.x, h.z, bounds, W, H);
     return { h, px, py };
   });
 
-  // ── Pass 1: dots (small white markers; selected = cyan) ───────────────────
   for (const { h, px, py } of dots) {
     const sel = h.id === selectedId;
     ctx.beginPath();
@@ -547,7 +521,7 @@ export function drawHotspots(
   //    up — rounded dark pill with the white name; no number badge). Labels
   //    that would OVERLAP an already-placed pill get a progressively LONGER
   //    leader, so nearby names stack at different heights instead of colliding.
-  //    Selected pill drawn last so it sits on top. ─────────────────────────────
+  // Selected pill drawn last so it sits on top.
   type Rect = { x: number; y: number; w: number; h: number };
   const placed: Rect[] = [];
   const hits = (x: number, y: number, w: number, hh: number) =>
@@ -563,7 +537,6 @@ export function drawHotspots(
     const clampX = (x: number) => Math.max(2, Math.min(W - boxW - 2, x));
     const step = boxH + 4;
 
-    // Candidates: upward with an ever-longer leader, then downward fallback.
     let bx = clampX(px - boxW / 2);
     let by = py - r - leader - boxH;
     let lineEndY = py - r - leader;
@@ -604,7 +577,6 @@ export function drawHotspots(
     ctx.lineTo(bx, by + rad);
     ctx.quadraticCurveTo(bx, by, bx + rad, by);
     ctx.closePath();
-    // Solid dark pill (reference style) — cyan when selected.
     ctx.fillStyle = sel ? "rgba(34,211,238,0.94)" : "rgba(20,22,27,0.95)";
     ctx.fill();
     ctx.fillStyle = sel ? "#06212a" : "#ffffff";
@@ -613,7 +585,6 @@ export function drawHotspots(
   ctx.restore();
 }
 
-// ── Player FOV cone + position dot ────────────────────────────────────────
 export function drawPlayerFOV(
   ctx: CanvasRenderingContext2D,
   pos: { x: number; z: number },
@@ -640,7 +611,6 @@ export function drawPlayerFOV(
   // points the cone backwards.
   ctx.rotate(-rotY);
 
-  // FOV gradient cone
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledFovLen);
   grad.addColorStop(0,   "rgba(0,229,255,0.9)");
   grad.addColorStop(0.5, "rgba(0,229,255,0.4)");
@@ -652,7 +622,6 @@ export function drawPlayerFOV(
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Edge lines
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(Math.sin(-FOV_ANGLE / 2) * scaledFovLen, -Math.cos(-FOV_ANGLE / 2) * scaledFovLen);
@@ -662,7 +631,6 @@ export function drawPlayerFOV(
   ctx.lineWidth = strokeWidth;
   ctx.stroke();
 
-  // Player dot
   ctx.beginPath();
   ctx.arc(0, 0, scaledPlayerSize, 0, Math.PI * 2);
   ctx.fillStyle = PLAYER_FILL;
@@ -677,7 +645,6 @@ export function drawPlayerFOV(
   ctx.restore();
 }
 
-// ── Click ripple marker ────────────────────────────────────────────────────
 export function drawClickMarker(
   ctx: CanvasRenderingContext2D,
   marker: { px: number; py: number; alpha: number },

@@ -6,12 +6,12 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime";
 
-// ── Room zone: one named mesh in the navmesh GLB ──────────────────────────
+// Room zone: one named mesh in the navmesh GLB
 // Convention: mesh.name in the GLB matches the LayoutsConfig.id in scene-config
 export interface RoomZone {
-  id: string;       // mesh name (e.g. "room_bedroom-1")
-  mesh: THREE.Mesh; // invisible mesh for raycasting precision
-  bbox: THREE.Box3; // world-space bounding box
+  id: string;
+  mesh: THREE.Mesh;
+  bbox: THREE.Box3;
 }
 
 export interface FloorBounds {
@@ -20,7 +20,7 @@ export interface FloorBounds {
   zMin: number; zMax: number;
 }
 
-// ── Extract all meshes from a GLTF scene ─────────────────────────────────
+// Extract all meshes from a GLTF scene
 //   geo       — all submeshes merged (used for pathfinding zones)
 //   firstBBox — bounding box of the FIRST mesh only (used for minimap bounds)
 //   roomZones — per-named-mesh zone data for room detection
@@ -63,7 +63,7 @@ function extractGeo(scene: THREE.Group): {
   return { geo: merged, firstBBox, roomZones };
 }
 
-// ── Single-floor navmesh loader ──────────────────────────────────────────
+// Single-floor navmesh loader
 // Mirrors SingleModel: one GLB at a time, loaded for the active floor only.
 // When the active floor changes the parent re-keys this component, the old
 // GLB is released, and the new floor's navmesh is fetched and registered.
@@ -128,7 +128,6 @@ function SingleNavmeshContent({
     onLoaded?.();
   }, [scene, floorId, onGeometry, onFloorBounds, onRoomZones, onLoaded, debug]);
 
-  // Ref-counted GLTF lifecycle — same pattern as SingleModelContent.
   useEffect(() => {
     acquireGLTF(url);
     return () => releaseGLTF(url, scene, useGLTF.clear);

@@ -62,7 +62,7 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
   }, [scene, range?.near, range?.far, authored]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(() => {
-    if (authored) return; // pinned by the author — nothing to track
+    if (authored) return;
     const fog = ours.current;
     if (!fog || scene.fog !== fog) return;
     const bg = scene.background;

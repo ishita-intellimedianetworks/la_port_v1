@@ -3,7 +3,6 @@ import type * as THREE from "three";
 import type { Pathfinding } from "three-pathfinding";
 import type { RoomZone } from "../navmesh/geometry";
 
-// ── Public handle ──────────────────────────────────────────────────────────────
 /** Walk/measure/preview target. Y resolution (see usePathfinding):
  *  `y` (floor-level) wins; else `eyeY` (authored camera height — the
  *  controller subtracts its cameraHeight to get the floor); else the
@@ -96,7 +95,6 @@ export interface PlayerControllerHandle {
   setPitchLock: (v: boolean) => void;
 }
 
-// ── Component props ────────────────────────────────────────────────────────────
 export interface PlayerControllerProps {
   /** Walk gate: navmesh ready AND not in a cinematic. Enables pathfinding walk
    *  + floor-follow. */
@@ -126,7 +124,6 @@ export interface PlayerControllerProps {
   debug?: boolean;
 }
 
-// ── Shared mutable state (refs grouped by concern) ─────────────────────────────
 export interface TransitionState {
   /** Is a GSAP floor transition currently running? */
   active: MutableRefObject<boolean>;
@@ -140,7 +137,6 @@ export interface TransitionState {
 }
 
 export interface PlayerState {
-  // ── Position & orientation ──
   pos: MutableRefObject<THREE.Vector3>;
   targetY: MutableRefObject<number>;
   rot: MutableRefObject<THREE.Euler>;
@@ -150,7 +146,6 @@ export interface PlayerState {
   lookAtTween: MutableRefObject<gsap.core.Tween | null>;
   initPos: MutableRefObject<THREE.Vector3>;
   snapped: MutableRefObject<boolean>;
-  // ── Zone & path ──
   currentZone: MutableRefObject<string>;
   path: MutableRefObject<THREE.Vector3[]>;
   pathI: MutableRefObject<number>;
@@ -160,13 +155,11 @@ export interface PlayerState {
   vizGrp: RefObject<THREE.Group | null>;
   onNavComplete: MutableRefObject<(() => void) | null>;
   speedMult: MutableRefObject<number>;
-  // ── Idle camera drift ──
   idleOn: MutableRefObject<boolean>;
   idleAcc: MutableRefObject<number>;
   prevEnabled: MutableRefObject<boolean>;
   /** Drag look is yaw-only while true (fly-over pose keeps looking straight
    *  down). Cleared by every teleport / new walk. */
   pitchLock: MutableRefObject<boolean>;
-  // ── Floor transition ──
   transition: TransitionState;
 }

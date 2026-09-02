@@ -111,12 +111,10 @@ function isWeakGpu(renderer?: THREE.WebGLRenderer): boolean {
       : String(gl.getParameter(gl.RENDERER) ?? "");
     if (!name) return true;
     const n = name.toLowerCase();
-    // Discrete parts, in rough order of how often they turn up.
     const discrete = /\b(nvidia|geforce|rtx|gtx|quadro|radeon (rx|pro)|\brx \d{3,}|arc a\d{3})/;
-    // Apple Silicon shares memory with the system but has a large, real budget.
     if (/apple m\d/.test(n)) return false;
     if (discrete.test(n)) return false;
-    return true; // Intel UHD/Iris/HD, Mali, Adreno, PowerVR, SwiftShader, unknown
+    return true;
   } catch {
     return true;
   }
@@ -169,7 +167,6 @@ export function resolveBudget(
       : { cpuMB: 160, gpuMB: 128, texMB: 56 };
   }
 
-  // Desktop. The CPU pool follows RAM; the GPU pool follows the GPU.
   const cpuMB = typeof dm === "number" && dm <= 4 ? 192 : typeof dm === "number" && dm >= 8 ? 448 : 288;
   // 192 MB is enough to hold the whole far tier (measured 178.7 MB) with the
   // frustum cull off, which is what the dollhouse overview needs; it is not

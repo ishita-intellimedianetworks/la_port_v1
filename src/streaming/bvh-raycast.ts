@@ -35,7 +35,6 @@ export function lazyBvhRaycast(
     if (!geo.boundingSphere) geo.computeBoundingSphere();
     if (!geo.boundingSphere) return;
     _sphere.copy(geo.boundingSphere).applyMatrix4(this.matrixWorld);
-    // Cheap reject BEFORE paying for the tree — this is the whole point.
     if (!raycaster.ray.intersectsSphere(_sphere)) return;
     geo.boundsTree = new MeshBVH(geo);
   }

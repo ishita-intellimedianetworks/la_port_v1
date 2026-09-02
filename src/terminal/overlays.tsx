@@ -65,7 +65,6 @@ export default function Overlays() {
     if (phase === "firstPerson" && !fpInstructionsSeen) setInstructionsOpen(true);
   }, [phase, fpInstructionsSeen]);
   const activeFloor = floors[activeFloorIndex];
-  // All destination-nav UI state lives in one store (shared with the 3D panel + minimap).
   const openLabel = useNavUiStore((s) => s.openLabel);
   const lastLabel = useNavUiStore((s) => s.lastLabel);
   const currentDest = useNavUiStore((s) => s.currentDest);
@@ -84,7 +83,6 @@ export default function Overlays() {
   // Only walks started from a label/directions panel raise the turn HUD; manual
   // map clicks and 3D double-clicks walk silently (see navigateToFloor).
   const navHud = useNavUiStore((s) => s.navHud);
-  // Clicked 3D hotspot marker → centred info overlay (memorial hotspots).
   const hotspotInfo = useNavUiStore((s) => s.hotspotInfo);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
 
@@ -126,7 +124,6 @@ export default function Overlays() {
     edgeFeather.enabled.value =
       phase === "dollhouse" ? (activeFloor?.dollhouseOnly ? 0.4 : 1) : 0;
   }, [phase, activeFloor?.dollhouseOnly]);
-
 
   // Where the player ACTUALLY is drives two highlights, via one stable-deps poll
   // that WRITES the shared store. Both are pure XZ proximity to a FIXED point
@@ -178,7 +175,7 @@ export default function Overlays() {
           const pd = dests[prev.category]?.find((x) => x.id === prev.id);
           const cam = pd?.camera;
           if (cam && Math.hypot(p.x - cam.position[0], p.z - cam.position[2]) < CURRENT_REACH_UNITS) {
-            return; // still at the latched destination — nothing to change
+            return;
           }
         }
         let cur: { id: string; label: string; category: DestinationCategory; option?: string } | null = null;
@@ -235,7 +232,6 @@ export default function Overlays() {
   // the new venue greets with its home card.
   useEffect(() => {
     setHomeCardDismissed(false);
-    // A venue swap invalidates any open hotspot-info card (its markers are gone).
     useNavUiStore.getState().setHotspotInfo(null);
   }, [activeFloorIndex]);
   // A TELEPORT to another destination never passes through the walk-start
@@ -296,7 +292,6 @@ export default function Overlays() {
     playerControllerRef.current?.clearPreview();
     handleFloorSelect(idx >= 0 ? idx : 0);
   }, [floors, goHome, playerControllerRef, handleFloorSelect]);
-  // Interior Home = back to this interior's start pose (not an exit).
   const interiorHome = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl) return;
@@ -351,7 +346,6 @@ export default function Overlays() {
   const handleFirstPerson = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl || !firstPersonPose) return;
-    // An arrival elsewhere, so nothing that was open still belongs on screen.
     closeOverlays();
     ctrl.clearPreview();
     const p = firstPersonPose.position as [number, number, number];
@@ -360,7 +354,6 @@ export default function Overlays() {
     // and let teleportTo re-add the eye height, exactly as Home does. The
     // authored value is passed only as the expectedY tie-breaker.
     const surfaceY = ctrl.probeFloorY(p[0], p[2], p[1]) ?? p[1];
-    // Same fade-down / snap / fade-up as every other teleport.
     triggerFloorTransition(() => {
       ctrl.teleportTo([p[0], surfaceY, p[2]], r);
     });
@@ -371,8 +364,6 @@ export default function Overlays() {
    *  instructions card are gated by the SAME value — teaching a circle that is
    *  not on screen is worse than not teaching it. */
   const firstPersonAction = !uiFrozen && firstPersonPose ? handleFirstPerson : undefined;
-
-  // Hide the standing-at destination from its own list (re-appears once it un-latches).
 
   // Opening the full map covers the screen. The map and the label panel SHARE
   // the open category + sub-category (nav store), so we keep the label — the
@@ -385,7 +376,7 @@ export default function Overlays() {
     playerControllerRef.current?.clearPreview();
   }, [playerControllerRef]);
 
-  // ── Crowd Flow fly-over ────────────────────────────────────────────────────
+  // Crowd Flow fly-over
   // Opening the Crowd Flow category lifts the player to the authored aerial
   // pose (pitch-locked straight down) so the zone heatmap reads at a glance;
   // closing it returns to the pre-fly spot. The return only fires if the
@@ -425,7 +416,6 @@ export default function Overlays() {
     wasCrowdOpen.current = crowdOpen;
   }, [crowdOpen, crowdFly, playerControllerRef, triggerFloorTransition]);
 
-
   // The loader completes only when the progress bar has filled to 100% AND both
   // models are downloaded — so it never hides early.
   const revealProgress = useProgressStore((s) => s.revealProgress);
@@ -439,7 +429,6 @@ export default function Overlays() {
       {!inlineMode && showHud && (
         <HoloTwinHud
           progress={0}
-          // Stay up until the bar hits 100% AND both models are downloaded.
           visible={!loaderDone}
           onFadeComplete={() => setShowHud(false)}
           unitName={unitName}
@@ -499,7 +488,6 @@ export default function Overlays() {
         />
       )}
       */}
-
 
       {/* Hotspot readout — opened by CLICKING a 3D marker. The engine reports
           the click as (destination, marker index); a destination IS a layout
@@ -632,7 +620,6 @@ export default function Overlays() {
         </button>
       )}
 
-
       {/* Left edge: the single "Resources" panel — layouts, each expandable
           to its child hotspots. Tucked away behind any overlay that owns the
           screen — the instructions card, or a resource's data card — because
@@ -693,12 +680,10 @@ export default function Overlays() {
           }}
           onHome={handleHome}
           // TWO WAYS OF NOT OFFERING SOMETHING, and they are not interchangeable.
-          //
           // The Map circle stays in the dock, greyed and out of the tab order.
           // It ships on the main version that way, and removing it instead would
           // reflow the row and move where the muscle memory for Home and
           // Dollhouse lands.
-          //
           // First Person is omitted outright: it has never shipped, so there is
           // no position to preserve and a greyed circle would only advertise
           // something nobody is missing. `undefined` is also what a site with no
@@ -798,7 +783,6 @@ export default function Overlays() {
           </button>
         </div>
       )}
-
 
       <FadeScreen visible={fadeVisible} />
 

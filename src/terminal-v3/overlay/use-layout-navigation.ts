@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { HOTSPOT_BY_ID, LAYOUT_BY_ID, poseForHotspot } from "@/config";
 import type { Destination, DestinationCategory } from "@/shared/types";
 import { useScene } from "../context/scene-context";
+import { GROUND_VIEW_BY_HOTSPOT } from "../ground-views";
 import { useNavUiStore } from "../stores/nav-ui-store";
 
 /** A layout as the engine holds it: the destination plus the zone it sits in. */
@@ -140,9 +141,68 @@ export function useLayoutNavigation() {
     [playerControllerRef, triggerFloorTransition, find],
   );
 
+  /**
+   * Travel to a resource's GROUND standpoint — the walk affordance in the
+   * Resources tree.
+   *
+   * The difference from `goToHotspot` is only where you land, and it is the
+   * whole point: that one keeps the layout's authored aerial height (every
+   * layout is `walkable: false`), this one puts the player's FEET on the
+   * navmesh and lets the controller supply the eye height. So the view arrives
+   * at exactly the height walking there would have given — no authored Y is
+   * trusted for the camera.
+   *
+   * The stored `position[1]` is the surface Y the pose was authored against,
+   * used here only as `probeFloorY`'s tie-breaker (it disambiguates stacked
+   * triangles) and as the fallback if the probe misses the mesh entirely. What
+   * actually seats the player is the LIVE navmesh, so a re-bake that shifts the
+   * ground moves the camera with it instead of leaving it hovering.
+   *
+   * Everything else matches `goToHotspot`: `currentDest` stays latched to the
+   * parent layout because that is where the player physically is, the bead is
+   * selected so the scene narrows to the one resource, and the data card is
+   * left closed — arriving should leave you looking at the thing, and clicking
+   * the bead is what opens the readings.
+   */
+  const goToHotspotGround = useCallback(
+    (hotspotId: string) => {
+      const controller = playerControllerRef.current;
+      const hotspot = HOTSPOT_BY_ID[hotspotId];
+      const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+      const view = GROUND_VIEW_BY_HOTSPOT[hotspotId];
+      if (!controller || !hotspot || !layout || !view) return;
+
+      const entry = find(layout.id);
+
+      useNavUiStore.getState().setHotspotInfo(null);
+
+      triggerFloorTransition(() => {
+        const [x, authoredSurfaceY, z] = view.position;
+        // Feet on the navmesh. `teleportTo` adds the controller's camera height
+        // on top, which is `world.eyeHeight` — the same figure the walking view
+        // uses, so this pose cannot drift from first-person height.
+        const y = controller.probeFloorY(x, z, authoredSurfaceY) ?? authoredSurfaceY;
+
+        controller.teleportTo([x, y, z], view.rotation);
+
+        if (entry) {
+          useNavUiStore.getState().setCurrentDest({
+            id: entry.destination.id,
+            label: entry.destination.label,
+            category: entry.category,
+            option: entry.destination.option,
+          });
+        }
+        useNavUiStore.getState().setSelectedHotspotId(hotspotId);
+      });
+    },
+    [playerControllerRef, triggerFloorTransition, find],
+  );
+
   return {
     goToLayout,
     goToHotspot,
+    goToHotspotGround,
     entries,
     find,
     currentLayoutId: currentDest?.id ?? null,

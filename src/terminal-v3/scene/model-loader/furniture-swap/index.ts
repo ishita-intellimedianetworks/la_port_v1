@@ -28,10 +28,8 @@ export function setupFurnitureToggle(
 ): (visible: boolean) => void {
   const { groups = [], textureSwaps = {} } = config;
 
-  // ─────────────────────────────────────────────────────────────────────────
   // PHASE 1 — Traverse the entire scene once.
   //           Build a map of: normalised material name → { mat, meshes[] }
-  // ─────────────────────────────────────────────────────────────────────────
   const byMat = new Map<string, { mat: StdMat; meshes: THREE.Mesh[] }>();
 
   scene.traverse((obj) => {
@@ -46,14 +44,11 @@ export function setupFurnitureToggle(
     }
   });
 
-
-  // ─────────────────────────────────────────────────────────────────────────
   // PHASE 2 — For every textureSwap entry:
   //           a) collect meshes that have the KEY material
   //           b) grab the carrier mat from the mesh that has the VALUE material
   //           c) swap all key-meshes → carrierMat  (initial OFF state)
   //           d) store originalMat per mesh so toggle can restore it
-  // ─────────────────────────────────────────────────────────────────────────
   const store = new Map<string, {
     meshes: { mesh: THREE.Mesh; originalMat: StdMat }[];
     carrierMat: StdMat | null;
@@ -63,7 +58,6 @@ export function setupFurnitureToggle(
     const nk = norm(key);
     const nv = norm(value);
 
-    // a) all meshes with the key material
     const meshes: { mesh: THREE.Mesh; originalMat: StdMat }[] = [];
     for (const [matNorm, data] of byMat) {
       if (matchesKey(matNorm, nk)) {
@@ -73,7 +67,6 @@ export function setupFurnitureToggle(
       }
     }
 
-    // b) carrier material — from the mesh that has the value material
     let carrierMat: StdMat | null = null;
     for (const [matNorm, data] of byMat) {
       if (matchesKey(matNorm, nv)) {
@@ -82,8 +75,6 @@ export function setupFurnitureToggle(
       }
     }
 
-
-    // c) swap key-meshes to carrier mat right now (start in furniture-OFF state)
     if (meshes.length && carrierMat) {
       meshes.forEach(({ mesh }) => {
         mesh.material = carrierMat!;
@@ -91,25 +82,19 @@ export function setupFurnitureToggle(
       });
     }
 
-    // d) store for toggle
     if (meshes.length) store.set(nk, { meshes, carrierMat });
   }
 
   renderer.compile(scene, camera);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TOGGLE — called whenever the UI switch changes
-  // ─────────────────────────────────────────────────────────────────────────
   return function toggleFurniture(visible: boolean): void {
     store.forEach(({ meshes, carrierMat }) => {
       if (visible) {
-        // Furniture ON → restore each mesh's original key material
         meshes.forEach(({ mesh, originalMat }) => {
           mesh.material = originalMat;
           (originalMat as StdMat).needsUpdate = true;
         });
       } else {
-        // Furniture OFF → apply carrier mat
         if (!carrierMat) return;
         meshes.forEach(({ mesh }) => {
           mesh.material = carrierMat!;
@@ -119,7 +104,6 @@ export function setupFurnitureToggle(
     });
 
     // Furniture group visibility (hide/show the geometry).
-    //
     // Match the group name the SAME way materials are matched (`matchesKey`):
     // exact after normalisation, plus numbered duplicates (kitchen001…). We
     // deliberately do NOT substring-`includes` here — that made a "kitchen"

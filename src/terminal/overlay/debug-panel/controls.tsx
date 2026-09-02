@@ -267,7 +267,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
       { collapsed: true },
     ),
 
-    // Interior floors only — out on the port the spot is not even mounted.
     "interior spot": folder(
       {
         "spot intensity": {

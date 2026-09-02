@@ -60,20 +60,16 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
   ) => {
     const { camera, gl, scene } = useThree();
 
-    // ── All mutable state in one place ────────────────────────────────────────
     const state = usePlayerState({ startPosition, startRotation, cameraHeight, initialZone });
 
-    // Idle drift is gated externally — TerminalExperience calls startIdleDrift() after reveal
     const skipFirstIdleRef = useRef(true);
 
-    // Always-current refs for callbacks so inner functions never re-create
     const onMovingChangeRef = useRef(onMovingChange);
     useLayoutEffect(() => { onMovingChangeRef.current = onMovingChange; });
 
     const onRoomChangeRef = useRef(onRoomChange);
     useLayoutEffect(() => { onRoomChangeRef.current = onRoomChange; });
 
-    // Stable empty fallback so useRoomZoneDetection can always read a map
     const emptyMapRef = useRef<Map<string, RoomZone[]>>(new Map());
 
     const setMoving = useCallback((v: boolean) => {
@@ -82,7 +78,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Focused hooks ─────────────────────────────────────────────────────────
     const { navigateToPoint, stopNavigation, previewTo, clearPreview, measurePathTo, measurePathsTo } = usePathfinding({
       state, pathfinding, cameraHeight, setMoving, routeSanitize, debug,
     });
@@ -123,7 +118,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       onRoomChange: stableOnRoomChange,
     });
 
-    // ── Imperative handle (public API surface) ────────────────────────────────
     useImperativeHandle(ref, () => ({
       navigateToPoint: (pos, targetZone, onDone) => {
         // A committed walk supersedes any preview route — and any fly-over
@@ -200,7 +194,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       lookAtPoint: (target) => {
         // Yaw-only rotation. Y is intentionally ignored: the camera stays
         // level and just turns horizontally toward the target's XZ.
-        //
         // Implementation: a GSAP tween animates rot.y over a fixed wall-clock
         // duration with an ease-out curve. This is frame-rate independent —
         // settles in the same real time on both PC and phones (the previous
@@ -220,7 +213,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
         arc = ((arc + Math.PI * 3) % TAU) - Math.PI;
         const endYaw = state.rot.current.y + arc;
 
-        // Kill any in-flight tween so consecutive lookAt calls don't queue.
         state.lookAtTween.current?.kill();
         state.lookAtTween.current = gsap.to(state.rot.current, {
           y: endYaw,
@@ -233,7 +225,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
             state.lookAtTween.current = null;
           },
         });
-        // Cancel intro drift; it would advance yawT and fight the tween.
         state.idleOn.current = false;
       },
       captureScreenshot: (download = false) => {
@@ -266,7 +257,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       state.initPos.current.set(startPosition[0], y, startPosition[2]);
       state.rot.current.set(startRotation[0], startRotation[1], startRotation[2]);
       state.yawT.current = startRotation[1];
-      // Let the one-shot navmesh Y-snap re-run against the NEW floor's mesh.
       state.snapped.current = false;
       camera.position.set(startPosition[0], y, startPosition[2]);
       camera.rotation.set(startRotation[0], startRotation[1], startRotation[2], "YXZ");

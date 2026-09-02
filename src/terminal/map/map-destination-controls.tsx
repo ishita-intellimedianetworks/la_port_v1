@@ -38,7 +38,6 @@ export function MapDestinationControls({
       style={listMode ? undefined : { borderTop: "1px solid rgba(255,255,255,0.08)" }}
     >
       {isMoving ? (
-        // Same as the 3D walking dock: a blue Stop + the speed multiplier options.
         <div className="m-auto flex items-center gap-1.5">
           <button
             type="button"

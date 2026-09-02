@@ -79,7 +79,6 @@ export function releaseGLTF(
     return;
   }
   activeMounts.delete(url);
-  // Defer so a same-tick re-acquire (strict mode) can cancel the dispose.
   queueMicrotask(() => {
     if (activeMounts.has(url)) return;
     clearCache(url);

@@ -87,10 +87,9 @@ export class HoloTwinPreview {
     this.material = createPointMaterial(this.sharedUniforms);
     this.points = new THREE.Points(geometry, this.material);
     this.points.frustumCulled = false;
-    this.points.raycast = () => {}; // visual-only — never block navigation raycasts
+    this.points.raycast = () => {};
   }
 
-  /** Add the Points object to your scene. */
   addToScene(scene: THREE.Scene): void {
     if (this.points) scene.add(this.points);
   }
@@ -139,8 +138,6 @@ export class HoloTwinPreview {
   }
 }
 
-// ----------------------------------------------------------------------
-
 const POINT_COLOR_HEX = 0x0fb7ff;
 
 function createPointMaterial(sharedUniforms: SharedUniforms): THREE.ShaderMaterial {
@@ -167,7 +164,7 @@ function createPointMaterial(sharedUniforms: SharedUniforms): THREE.ShaderMateri
 
       void main() {
         vNormal = aNormal;
-        vec3 p = position; // baked target — silhouette from frame 1, no scatter
+        vec3 p = position;
 
         float delay = hash11(position.z * 7.0 + position.x) * 0.4;
         float k = clamp((uReveal - delay) / max(1.0 - delay, 0.001), 0.0, 1.0);
@@ -175,7 +172,6 @@ function createPointMaterial(sharedUniforms: SharedUniforms): THREE.ShaderMateri
         vDensity = k;
         vHash = hash11(position.x * 3.1 + position.z * 1.7);
 
-        // Tiny ambient breathing once revealed
         p += vec3(
           sin(uTime * 0.7 + p.x * 0.3),
           cos(uTime * 0.5 + p.y * 0.3),

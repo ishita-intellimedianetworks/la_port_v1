@@ -39,7 +39,6 @@ const FADE_BAND = 200;
 // switch — ease it in alongside the Sky dome instead of popping.
 const FADE_IN_SEC = 1.5;
 
-// 0 at the wrap edge, ramping to 1 once FADE_BAND inside it (both sides).
 const edgeFade = (x: number) =>
   THREE.MathUtils.clamp((WRAP_EDGE - Math.abs(x)) / FADE_BAND, 0, 1);
 
@@ -65,7 +64,7 @@ export default function Clouds() {
       fadeRef.current = Math.min(1, fadeRef.current + delta / FADE_IN_SEC);
     }
     const fk = fadeRef.current;
-    const fadeK = fk * fk * (3 - 2 * fk); // smoothstep ease-in
+    const fadeK = fk * fk * (3 - 2 * fk);
     const drift = (
       g: THREE.Group | null,
       mat: THREE.MeshStandardMaterial | null,
@@ -105,7 +104,7 @@ export default function Clouds() {
       emissive="#ffffff"
       emissiveIntensity={0.7}
       alphaTest={0.01}
-      opacity={0} // driven per-frame: BASE_OPACITY × edgeFade × mount fade
+      opacity={0}
       transparent
       depthWrite={false}
       side={THREE.DoubleSide}

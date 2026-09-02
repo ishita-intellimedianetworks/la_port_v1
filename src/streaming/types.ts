@@ -9,7 +9,7 @@ import type { Tier } from "./config";
 
 export interface ChunkLod {
   tier: Tier;
-  url: string; // relative to assetBase
+  url: string;
   tris: number;
   bytes: number;
 }
@@ -46,7 +46,7 @@ export interface TexSlot {
   image: number;
   /** Which UV set to sample: 0 -> TEXCOORD_0, 1 -> TEXCOORD_1. */
   uv: number;
-  wrapS?: number; // glTF enum: 10497 REPEAT, 33071 CLAMP_TO_EDGE, 33648 MIRRORED
+  wrapS?: number;
   wrapT?: number;
   /** KHR_texture_transform, when the source declared one for this slot. */
   transform?: {
@@ -83,9 +83,9 @@ export interface MaterialDef {
 export interface TexRung {
   px: number;
   tag: string;
-  url: string; // WebP (RGBA-decoded on the GPU) — universal fallback
+  url: string;
   bytes: number;
-  ktx2?: string; // KTX2/Basis (stays GPU-compressed: ~4-8× less VRAM). Preferred when supported.
+  ktx2?: string;
   ktx2Bytes?: number;
 }
 export interface TexImage {

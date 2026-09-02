@@ -135,13 +135,11 @@ export interface StreamingConfig {
 
 // Where the baked chunk set is served from. TWO env vars, because a published
 // prefix does not have to be spelled like the local one.
-//
 //   NEXT_PUBLIC_STREAM_BASE   the COMPLETE base, used verbatim. Nothing is
 //                             appended — it already names the asset folder.
 //   NEXT_PUBLIC_ASSET_BASE    a ROOT that `<slug>/assets/` is appended to.
 //                             Defaults to `/assets`, i.e. the copy under
 //                             public/ (gitignored).
-//
 // The complete form wins when both are set, and exists because the two names
 // genuinely diverge: this bake calls itself `portla-c5-v5-obj` (it is
 // `manifest.model`, and the folder under public/ matches) but is published at
@@ -236,7 +234,6 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
     texUpgradesPerTick: m.render.texUpgradesPerTick,
     adaptiveDpr: m.render.adaptiveDpr,
     maxDpr: m.render.maxDpr,
-    // Inert until a ktx stage has run on the asset set; harmless before that.
     useKtx2: true,
 
     frustumCull: s.frustumCull,
@@ -337,14 +334,11 @@ export function streamVariant(id: StreamVariantId): StreamVariant {
   return STREAM_VARIANTS[id];
 }
 
-// =============================================================================
 // MOBILE PROFILE — a proportional shrink, not a second set of magic numbers.
-//
 // Phones enforce a VRAM ceiling of a few hundred MB before killing the WebGL
 // context, so the loaded bubble and the texture resolution come down together.
 // Deriving it from the authored numbers means it tracks any retune
 // automatically — there is nothing here to keep in sync.
-// =============================================================================
 const MOBILE = {
   /** Bands shrink toward the camera; near is left alone so what you are standing
    *  next to still looks right. */
@@ -391,7 +385,6 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
     // the FULL near tier (8.3 M triangles on this bake) with nothing left to
     // bound it. Everything above would still be applied and none of it would
     // do anything.
-    //
     // Desktop keeps residency and its artefact-free fill; mobile falls back to
     // exactly the streaming behaviour it has today. This is the one place the
     // two profiles differ in KIND rather than in degree, which is why it is
@@ -427,25 +420,20 @@ export function resolveStreamConfig(
   return (profile ?? detectProfile()) === "mobile" ? mobileProfile(ground) : ground;
 }
 
-// =============================================================================
 // AERIAL PROFILE — the second strategy over the SAME manifest.
-//
 // The ground bands assume the camera is IN the terminal. Every `layouts[]`
 // camera here is a framing shot 54-412 m up and up to 2.8 km out, and at those
 // distances the ground bands load nothing but the two district-sized ground
 // planes: measured over the ten layouts, L01/L02/L03/L07 each resolved just
 // 2 chunks of 831 inside the 990 m unload radius, which is why the shot framed
 // empty sky.
-//
 // What makes the fix cheap is the far tier: the ENTIRE model at `far` is 831
 // chunks / 22.0 MB encoded / 11.02 M triangles, and all 70 images at the 128 px
 // rung come to 0.1 MB. So an unload radius that spans the whole 15 x 10 km
 // district costs ~22 MB resident — less than the ground config's own 33 MB
 // ceiling. There is no version of this that needs a second asset set.
-//
 // Authored as a partial override of `stream`, so anything not named here tracks
 // the ground numbers automatically.
-// =============================================================================
 
 /** Merge `stream.aerial` over `stream` and resolve, or null when no aerial
  *  block is authored (in which case the swap never happens). */
@@ -496,9 +484,7 @@ export function resolveAerialConfig(
   };
 }
 
-// =============================================================================
 // DOLLHOUSE PROFILE — the third strategy over the same manifest.
-//
 // The overview is a single fixed vantage looking at the whole zone from the
 // air. Adaptive banding has nothing to give it: the view cone covers
 // everything, so the frustum cull buys nothing, and any band that resolves to
@@ -506,14 +492,11 @@ export function resolveAerialConfig(
 // authors near/mid at 0 and lets EVERY chunk fall through to `far` — the
 // coarsest geometry LOD and the 128 px texture rung, which is the whole model
 // for about 22 MB encoded.
-//
 // It is also the same 22 MB the walking view wants first: the manager keeps its
 // decoded-chunk cache across a `setConfig` swap, so entering first person
 // re-mounts from memory and only downloads what the near bands add on top.
-//
 // The hide rules are resolved by ChunkManager, not here — matching a material
 // name needs `materials.json`, which is fetched at runtime.
-// =============================================================================
 
 /** Merge `stream.dollhouse` over `stream` and resolve, or null when no
  *  dollhouse block is authored (the overview then streams with whatever the
@@ -588,6 +571,5 @@ export function fogRange(c: StreamingConfig): { near: number; far: number } | nu
   };
   const s = c.fog.start;
   const start = typeof s === "number" ? far * s : bands[s] ?? c.farDist;
-  // near must sit at least a metre inside far, and never below 1.
   return { near: Math.max(1, Math.min(start, far - 1)), far };
 }

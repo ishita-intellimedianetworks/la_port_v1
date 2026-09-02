@@ -1,16 +1,13 @@
 "use client";
 
 // Single source of truth for fade timing.
-//
 // FADE_IN_MS  = how long opacity ramps 0→1 (the screen darkening).
 // FADE_OUT_MS = how long opacity ramps 1→0 (the new scene revealing).
 // These MUST stay equal — the fade-in and fade-out durations of a single
 // transition are visually symmetric on purpose, only the blackout hold in
 // between is allowed to flex.
-//
 // FADE_MS is kept as an alias of FADE_IN_MS for callers that drive their own
 // timing off the fade-in length (e.g. cue lead during the dollhouse fly-in).
-//
 // BLACKOUT_VISIBLE_MS is the FALLBACK static hold at full opacity between
 // fade-in and fade-out when no readiness predicate is supplied to
 // useFadeTransition. When a predicate is supplied (most transitions today),
@@ -23,7 +20,6 @@ export const FADE_OUT_MS = 800;
 export const FADE_MS = FADE_IN_MS;
 export const BLACKOUT_VISIBLE_MS = 0;
 export const FADE_EASING = "linear";
-
 
 export const ENTER_FADE_MS = 340;
 

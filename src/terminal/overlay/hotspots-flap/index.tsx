@@ -17,9 +17,6 @@ interface HotspotsFlapProps {
   tucked?: boolean;
 }
 
-/** Stable empty map, so "no overrides for this query" is not a new object each render. */
-const EMPTY_OVERRIDES: Record<string, boolean> = {};
-
 /**
  * The LEFT edge flap: the single "Resources" panel. Per the handoff, a
  * hotspot is a layout's CHILD, not a peer entry of its own — so layouts lead
@@ -54,24 +51,27 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
-  // Which layout rows are unfolded. An OVERRIDE map, not the truth: an absent
-  // entry means "whatever the current search implies", so a hit inside a layout
-  // can unfold it without fighting a stored value.
-  //
+  // Which layout row is unfolded — AT MOST ONE. Opening a second folds the
+  // first away, so the tree stays one screenful instead of growing into a
+  // column the operator has to scroll past to reach the next layout.
+  // An OVERRIDE, not the truth: `undefined` means "whatever the current search
+  // implies", so a hit inside a layout can unfold it without fighting a stored
+  // value. Once a chevron is tapped the choice wins — a layout id, or null for
+  // "the one that was open is now closed".
   // TAGGED with the query it was made under, and read only while that query is
   // still the live one. The alternative — clearing it from an effect on every
   // keystroke — is the same behaviour a render later, with a wasted render and
-  // a frame where the old overrides are still on screen.
-  const [expanded, setExpanded] = useState<{ query: string; map: Record<string, boolean> }>({
+  // a frame where the old choice is still on screen.
+  const [expanded, setExpanded] = useState<{ query: string; openId?: string | null }>({
     query: "",
-    map: {},
   });
-  const overrides = expanded.query === q ? expanded.map : EMPTY_OVERRIDES;
+  const openId = expanded.query === q ? expanded.openId : undefined;
   const toggleExpanded = useCallback(
     (layoutId: string, fallback: boolean) => {
       setExpanded((prev) => {
-        const map = prev.query === q ? prev.map : {};
-        return { query: q, map: { ...map, [layoutId]: !(map[layoutId] ?? fallback) } };
+        const current = prev.query === q ? prev.openId : undefined;
+        const isOpen = current === undefined ? fallback : current === layoutId;
+        return { query: q, openId: isOpen ? null : layoutId };
       });
     },
     [q],
@@ -147,8 +147,7 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
         )}
         {rows.map(({ layout, children, autoOpen }) => {
           const hasChildren = children.length > 0;
-          // The override wins where it exists; otherwise the search decides.
-          const isOpen = overrides[layout.id] ?? autoOpen;
+          const isOpen = openId === undefined ? autoOpen : openId === layout.id;
           return (
             <li key={layout.id} className="flex flex-col gap-1.5 short:gap-1">
               <div className="flex items-center gap-1.5 short:gap-1">

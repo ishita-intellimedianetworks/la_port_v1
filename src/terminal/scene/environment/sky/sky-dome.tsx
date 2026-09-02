@@ -42,7 +42,6 @@ import { sampleSky } from "./palette";
  * authored, and it now tracks a real horizon instead of a flat blue.
  */
 
-// Matches BackgroundFade's fade, which rode the dollhouse → first-person fly.
 const FADE_SEC = 1.6;
 
 // Half-extent of the box in world units. It only has to sit between the
@@ -67,10 +66,10 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uHaze;
-  uniform vec3 uSun;      // colour x intensity
+  uniform vec3 uSun;
   uniform vec3 uSunDir;
   uniform float uTime;
-  uniform float uFade;    // 0 = black (dollhouse), 1 = full sky
+  uniform float uFade;
   varying vec3 vDir;
 
   #ifdef SKY_CLOUDS
@@ -79,7 +78,6 @@ const fragmentShader = /* glsl */ `
     return fract(sin(h) * 43758.5453) * 2.0 - 1.0;
   }
 
-  // Gradient noise with the quintic curve f^3 * (f * (f * 6 - 15) + 10).
   float gradNoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -111,13 +109,12 @@ const fragmentShader = /* glsl */ `
     float up = clamp(dir.y, -0.15, 1.0);
     vec3 col = mix(uHorizon, uZenith, pow(max(up, 0.0), 0.42));
 
-    // Below the horizon, fade into haze so downward rays never hit black.
     col = mix(col, uHaze, 1.0 - smoothstep(-0.15, 0.0, dir.y));
 
     float s = max(dot(dir, uSunDir), 0.0);
-    col += uSun * pow(s, 10.0) * 0.18;                 // wide halo (verbatim)
-    col += uSun * pow(s, 220.0) * 0.9;                 // inner glow, ex-bloom
-    col += uSun * smoothstep(0.9990, 0.9997, s) * 6.0; // disk, softened
+    col += uSun * pow(s, 10.0) * 0.18;
+    col += uSun * pow(s, 220.0) * 0.9;
+    col += uSun * smoothstep(0.9990, 0.9997, s) * 6.0;
 
     #ifdef SKY_CLOUDS
     // A low band of cloud near the horizon. Guarded: outside the band the whole
@@ -152,7 +149,6 @@ export default function SkyDome({
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
   const meshRef = useRef<THREE.Mesh>(null);
-  // 0 = black (dollhouse), 1 = full sky; eased toward `sky`.
   const mix = useRef(0);
 
   // Time of day and the cloud band are LIVE (see `sky-store`) so the debug
@@ -163,7 +159,6 @@ export default function SkyDome({
   // sun is DRAWN and nothing else — every colour uniform below is still `t`'s
   // (see `sampleSky`) — and `lightingForT` is handed the very same angles, so
   // the disk and the shadows are one ray.
-  //
   // Selected as primitives, not as an object: a selector returning a fresh
   // object would make every unrelated store write look like a change, and the
   // uniform effect below is keyed on this.
@@ -242,7 +237,7 @@ export default function SkyDome({
       target > mix.current
         ? Math.min(target, mix.current + step)
         : Math.max(target, mix.current - step);
-    const k = mix.current * mix.current * (3 - 2 * mix.current); // smoothstep
+    const k = mix.current * mix.current * (3 - 2 * mix.current);
 
     material.uniforms.uFade.value = k;
     material.uniforms.uTime.value += delta;

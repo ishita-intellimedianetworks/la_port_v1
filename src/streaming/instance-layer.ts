@@ -66,7 +66,7 @@ export class InstanceLayer {
     try {
       gltf = await this.loader.loadAsync(this.assetBase + "palette.glb");
     } catch {
-      return false; // no palette for this model — stay inert
+      return false;
     }
     const bin = await fetch(this.assetBase + "instances.bin");
     if (!bin.ok) return false;
@@ -104,20 +104,17 @@ export class InstanceLayer {
   sync(resident: ChunkEntry[]) {
     if (!this.loaded || !this.matrices) return;
 
-    // Signature of the resident set — skip the rebuild when nothing moved.
     let key = "";
     for (const c of resident) if (c.inst) key += c.id + ",";
     if (key === this.lastKey) return;
     this.lastKey = key;
 
-    // 1. count placements per palette entry
     const counts = new Int32Array(this.byEntry.length);
     for (const c of resident) {
       if (!c.inst) continue;
       for (const [pal, , n] of c.inst) counts[pal] += n;
     }
 
-    // 2. size each InstancedMesh, then fill it
     const cursor = new Int32Array(this.byEntry.length);
     for (let e = 0; e < this.byEntry.length; e++) {
       const need = counts[e];
@@ -132,7 +129,6 @@ export class InstanceLayer {
           if (p.mesh) { p.mesh.count = 0; p.mesh.visible = false; }
           continue;
         }
-        // Grow in steps so a wandering camera does not reallocate every tick.
         if (!p.mesh || p.capacity < need) {
           const cap = Math.max(need, Math.ceil(need * 1.5), 8);
           // Carry the material across a regrow. It does not depend on capacity,
@@ -145,11 +141,10 @@ export class InstanceLayer {
           const material = p.mesh ? (p.mesh.material as THREE.Material) : this.makeMaterial(p.matIdx);
           if (p.mesh) {
             this.group.remove(p.mesh);
-            p.mesh.dispose(); // instance buffer only — geometry and material are reused
+            p.mesh.dispose();
           }
           const mesh = new THREE.InstancedMesh(p.geometry, material, cap);
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-          // Same shadow contract as the per-chunk meshes.
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           // A shared bounding volume IS meaningful, as long as it is rebuilt
@@ -167,7 +162,6 @@ export class InstanceLayer {
       }
     }
 
-    // 3. copy matrices, chunk by chunk
     for (const c of resident) {
       if (!c.inst) continue;
       for (const [pal, start, n] of c.inst) {

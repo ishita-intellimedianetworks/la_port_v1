@@ -22,8 +22,7 @@ import type { PlayerControllerHandle } from "../../scene/player/types";
 import { etaSeconds } from "./format";
 import { navConfig } from "../../navigation-config";
 
-const TURN_MIN_DEG = navConfig.logic.turnMinDeg; // bends sharper than this = a turn
-// Which cross-product sign means "right" (flip in nav-config if inverted).
+const TURN_MIN_DEG = navConfig.logic.turnMinDeg;
 const RIGHT_IS_POSITIVE_CROSS = navConfig.logic.rightIsPositiveCross;
 
 export interface NavInfo {
@@ -74,10 +73,9 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
       // getMetersPerUnit(), so the banner's distance/ETA matches the cards.
       const mpu = navConfig.logic.displayMetersPerUnit;
       const pos = ctrl.getPosition();
-      // Full polyline the avatar still has to walk: current position → waypoints.
       const pts = [{ x: pos.x, z: pos.z }, ...path];
 
-      let total = 0; // world units
+      let total = 0;
       const seg: number[] = [];
       for (let i = 0; i < pts.length - 1; i++) {
         const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
@@ -85,9 +83,8 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
         total += d;
       }
 
-      // First significant bend = the next maneuver. None → arrival.
       let turnDir: NavInfo["turnDir"] = "arrive";
-      let turnDist = total; // world units to the maneuver
+      let turnDist = total;
       let cum = 0;
       for (let k = 1; k < pts.length - 1; k++) {
         cum += seg[k - 1];
@@ -100,7 +97,7 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
         const dot = (ax * bx + az * bz) / (al * bl);
         const ang = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
         if (ang >= TURN_MIN_DEG) {
-          const cross = az * bx - ax * bz; // y-component of incoming × outgoing
+          const cross = az * bx - ax * bz;
           turnDir = cross > 0 === RIGHT_IS_POSITIVE_CROSS ? "right" : "left";
           turnDist = cum;
           break;

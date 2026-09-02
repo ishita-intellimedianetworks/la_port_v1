@@ -139,11 +139,9 @@ export function EdgeFlap({
           // screen, and the rows are two short strings, not paragraphs.
           width: `min(${short ? 290 : 340}px, calc(100vw - ${dim.w + (short ? 18 : 26)}px))`,
           // A FIXED frame — the body below scrolls inside it.
-          //
           // The 128px of breathing room is what the bottom dock and the top
           // chrome need on a laptop. A landscape phone has ~360px of height in
           // total, and giving 128 of it away left room for barely three rows.
-          //
           // 96px there instead, and the panel is centred, so it clears the
           // top-left Exit tab (8px in, 36px tall) by a hair at the top and the
           // interior Home button at the bottom — the dock proper tucks itself
@@ -198,13 +196,11 @@ function Flap({
 }) {
   const { w, h, r } = dim;
 
-  // Rounded on the INNER side, square against the screen edge.
   const fillPath =
     side === "right"
       ? `M ${w} 0 L ${r} 0 Q 0 0 0 ${r} L 0 ${h - r} Q 0 ${h} ${r} ${h} L ${w} ${h} Z`
       : `M 0 0 L ${w - r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h - r} Q ${w} ${h} ${w - r} ${h} L 0 ${h} Z`;
 
-  // Stroke three sides only — never the edge that meets the screen border.
   const borderPath =
     side === "right"
       ? `M ${w} 1 L ${1 + r} 1 Q 1 1 1 ${1 + r} L 1 ${h - 1 - r} Q 1 ${h - 1} ${1 + r} ${h - 1} L ${w} ${h - 1}`

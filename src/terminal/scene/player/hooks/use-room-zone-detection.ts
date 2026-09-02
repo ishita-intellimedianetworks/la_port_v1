@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { RoomZone } from "../../navmesh/geometry";
 
-const THROTTLE = 10; // sample every 10 frames
+const THROTTLE = 10;
 const _orig = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
 const _rc   = new THREE.Raycaster();
@@ -33,7 +33,6 @@ export function useRoomZoneDetection({
     if (!enabled) return;
     if (++frameRef.current % THROTTLE !== 0) return;
 
-    // Derive floor id from zone name "zone_<floorId>"
     const floorId = currentZone.current.startsWith("zone_")
       ? currentZone.current.slice(5)
       : currentZone.current;
@@ -42,7 +41,6 @@ export function useRoomZoneDetection({
 
     const p = pos.current;
 
-    // Fast XZ bbox pre-filter
     const candidates = zones.filter(z =>
       p.x >= z.bbox.min.x && p.x <= z.bbox.max.x &&
       p.z >= z.bbox.min.z && p.z <= z.bbox.max.z,
@@ -53,7 +51,6 @@ export function useRoomZoneDetection({
     if (candidates.length === 1) {
       next = candidates[0].id;
     } else if (candidates.length > 1) {
-      // Precision: raycast downward to find exact mesh the player stands on
       _orig.set(p.x, p.y + 0.5, p.z);
       _rc.set(_orig, _down);
       _rc.far = 3;
@@ -61,7 +58,6 @@ export function useRoomZoneDetection({
       if (hits.length > 0) {
         next = (hits[0].object as THREE.Mesh).name;
       } else {
-        // Fallback: pick the candidate with the smallest XZ area (most specific room)
         let smallest = Infinity;
         for (const c of candidates) {
           const area = (c.bbox.max.x - c.bbox.min.x) * (c.bbox.max.z - c.bbox.min.z);
@@ -69,7 +65,6 @@ export function useRoomZoneDetection({
         }
       }
     }
-    // Zero candidates: player in doorway/threshold — keep previous room
 
     if (next !== currentRef.current) {
       currentRef.current = next;

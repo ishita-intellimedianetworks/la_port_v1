@@ -14,7 +14,6 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
 import type { FloorTransition } from "@/shared/types";
 
-// Same opt-in as the rest of the scene debug logging (?debug=true).
 const DEBUG = typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("debug") === "true";
 
@@ -31,7 +30,6 @@ interface PortalRaycastOptions {
 export function usePortalRaycast({
   gl, camera, raycaster, scene, enabled, transitions, onEnter,
 }: PortalRaycastOptions) {
-  // Always-current refs so listeners stay stable across callback/data changes.
   const onEnterRef = useRef(onEnter);
   useLayoutEffect(() => { onEnterRef.current = onEnter; });
   const transitionsRef = useRef(transitions);

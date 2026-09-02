@@ -17,7 +17,6 @@ import { useFrame } from "@react-three/fiber";
 export function PerfMeter() {
   const elRef = useRef<HTMLDivElement | null>(null);
 
-  // FPS sampling state — buffered, flushed to DOM once per second.
   const frameCount = useRef(0);
   const acc = useRef(0);
   const minDt = useRef(Infinity);

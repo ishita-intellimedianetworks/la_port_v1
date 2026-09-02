@@ -9,7 +9,6 @@ import * as THREE from "three";
 const SKY_BLUE = new THREE.Color("#7fbffc");
 const BLACK = new THREE.Color("#000000");
 
-// Matches the old dome fade, riding the dollhouse → first-person fly.
 const FADE_SEC = 1.6;
 
 /**
@@ -25,7 +24,6 @@ const FADE_SEC = 1.6;
  */
 export default function BackgroundFade({ sky }: { sky: boolean }) {
   const scene = useThree((s) => s.scene);
-  // 0 = black (dollhouse), 1 = sky blue (first person); eased toward `sky`.
   const mix = useRef(0);
 
   useFrame((_, delta) => {
@@ -39,7 +37,7 @@ export default function BackgroundFade({ sky }: { sky: boolean }) {
     // Coming back from an interior the background is still the HDR texture —
     // swap a Color back in before writing to it.
     if (!(scene.background instanceof THREE.Color)) scene.background = new THREE.Color(0x000000);
-    const k = mix.current * mix.current * (3 - 2 * mix.current); // smoothstep
+    const k = mix.current * mix.current * (3 - 2 * mix.current);
     (scene.background as THREE.Color).copy(BLACK).lerp(SKY_BLUE, k);
   });
 

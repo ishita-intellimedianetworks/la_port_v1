@@ -11,7 +11,6 @@ import { closestNavmeshPoint } from "../utils/probe-floor-y";
 import { findPathWeighted, findPathsWeighted } from "../../utils/weighted-path";
 import type { PlayerState } from "../types";
 
-// ── Route sanitation ──────────────────────────────────────────────────────────
 // The memorial navmesh (v1) is polluted: it covers the seating bowl AND has
 // long skinny "connector" triangles streaking across the stands, so A* routes
 // legally dive through the stadium or drop near-vertically between levels.
@@ -19,8 +18,8 @@ import type { PlayerState } from "../types";
 // truncated at the first suspicious segment: one that leaves the endpoints'
 // height band, or one steeper than a walkable ramp.
 const ROUTE_Y_BAND = 2.5;
-const MAX_ROUTE_SLOPE = 0.45; // ramps/stairs ~0.3; bowl slope / connectors 0.55+
-const MIN_RISE = 0.8;         // ignore ordinary stair steps
+const MAX_ROUTE_SLOPE = 0.45;
+const MIN_RISE = 0.8;
 
 function sanitizeRoute(fromY: number, pts: THREE.Vector3[], debug = false): THREE.Vector3[] {
   if (!pts.length) return pts;
@@ -124,7 +123,7 @@ export function usePathfinding({
         // route far short), the "path" ends nowhere near the destination —
         // drawing it reads as a broken flying ribbon, so report unreachable
         // instead (the UI then falls back to its teleport-only messaging).
-        const END_NEAR_TOL = 6; // world units, XZ
+        const END_NEAR_TOL = 6;
         const end = clean[clean.length - 1];
         if (Math.hypot(end.x - targetPt.x, end.z - targetPt.z) > END_NEAR_TOL) return null;
         return clean;
@@ -154,12 +153,11 @@ export function usePathfinding({
     (target: NavTargetIn, overrideZone?: string): number | null => {
       const path = computePath(target, overrideZone);
       if (!path?.length) return null;
-      // Leg from the player's feet to the first waypoint, then waypoint→waypoint.
       let len = Math.hypot(path[0].x - state.pos.current.x, path[0].z - state.pos.current.z);
       for (let i = 0; i < path.length - 1; i++) {
         len += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].z - path[i].z);
       }
-      return len; // world units — caller multiplies by getMetersPerUnit()
+      return len;
     },
     [computePath, state.pos],
   );
@@ -180,7 +178,7 @@ export function usePathfinding({
         const group = pathfinding.getGroup(zone, fromPt) ?? 0;
         const targetPts = targets.map((t) => new THREE.Vector3(t.x, targetFloorY(t, floorY, cameraHeight), t.z));
         const paths = findPathsWeighted(pathfinding, fromPt, targetPts, zone, group);
-        const END_NEAR_TOL = 6; // world units, XZ — same rule as computePath
+        const END_NEAR_TOL = 6;
         return paths.map((raw, i) => {
           if (!raw?.length) return null;
           const clean = routeSanitize ? sanitizeRoute(floorY, raw) : raw;
@@ -192,7 +190,7 @@ export function usePathfinding({
           for (let j = 0; j < clean.length - 1; j++) {
             len += Math.hypot(clean[j + 1].x - clean[j].x, clean[j + 1].z - clean[j].z);
           }
-          return len; // world units — caller multiplies by getMetersPerUnit()
+          return len;
         });
       } catch {
         return targets.map(() => null);
@@ -308,7 +306,6 @@ export function usePathfinding({
         // pos to path[0] — three-pathfinding's funnel/string-pull may emit
         // path[0] as the first portal centroid (not the literal startPosition),
         // and snapping there would visibly teleport the player toward the click.
-        //
         // Instead, advance pathI past any leading waypoints that already sit
         // within ~5cm of the player. The walk loop then naturally walks from
         // the player's actual position toward the first meaningful waypoint.
@@ -347,7 +344,7 @@ export function usePathfinding({
         // Kill any lookAt rotation tween; the new walk owns yaw now.
         state.lookAtTween.current?.kill();
         state.lookAtTween.current = null;
-        state.idleOn.current = false; // cancel intro drift when navigation starts
+        state.idleOn.current = false;
         // The speed multiplier is deliberately NOT reset here. It is a setting,
         // not a per-walk state: someone who drops to 1× to look at something has
         // chosen a pace, and slamming it back to 5× the moment they click the

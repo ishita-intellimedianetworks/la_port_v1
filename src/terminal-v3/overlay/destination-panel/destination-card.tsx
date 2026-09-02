@@ -12,9 +12,9 @@ const HERE_BLUE = "#2997FF";
  *  inline on cards whose destination carries an authored `crowd` level (the
  *  memorial gates), replacing the separate Crowd Flow category. */
 export const CROWD_DOT: Record<string, string> = {
-  high: "#ff453a", // red
-  med: "#ffd60a",  // yellow
-  low: "#30d158",  // green — classic heat-map scale
+  high: "#ff453a",
+  med: "#ffd60a",
+  low: "#30d158",
 };
 /** Tier word shown beside the dot — a bare dot alone doesn't read as crowd. */
 export const CROWD_WORD: Record<string, string> = {

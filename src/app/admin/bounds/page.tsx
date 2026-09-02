@@ -47,7 +47,6 @@ const r = (n: number, d = 2) => {
 };
 
 export default function BoundsPage() {
-  // ── Step 1: render ─────────────────────────────────────────────────────────
   const sceneRef = useRef<THREE.Object3D | null>(null);
   const [glbBbox, setGlbBbox] = useState<WorldBbox | null>(null);
   const [manifestBbox, setManifestBbox] = useState<WorldBbox | null>(null);
@@ -112,7 +111,6 @@ export default function BoundsPage() {
       const out = await renderTopDown(
         sceneRef.current, bbox, dims.w, dims.h, mode, opaque ? "#0b1020" : null,
       );
-      // Decoded here so the URL and bitmap land in one state update.
       const img = new Image();
       await new Promise<void>((res, rej) => {
         img.onload = () => res();
@@ -131,7 +129,6 @@ export default function BoundsPage() {
     }
   }, [bbox, dims, mode, opaque]);
 
-  // ── Step 2: calibrate ──────────────────────────────────────────────────────
   const [siteImg, setSiteImg] = useState<HTMLImageElement | null>(null);
   const [override, setOverride] = useState<Placement | null>(null);
   const [overlayAlpha, setOverlayAlpha] = useState(0.55);
@@ -203,7 +200,6 @@ export default function BoundsPage() {
     ctx.drawImage(plan.img, x, y, w, h);
     ctx.restore();
 
-    // Model outline
     ctx.save();
     ctx.strokeStyle = "#22d3ee";
     ctx.lineWidth = 1.5;
@@ -211,7 +207,6 @@ export default function BoundsPage() {
     ctx.strokeRect(x, y, w, h);
     ctx.restore();
 
-    // Walkable zone — where map clicks will resolve.
     if (showZone && bbox) {
       const mppX = bbox.dx / placement.ow;
       const mppZ = bbox.dz / placement.oh;
@@ -232,7 +227,6 @@ export default function BoundsPage() {
 
   useEffect(() => { redraw(); }, [redraw]);
 
-  // Drag to move.
   const dragRef = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -249,7 +243,6 @@ export default function BoundsPage() {
   };
   const onPointerUp = () => { dragRef.current.on = false; };
 
-  // Scales about the centre, so zooming and nudging don't fight.
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -261,7 +254,6 @@ export default function BoundsPage() {
     return () => cv.removeEventListener("wheel", onWheel);
   }, [updatePlacement]);
 
-  // Arrow keys nudge (shift = coarse); [ ] scale.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const step = e.shiftKey ? 20 : 2;
@@ -284,7 +276,6 @@ export default function BoundsPage() {
     return toJson(result, placement, siteImg.naturalWidth, siteImg.naturalHeight, "/floorplan/everport-site.webp");
   }, [result, placement, siteImg]);
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
   const box = "rounded-lg border border-neutral-800 bg-neutral-900 p-4";
   const btn = "rounded px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40";
   const btnP = `${btn} bg-blue-600 text-white hover:bg-blue-500`;

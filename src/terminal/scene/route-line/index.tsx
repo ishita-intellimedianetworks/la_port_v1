@@ -137,29 +137,27 @@ function hexRgb(hex: string): string {
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
 }
 
-// ── In-scene turn arrow (AR car-HUD style) ──────────────────────────────────
+// In-scene turn arrow (AR car-HUD style)
 // A single floating arrow placed at the NEXT bend in the route, pointing the way
 // you'll head after the turn — like a heads-up nav arrow over the road. Sized in
 // metres (scaled by W at runtime).
 const TURN_ARROW_SIZE_M = 1.7;
-const TURN_ARROW_LIFT_M = 1.9;  // floats well above the road (visible from afar)
-// const TURN_ARROW_COLOR = "#8fd0ff"; // used by the (currently disabled) arrow mesh
-const TURN_MIN_DEG = navConfig.logic.turnMinDeg; // bend sharper than this = a turn
+const TURN_ARROW_LIFT_M = 1.9;
+const TURN_MIN_DEG = navConfig.logic.turnMinDeg;
 const RIGHT_IS_POSITIVE_CROSS = navConfig.logic.rightIsPositiveCross;
-// In-plane tilt of the floating arrow toward the turn side (↖ / ↗).
 const TURN_ARROW_TILT = 0.55;
 
 /** A sleek slim arrow (head + thin shaft) pointing +Y, ~1 unit tall (scaled by
  *  W per frame). */
 function buildArrowGeom(): THREE.ShapeGeometry {
   const s = new THREE.Shape();
-  s.moveTo(0, 1.05);     // tip
-  s.lineTo(0.4, 0.5);    // head right (slim)
+  s.moveTo(0, 1.05);
+  s.lineTo(0.4, 0.5);
   s.lineTo(0.14, 0.5);
-  s.lineTo(0.14, 0);     // thin shaft
+  s.lineTo(0.14, 0);
   s.lineTo(-0.14, 0);
   s.lineTo(-0.14, 0.5);
-  s.lineTo(-0.4, 0.5);   // head left
+  s.lineTo(-0.4, 0.5);
   s.closePath();
   return new THREE.ShapeGeometry(s);
 }
@@ -183,8 +181,8 @@ function makeRouteTexture(): THREE.Texture {
   const g = ctx.createLinearGradient(0, 0, 0, 64);
   g.addColorStop(0.0, `rgba(${core}, 0)`);
   g.addColorStop(0.12, `rgba(${core}, 0)`);
-  g.addColorStop(0.2, `rgba(${casing}, 0.95)`); // casing edge
-  g.addColorStop(0.34, `rgba(${core}, 1)`); // bright core
+  g.addColorStop(0.2, `rgba(${casing}, 0.95)`);
+  g.addColorStop(0.34, `rgba(${core}, 1)`);
   g.addColorStop(0.66, `rgba(${core}, 1)`);
   g.addColorStop(0.8, `rgba(${casing}, 0.95)`);
   g.addColorStop(0.88, `rgba(${core}, 0)`);
@@ -268,7 +266,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     return;
   }
 
-  // World units per metre (human-scale sizing, independent of model bounds).
   const mpu = ctrl.getMetersPerUnit() || 0.5;
   const W = 1 / mpu; // 1 metre in world units
   const width = M_LINE_W * W;
@@ -320,7 +317,7 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
   // most MAX_GROUND_PROBES_PER_FRAME per frame — beyond the budget they draw at
   // the navmesh Y for a frame or two until their raycast lands.
   let probesLeft = MAX_GROUND_PROBES_PER_FRAME;
-  if (floorCache.ys.size > 4096) floorCache.ys.clear(); // unbounded-session guard
+  if (floorCache.ys.size > 4096) floorCache.ys.clear();
   const resolveY = (i: number, x: number, fallbackY: number, z: number) => {
     if (i === 0) {
       // Foot moves every frame — only re-raycast the scene once it has travelled
@@ -338,7 +335,7 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     const k = yKey(x, z);
     const cached = floorCache.ys.get(k);
     if (cached !== undefined) return cached;
-    if (probesLeft <= 0) return fallbackY; // budget spent — navmesh Y until resolved
+    if (probesLeft <= 0) return fallbackY;
     probesLeft--;
     const gy = groundYAt(scene, x, z, fallbackY);
     floorCache.ys.set(k, gy);
@@ -357,7 +354,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     const len = Math.hypot(dx, dz) || 1;
     dx /= len;
     dz /= len;
-    // Perpendicular in the XZ ground plane.
     const nx = -dz;
     const nz = dx;
     const y = resolveY(i, _px[i], _py[i], _pz[i]) + lift;
@@ -368,7 +364,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     pos[off + 3] = _px[i] - nx * half;
     pos[off + 4] = y;
     pos[off + 5] = _pz[i] - nz * half;
-    // V spans the width 0→1 so the route gradient renders across the line.
     const uo = i * 4;
     uv[uo] = 0;
     uv[uo + 1] = 0;
@@ -381,7 +376,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
   setup.geom.setDrawRange(0, (n - 1) * 6);
   ribbon.visible = true;
 
-  // Destination: small ring on the spot + a small pin floating just above it.
   const li = n - 1;
   const groundY = resolveY(li, _px[li], _py[li], _pz[li]) + lift;
   if (ring) {
@@ -396,7 +390,7 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     pin.scale.setScalar(M_PIN * W);
   }
 
-  // ── Floating turn arrow at the NEXT bend (AR car-HUD style) ───────────────
+  // Floating turn arrow at the NEXT bend (AR car-HUD style)
   // A camera-facing arrow hovers above the next turn, tilted toward the turn
   // side (↖ / ↗) — sleek, always-on-top, readable from a distance. Densified
   // in-segment samples are collinear (bend angle ≈ 0) so the detection still
@@ -425,7 +419,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
         resolveY(turnIdx, _px[turnIdx], _py[turnIdx], _pz[turnIdx]) + (TURN_ARROW_LIFT_M + M_LIFT) * W,
         _pz[turnIdx],
       );
-      // Billboard to the camera, then tilt in-plane toward the turn side.
       turnArrow.quaternion.copy(camera.quaternion);
       turnArrow.rotateZ(isRight ? -TURN_ARROW_TILT : TURN_ARROW_TILT);
       turnArrow.scale.setScalar(TURN_ARROW_SIZE_M * W);
@@ -465,7 +458,6 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
   // paintNavFrame never hits them (it must hit the model floor, not the route).
   const noRaycast = () => null;
 
-  // Pin + ring geometry are authored at unit=1 and scaled to metres per frame.
   return (
     <>
       {/* Route line — depth-tested; sits on the raycast ground. */}

@@ -20,7 +20,6 @@ const SPEEDS = [1, 5, 10] as const;
  *  setting 5× on the map left the dock showing a stale 1× (and vice versa). */
 export function SpeedControl({ ctrlRef, vertical = false }: { ctrlRef: RefObject<PlayerControllerHandle | null>; vertical?: boolean }) {
   const [v, setV] = useState(navConfig.logic.defaultSpeedMult);
-  // Keep in sync with the controller, so the two mounted copies agree.
   useEffect(() => {
     const id = setInterval(() => {
       const cur = ctrlRef.current?.getSpeedMultiplier();

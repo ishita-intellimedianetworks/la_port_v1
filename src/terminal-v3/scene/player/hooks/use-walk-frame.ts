@@ -45,7 +45,7 @@ const _probeCache: {
   nodeIdx: number;
 } = { zone: "", groupIdx: -1, nodeIdx: -1 };
 
-// ── Walk-start ease-in ───────────────────────────────────────────────────────
+// Walk-start ease-in
 // The player otherwise jumps to full walking speed on frame one, which reads as
 // a jerky, too-fast start (and coincides with the panel close + camera handoff).
 // Ramp speed 0→1 over WALK_RAMP_SEC with a smoothstep so the walk glides into
@@ -53,7 +53,7 @@ const _probeCache: {
 const WALK_RAMP_SEC = 0.7;
 const _walkRamp = { prevMoving: false, t: 1 };
 
-// ── Movement-direction steering ──────────────────────────────────────────────
+// Movement-direction steering
 // Waypoints are sparse (one per corner), so heading straight at path[pathI]
 // snaps the movement vector the instant pathI advances — a visible lateral
 // jerk at every bend. Instead the walk direction eases toward the current
@@ -68,10 +68,10 @@ const _walkRamp = { prevMoving: false, t: 1 };
 // deviation from the drawn route is a few tens of cm at most (the Y probe
 // already tolerates brief off-mesh corner cuts). Module-level (single
 // player), reset per walk.
-const STEER_RATE = 8;      // 1/s — ~95% converged in ~0.4s
+const STEER_RATE = 8;
 const _moveDir = { x: 0, z: 0 };
 
-// ── Spatial grid for the floor probe ─────────────────────────────────────────
+// Spatial grid for the floor probe
 // Buckets a zone's navmesh triangles into XZ cells so the per-frame "which
 // triangle am I on" probe tests only the handful under the player instead of
 // scanning the whole zone. Dense navmeshes (e.g. the stadium's ~8.6k triangles
@@ -165,10 +165,8 @@ export interface UseWalkFrameOptions {
   pathfinding:  Pathfinding;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Plain function — NOT a hook or component, so its parameters are not subject
 // to the react-hooks/immutability rule. All ref mutations happen here.
-// ─────────────────────────────────────────────────────────────────────────────
 function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
   const {
     prevEnabled, idleOn, idleAcc,
@@ -186,7 +184,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
   // drift away from the advertised ETA.)
   const navSpeedUnits = navConfig.logic.walkMps / navConfig.logic.displayMetersPerUnit;
 
-  // ── First-enable trigger ───────────────────────────────────────────────────
   if (enabled && !prevEnabled.current) {
     prevEnabled.current = true;
     if (!skipFirstIdle?.current) {
@@ -196,12 +193,11 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
   }
 
   if (!enabled) {
-    // ── Look-only mode ────────────────────────────────────────────────────────
+    // Look-only mode
     // The player is in first-person but walking is disabled — typically because
     // the floor has no navmesh yet (navReady false → `enabled` false). We still
     // want drag + idle rotation to move the camera so the user can look around;
     // we just skip all pathfinding walking and floor-height probing.
-    //
     // Gated on `lookEnabled` (NOT just `!enabled`) so this never runs during a
     // cinematic fly — there `lookEnabled` is false and we fully yield the camera.
     if (lookEnabled) {
@@ -222,10 +218,8 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     return;
   }
 
-  // Idle frames re-arm the walk-start ease-in so the NEXT walk ramps from 0.
   if (!moving.current) _walkRamp.prevMoving = false;
 
-  // ── Floor transition: GSAP drives prog.t 0 → 1 ────────────────────────────
   if (transition.active.current) {
     const t = transition.prog.current.t;
     pos.current.lerpVectors(transition.start.current, transition.end.current, t);
@@ -239,7 +233,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
 
   const dt = Math.min(delta, 0.1);
 
-  // ── Idle drift rotation ────────────────────────────────────────────────────
   if (idleOn.current && !moving.current) {
     const step = IDLE_ROTATE_SPEED * dt;
     yawT.current    += step;
@@ -247,7 +240,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     if (idleAcc.current >= Math.PI * 2) idleOn.current = false;
   }
 
-  // ── Waypoint walking ───────────────────────────────────────────────────────
   if (moving.current && path.current.length > 0) {
     const wp     = path.current[pathI.current];
     const dx     = wp.x - pos.current.x;
@@ -258,7 +250,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     // first moment of the walk glides in instead of snapping to full pace.
     if (!_walkRamp.prevMoving) {
       _walkRamp.t = 0;
-      // Fresh walk — no inherited steering direction from the previous one.
       _moveDir.x = 0;
       _moveDir.z = 0;
     }
@@ -309,7 +300,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
         mx = _moveDir.x + (ux - _moveDir.x) * a;
         mz = _moveDir.z + (uz - _moveDir.z) * a;
         const ml = Math.hypot(mx, mz);
-        // Degenerate blend (near-reversal / collapsed vector) → go direct.
         if (ml < 0.3 || (mx * ux + mz * uz) / Math.max(ml, 1e-6) < 0.2) {
           mx = ux; mz = uz;
         } else {
@@ -322,7 +312,7 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       pos.current.z += mz * step;
     }
 
-    // ── Look-ahead: aim yaw at a point ahead on the path ──────────────────
+    // Look-ahead: aim yaw at a point ahead on the path
     // Scaled LINEARLY with speed so the look-ahead horizon is constant in
     // TIME (the same seconds-ahead at any multiplier). With the old √mult
     // scaling the horizon shrank as speed rose, so at 5× the yaw target
@@ -350,7 +340,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     // Smooth yawT toward the look-ahead direction rather than snapping it.
     // This absorbs the small per-waypoint direction jumps that cause jitter
     // when pathI advances and the look-ahead point shifts on the path.
-    //
     // Frame-rate independent: `rate * dt` was a 60fps approximation. At 30fps
     // it under-smoothed (target leaked through), at 120fps it over-smoothed
     // (camera lagged). 1 - exp(-rate * dt) gives the same exponential decay
@@ -359,8 +348,7 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     yawT.current = lerpAngle(yawT.current, yaw(pos.current, _ahead), yawAlpha);
   }
 
-  // ── Floor Y — barycentric probe, WHILE MOVING ───────────────────────
-  //
+  // Floor Y — barycentric probe, WHILE MOVING
   // Probe runs only while walking — that's the only time its result is used
   // (the vertical-follow lerp below). When idle the camera Y is held, so the
   // probe would be wasted work. Critically, when the idle spot isn't inside a
@@ -368,7 +356,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
   // every triangle — thousands on the stadium) EVERY frame; running that while
   // standing still hitched the frame loop and made the idle auto-rotation look
   // jerky. Gating on `moving` removes that cost entirely when idle.
-  //
   // Uses the navmesh triangle the player is XZ-over and interpolates Y from
   // its three vertex Ys via barycentric weights. The fast-path / slow-path
   // disambiguation handles stacked triangles at stair seams without picking
@@ -385,7 +372,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const groups: any[][] = zoneData.groups ?? [];
 
-      // Reset cache if zone changed
       if (_probeCache.zone !== zone) {
         _probeCache.zone = zone;
         _probeCache.groupIdx = -1;
@@ -423,7 +409,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       // the bias matches the actual climb rate and the probe picks the
       // triangle the player is genuinely on. When idle, fall back to the
       // player's current feet Y.
-      //
       // `segDY` is the absolute Y delta of the current path segment — used
       // below to decide whether to TRUST the segment-interpolated Y directly
       // (slope walking) or fall back to the navmesh-probe Y (flat walking).
@@ -440,7 +425,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
         const sdz = wp.z - prev.z;
         const segLenSq = sdx * sdx + sdz * sdz;
         if (segLenSq < 1e-9) return wp.y;
-        // Scalar projection of (pos - prev) onto (wp - prev), clamped to [0,1].
         const tdx = pos.current.x - prev.x;
         const tdz = pos.current.z - prev.z;
         let tParam = (tdx * sdx + tdz * sdz) / segLenSq;
@@ -477,7 +461,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       // GRID PATH: test only the triangles bucketed under the player's XZ cell
       // (biased by expectedSurfaceY, same as the full scan). Bounds the cost to
       // a few triangles regardless of how many the zone has.
-      //
       // HEIGHT-BAND GUARD: candidates outside GRID_Y_BAND of the expected
       // surface are rejected outright, not just deprioritised. On stacked
       // multi-level meshes (SoFi: bowl/concourse ABOVE a lower walkway) the
@@ -524,7 +507,7 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       // few frames is visually perfect: the path waypoints carry the real Y
       // and the slope branch below tracks climbs, so nothing drifts.
 
-      // ── Pick Y source ─────────────────────────────────────────────────
+      // Pick Y source
       // On SLOPING path segments (stairs / ramps) the probe's per-triangle
       // Y can step when crossing triangle boundaries — even with a smoothly
       // authored slope, the welder (`weldToSingleGroup` in ../navmesh) can
@@ -533,7 +516,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       // it's a linear interpolation between two waypoint Ys, and XZ also
       // moves linearly along the segment, so segment-interpolated Y is the
       // ground truth climb curve.
-      //
       // SLOPE_Y_THRESHOLD = 0.05m: a 5cm Y delta over a path segment marks
       // it as inclined (anything less is treated as float noise on a flat
       // segment, where the probe is more accurate — it tracks small
@@ -547,11 +529,10 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     }
   }
 
-  // ── Vertical follow ────────────────────────────────────────────────
+  // Vertical follow
   // Only adjust Y while ACTIVELY WALKING — the lerp smooths the small Y
   // discontinuities the probe produces when crossing navmesh triangles on a
   // slope/stairs.
-  //
   // When IDLE we deliberately do NOT re-snap pos.y to the probe. The XZ isn't
   // moving, so the correct height is already set — by the spawn navmesh snap,
   // by a teleport, or by the last walking frame. Re-snapping to the probe every
@@ -568,7 +549,7 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     pos.current.y += (targetY.current - pos.current.y) * yAlpha;
   }
 
-  // ── Smooth yaw ────────────────────────────────────────────────────────────
+  // Smooth yaw
   // Two regimes:
   //   • Walking: constant-rate clamp at MAX_TURN_SPEED — keeps corner tracking
   //     responsive (`yawT` is itself being eased by the look-ahead each frame,
@@ -588,7 +569,7 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     rot.current.y = lerpAngle(rot.current.y, yawT.current, yawAlpha);
   }
 
-  // ── Pitch leveling while walking ──────────────────────────────────────────
+  // Pitch leveling while walking
   // If the user clicked a target after pitching the camera up/down (e.g. the
   // cursor was high on the screen), keep the head pitched at that angle while
   // walking would feel wrong — the player marches toward the point looking
@@ -601,14 +582,10 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     if (Math.abs(rot.current.x) < 1e-4) rot.current.x = 0;
   }
 
-  // ── Push to camera ─────────────────────────────────────────────────────────
   camera.position.copy(pos.current);
   camera.rotation.set(rot.current.x, rot.current.y, rot.current.z, "YXZ");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hook — only wires useFrame; all logic delegated to runWalkFrame above.
-// ─────────────────────────────────────────────────────────────────────────────
 export function useWalkFrame(opts: UseWalkFrameOptions): void {
   useFrame((_, delta) => runWalkFrame(opts, delta));
 }

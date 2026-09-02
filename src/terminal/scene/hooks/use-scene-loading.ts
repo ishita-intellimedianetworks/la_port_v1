@@ -11,7 +11,6 @@ import { useMinimapBounds } from "./use-minimap-bounds";
 import { crossfadeReveal } from "@/shared/ui/screens/loading-screen/reveal";
 import type { SharedUniforms } from "@/shared/ui/screens/loading-screen/reveal";
 
-// ── Per-floor model callbacks ─────────────────────────────────────────────────
 export interface ModelCallbacks {
   onLoaded: () => void;
   onBounds: (bbox: THREE.Box3) => void;
@@ -66,7 +65,6 @@ export function useSceneLoading({
   const onRevealDoneRef = useRef(onRevealDone);
   onRevealDoneRef.current = onRevealDone;
 
-  // ── Model loading gate ────────────────────────────────────────────────────
   const modelLoadedCount = useRef(0);
   const [allModelsLoaded, setAllModelsLoaded] = useState(false);
   // Latest GLB key whose onLoaded has fired. Drives the furniture-toggle
@@ -75,12 +73,11 @@ export function useSceneLoading({
   // committed to the scene (no race with the prior floor's leftover meshes).
   const [latestLoadedKey, setLatestLoadedKey] = useState<string | null>(null);
 
-  // ── Minimap bounds ────────────────────────────────────────────────────────
   const { setFloorBounds, setModelBounds } = useMinimapBounds({
     activeFloor, navReady, setMinimapData,
   });
 
-  // ── Navmesh zone registration ─────────────────────────────────────────────
+  // Navmesh zone registration
   // Re-register when the active floor's navmesh remounts. navReady becomes
   // false on every floor switch and flips true again once the new zone is set.
   const handleZoneReady = useCallback((floorId: string) => {
@@ -93,7 +90,7 @@ export function useSceneLoading({
     onReady: handleZoneReady,
   });
 
-  // ── Floor change → invalidate navReady until the new zone registers ──────
+  // Floor change → invalidate navReady until the new zone registers
   // The active-floor teleport effect in use-scene-navigation gates on
   // navReady; resetting it here makes that effect wait for the new floor's
   // navmesh GLB to load + register before snapping the player onto it.
@@ -108,7 +105,7 @@ export function useSceneLoading({
     [registerFloor],
   );
 
-  // ── Fire onLoaded + reveal callbacks once all gates are open ──
+  // Fire onLoaded + reveal callbacks once all gates are open
   // `assetsWarmed` (the other venues' byte warm, fed by the provider) is a
   // gate too — ARCHVIZ style: the crossfade only starts once the WHOLE loader
   // is about to complete, so the point cloud stays up through the download
@@ -142,7 +139,7 @@ export function useSceneLoading({
     }
   }, [navReady, allModelsLoaded, previewReady, assetsWarmed, progressDrivenReveal, onLoaded]);
 
-  // ── Deferred crossfade for the preview path (Smart-Loader demo timing) ───
+  // Deferred crossfade for the preview path (Smart-Loader demo timing)
   // The demo waits for its smoothed displayedProgress to reach ≥ 0.995 before
   // revealMesh(): the cloud finishes filling in at the bar's pace, holds for
   // a 300ms beat, then the mesh dithers in over 3.5s while the cloud fades
@@ -172,7 +169,6 @@ export function useSceneLoading({
     return () => clearTimeout(beat);
   }, [progressDrivenReveal, revealCaughtUp]);
 
-  // ── Stable per-key model callbacks ───────────────────────────────────────
   const callbacksCacheRef = useRef<Record<string, ModelCallbacks>>({});
   const modelCallbacksFor = useCallback(
     (key: string): ModelCallbacks => {

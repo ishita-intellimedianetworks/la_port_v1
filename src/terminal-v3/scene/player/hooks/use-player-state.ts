@@ -22,7 +22,6 @@ export function usePlayerState({
 }: UsePlayerStateOptions): PlayerState {
   const startY = startPosition[1] + cameraHeight;
 
-  // ── Position & orientation ────────────────────────────────────────────────
   const pos     = useRef(new THREE.Vector3(startPosition[0], startY, startPosition[2]));
   const targetY = useRef(startY);
   const rot     = useRef(new THREE.Euler(startRotation[0], startRotation[1], startRotation[2]));
@@ -31,7 +30,6 @@ export function usePlayerState({
   const initPos = useRef(new THREE.Vector3(startPosition[0], startY, startPosition[2]));
   const snapped = useRef(false);
 
-  // ── Zone & path ───────────────────────────────────────────────────────────
   const currentZone   = useRef(initialZone);
   const path          = useRef<THREE.Vector3[]>([]);
   const pathI         = useRef(0);
@@ -41,13 +39,11 @@ export function usePlayerState({
   const onNavComplete = useRef<(() => void) | null>(null);
   const speedMult     = useRef(navConfig.logic.defaultSpeedMult);
 
-  // ── Idle camera drift ─────────────────────────────────────────────────────
   const idleOn      = useRef(false);
   const idleAcc     = useRef(0);
   const prevEnabled = useRef(false);
   const pitchLock   = useRef(false);
 
-  // ── Floor transition (GSAP drives transProg.t 0 → 1) ─────────────────────
   const transActive   = useRef(false);
   const transStart    = useRef(new THREE.Vector3());
   const transEnd      = useRef(new THREE.Vector3());

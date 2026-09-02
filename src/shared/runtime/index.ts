@@ -1,7 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
 
 // Cache the mobile-detect once so we don't re-check per material.
 let _isLowPower: boolean | null = null;
@@ -13,7 +9,6 @@ function isLowPower(): boolean {
   if (typeof navigator !== "undefined" && (navigator.hardwareConcurrency ?? 8) <= 4) return (_isLowPower = true);
   return (_isLowPower = false);
 }
-
 
 export default isLowPower;
 

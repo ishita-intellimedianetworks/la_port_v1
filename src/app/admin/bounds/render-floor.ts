@@ -48,9 +48,6 @@ export function derive(b: WorldBbox): Bbox {
   };
 }
 
-// ── Loading ──────────────────────────────────────────────────────────────────
-
-// Decoder path matches chunk-manager so the browser reuses the cached WASM.
 let _draco: DRACOLoader | null = null;
 function dracoLoader(): DRACOLoader {
   if (!_draco) {
@@ -74,7 +71,6 @@ export async function loadGlb(src: File | string): Promise<THREE.Object3D> {
   }
 }
 
-/** The GLB's own extents. */
 export function measureBbox(scene: THREE.Object3D): WorldBbox {
   const b = new THREE.Box3().setFromObject(scene);
   return {
@@ -83,8 +79,6 @@ export function measureBbox(scene: THREE.Object3D): WorldBbox {
     minZ: b.min.z, maxZ: b.max.z,
   };
 }
-
-// ── Sizing ───────────────────────────────────────────────────────────────────
 
 /** Both dims come from the bbox, so image aspect == world aspect. */
 export function pixelDimsFor(bbox: Bbox, ppm: number): { w: number; h: number } {
@@ -107,8 +101,6 @@ export function maxTextureSize(): number {
   }
   return _maxTex;
 }
-
-// ── Render ───────────────────────────────────────────────────────────────────
 
 // One renderer for the session: context release is GC-driven, so allocating per
 // render exhausts the browser's WebGL contexts and render() silently no-ops.
@@ -164,7 +156,6 @@ export async function renderTopDown(
     addLighting(rs, bbox);
   }
 
-  // up = +Z looking down puts pixel(0,0) at (maxX, maxZ). See the file header.
   const cam = new THREE.OrthographicCamera(
     -bbox.dx / 2, bbox.dx / 2,
      bbox.dz / 2, -bbox.dz / 2,
@@ -176,7 +167,6 @@ export async function renderTopDown(
 
   renderer.render(rs, cam);
 
-  // toBlob, not toDataURL: at 4k the base64 string blocks the main thread.
   const blob = await new Promise<Blob | null>((res) =>
     rotate180(renderer.domElement).toBlob(res, "image/png"),
   );

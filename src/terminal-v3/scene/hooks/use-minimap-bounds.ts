@@ -49,13 +49,11 @@ export function useMinimapBounds({
   const [modelBoundsVersion, setModelBoundsVersion] = useState(0);
   const floorBoundsRef = useRef<Record<string, FloorBounds>>({});
 
-  // Store navmesh floor bounds when they arrive
   const setFloorBounds = useCallback((bounds: Record<string, FloorBounds>) => {
     floorBoundsRef.current = bounds;
   }, []);
 
   // Store model bounds when a model reports them.
-  //
   // The version bump is what makes the minimap re-resolve, so it must happen
   // ONLY on a real change. Bumping unconditionally turned every repeated report
   // of identical bounds into a re-render — and the reporter re-runs whenever the
@@ -67,7 +65,6 @@ export function useMinimapBounds({
     setModelBoundsVersion((v) => v + 1);
   }, []);
 
-  // Resolve minimap data whenever active floor, navReady, or bounds change
   useEffect(() => {
     if (!activeFloor.floorPlanUrl || !navReady) return;
 

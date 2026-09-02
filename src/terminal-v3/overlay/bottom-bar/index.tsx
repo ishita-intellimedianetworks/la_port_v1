@@ -118,7 +118,6 @@ function BarButton({
   // Small on purpose — at 1.1 the circles start colliding with their 12px gaps,
   // and the dock reads as jumping rather than responding. The press is a 1px
   // nudge DOWN with no scale-down, so the button never fights its own hover.
-  //
   // Rest colour is a class, not an inline style, so `hover:text-white` can win;
   // the active state is the one case that sets colour inline.
   return (

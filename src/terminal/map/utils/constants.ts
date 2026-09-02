@@ -25,12 +25,11 @@ export const MAP_FULL_CHROME_Y = 150;
 // 158 → 176: the gate rows now carry the crowd "● Moderate" chip beside the
 // name, which at 158 truncated the gate names to a couple of characters.
 export const SIDE_LEGEND_W = 176;
-export const ZOOM_FACTOR = 1.18; // per wheel tick
+export const ZOOM_FACTOR = 1.18;
 
 // Zoom is a plain canvas scale about the letterboxed plan, so 1 is exactly "the
 // terminal fills the canvas" — the framing the map opens on and the one the
 // recenter button returns to. Below 1 the context layer comes into view.
-//
 // The zoomed-OUT limit is not a constant: it is derived each frame from how far
 // the context layer actually reaches, so zooming out stops when the whole of it
 // is on screen rather than at some number that happens to suit one site. This
@@ -65,8 +64,8 @@ export const PLAYER_STROKE = "#ffffff";
 // Route colours come from the central nav-config so the minimap matches the 3D
 // route exactly. Bright blue core over a darker-blue casing, with a blue ETA
 // pill on the line. Replaces the old flat white dashed path.
-export const PATH_COLOR = navConfig.color.routeCore; // bright blue core
-export const ROUTE_CASING = navConfig.color.routeCasing; // darker blue casing
+export const PATH_COLOR = navConfig.color.routeCore;
+export const ROUTE_CASING = navConfig.color.routeCasing;
 export const ROUTE_PILL_BG = navConfig.color.pillBg;
 export const ROUTE_PILL_TEXT = navConfig.color.pillText;
 export const DEST_COLOR = navConfig.color.destRed;

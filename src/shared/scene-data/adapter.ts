@@ -25,7 +25,7 @@ import type { DestinationsByCategory } from "../types";
 
 type V3 = [number, number, number];
 
-// ── Engine settings ───────────────────────────────────────────────────────────
+// Engine settings
 // Tuning for THIS model, not authored content — which is why they live here
 // rather than in site.json.
 
@@ -45,8 +45,6 @@ const ROUTE_SANITIZE = false;
 
 const round = (v: number): number => Math.round(v * 10000) / 10000;
 const v3 = (a: readonly number[]): V3 => [round(a[0]), round(a[1]), round(a[2])];
-
-// ── Zones become the engine's destination categories ──────────────────────────
 
 const dests: DestinationsByCategory = {};
 for (const layout of layouts) {
@@ -82,8 +80,6 @@ for (const layout of layouts) {
   } as any);
 }
 
-// ── The single node, whose one floor is the terminal model ────────────────────
-
 const floors = [
   {
     id: "terminal",
@@ -99,14 +95,12 @@ const floors = [
     // it follows the asset base to a CDN and there is no second copy in public/
     // to keep in step. `assets.navmeshUrl` is the fallback for a site that
     // authors no stream block.
-    //
     // THIS IS THE v1 URL. The node tree is built once at import, before any
     // route exists, so it can only name one of the two bakes — and /v2 walks on
     // its OWN navmesh, which SceneContent substitutes from the active variant
     // (see `navmeshUrl` there). Leaving v1 here means a tree that never declares
     // a variant still gets a navmesh that matches the chunks it is streaming.
     navmeshUrl: scene.stream ? STREAM_VARIANTS.v1.navmeshUrl : scene.assets.navmeshUrl!,
-    // Legacy map plan; this site uses `map.plan` instead.
     floorPlanUrl: scene.assets.floorPlan ?? null,
     // Where first person begins. Authored as `cameras.spawn`, NOT derived from
     // the start layout: every layout here is an aerial framing (walkable:

@@ -24,6 +24,25 @@ import type { StreamVariantId } from "@/streaming/config";
 import SceneGraph from "./scene-graph";
 import Overlays from "./overlays";
 
+/**
+ * V3's OWN SPAWN — where first person begins and where Home returns to, for
+ * this route only.
+ *
+ * `cameras.spawn` in site.json is shared with `/` and `/v2`, so editing it
+ * there would move all three. This patches the single floor ("terminal")
+ * instead: every reader of the start pose — Home, the dollhouse fly-in, the
+ * first-person entry — prefers the active floor's over the site node's.
+ *
+ * TAKEN FROM cp_012 in la-port-zone-c5-cp-v4.glb via /extract-pos. That tool
+ * prints an XYZ euler, [3.0914, 0.2333, -3.13]; the rotation below is the YXZ
+ * reorder the camera is actually set with, so re-derive it rather than pasting
+ * the printed triple. Roll comes out at 0, i.e. the authored camera is level.
+ */
+const V3_SPAWN = {
+  startPosition: [-1326.861, 27.735, -224.4829] as [number, number, number],
+  startRotation: [0.0489, 2.9081, 0] as [number, number, number],
+};
+
 interface TerminalExperienceProps {
   /** Optional — defaults to the single configured site. */
   siteId?: string;
@@ -40,7 +59,12 @@ export default function TerminalExperienceV3({
 }: TerminalExperienceProps) {
   return (
     <StreamVariantProvider id={streamVariant}>
-    <TerminalProvider nodeId={siteId} onReady={onReady} dollhouseFirstVisit>
+    <TerminalProvider
+      nodeId={siteId}
+      onReady={onReady}
+      dollhouseFirstVisit
+      floorPatches={{ terminal: V3_SPAWN }}
+    >
       <main className="absolute h-full w-full overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
           <CanvasWithWrapper>

@@ -81,12 +81,10 @@ const REVEAL_PEAK = 0.75;
 // and its Points object is added to the scene AS SOON as it resolves — not
 // after Promise.all of all parts. That lets the silhouette grow alongside the
 // HUD progress bar instead of popping in at 100%.
-//
 // To still look like "one whole model" the per-floor materials are driven by
 // a single shared uTime / uReveal computed once per frame here, and they all
 // reference the same sharedUniforms.uGlobalAlpha — so reveal and crossfade
 // happen in perfect lockstep across every floor.
-//
 // Rendered outside <Suspense> so it appears while the GLBs are still loading.
 // Smooths drei's raw useProgress into a monotonic, eased value and writes it
 // to useProgressStore.revealProgress every frame. ONE source of truth shared
@@ -115,7 +113,6 @@ function ProgressSmoother() {
   // useGLTF resolves during SingleModelContent's render, which triggers a
   // "Cannot update X while rendering Y" warning. Polling once per frame is
   // fine — progress is already smoothed below.
-  //
   // The smoother uses frame-rate-independent exponential decay. The main
   // curve runs at a low rate so the reveal *feels* like it's settling
   // (time constant = 1 / BASE_RATE; at 0.8/s the smoother takes ~3.7s to
@@ -273,7 +270,6 @@ function ScenePreview({
     // crossfadeReveal() in useSceneLoading once everything is mounted and the
     // bar has caught up. Cloud fades out as the patched mesh materials dither
     // in (same uniform).
-    //
     // Two-stage cleanup so the cloud can't linger after the crossfade:
     //   1. Visibility-off at >= 0.9 — three.js skips the draw call entirely.
     //   2. Dispose at >= 0.95 — frees GPU geometry/material, removes the
@@ -338,7 +334,6 @@ function RevealBlurFade({ sharedUniforms }: { sharedUniforms: SharedUniforms }) 
     }
   }, []);
 
-  // Clear any inline styles if we unmount mid-drive (e.g. first-person entry).
   useEffect(() => {
     const el = gl.domElement;
     return () => {
@@ -351,7 +346,7 @@ function RevealBlurFade({ sharedUniforms }: { sharedUniforms: SharedUniforms }) 
   useFrame(() => {
     if (done.current) return;
     const a = sharedUniforms.uGlobalAlpha.value;
-    if (a <= 0) return; // crossfade not started — class-based blur owns the canvas
+    if (a <= 0) return;
 
     const el = gl.domElement;
     if (!driving.current) {
@@ -517,7 +512,6 @@ export function SceneContent({
   // mounted — the two models live in very different world units.
   const setWorldBounds = useWorldStore((s) => s.setBounds);
 
-
   const onRevealStart = useCallback(() => {
     onRevealStartProp?.();
   }, [onRevealStartProp]);
@@ -535,9 +529,7 @@ export function SceneContent({
     onRevealDoneRef.current?.();
   }, []);
 
-
-
-  // ── Single-model mounting ────────────────────────────────────────────────
+  // Single-model mounting
   // Dollhouse and first-person use the SAME model, so the key is the active
   // floor id in BOTH views. Keeping it stable means switching dollhouse ↔
   // first-person does NOT remount/re-parse the model — no black flash, no
@@ -551,7 +543,7 @@ export function SceneContent({
       : activeFloor?.modelUrl;
   const currentModelKey = activeFloor?.id ?? "_none";
 
-  // ── Adaptive streaming — BOTH views ───────────────────────────────────────
+  // Adaptive streaming — BOTH views
   // One manifest feeds the overview and the walk. The dollhouse used to draw a
   // separate decimated GLB (`assets.modelUrl`); it now streams the same chunks
   // with `stream.dollhouse`, which puts every one of them on the far tier —
@@ -559,12 +551,10 @@ export function SceneContent({
   // hidden. Adaptive banding still has nothing to give a fixed vantage that
   // frames everything, which is why that config switches the cull off and
   // flattens the tiers rather than reaching for a second asset.
-  //
   // The payoff is the transition: StreamedModel stays MOUNTED across the view
   // change and only its config swaps, so first person re-mounts the overview's
   // chunks from the decoded cache and downloads just what the near bands add.
   const streaming = !!activeFloor?.streamed;
-  // The walking half of that, for the things tuned to a camera on the ground.
   const walking = streaming && viewMode === "firstPerson";
   // Desktop on the first render — which is also what SSR produces, so hydration
   // is stable — then the real device profile once mounted.
@@ -623,7 +613,6 @@ export function SceneContent({
   // runs ONLY on the very first load; every later swap (venue changes,
   // dollhouse re-entries) just shows the cached/parsed model directly, with
   // the blackout covering the swap.
-  //
   // Two latches:
   //   • revealComplete — the first reveal finished. Without this, switching
   //     VENUES while still in the dollhouse (never having entered first
@@ -675,7 +664,6 @@ export function SceneContent({
     gl.domElement.classList.add("htl-main-revealing");
   }, [skipEffects, needsPreview, revealPastPeak, gl]);
 
-  // Final sharpen + unlock once the reveal transition has fully finished.
   useEffect(() => {
     if (skipEffects || !revealComplete) return;
     gl.domElement.classList.remove("htl-main-loading", "htl-main-revealing");
@@ -684,7 +672,6 @@ export function SceneContent({
 
   const roomZonesMapRef = useRef<Map<string, RoomZone[]>>(new Map());
 
-  // ── Loading, navmesh registration, minimap bounds ─────────────────────────
   const {
     navReady,
     allModelsLoaded,
@@ -709,14 +696,12 @@ export function SceneContent({
     onRevealDone: handleRevealDone,
   });
 
-  // ── Model bounds ───────────────────────────────────────────────────────────
   // STABLE IDENTITY, deliberately. ModelContent lists this callback in its
   // effect dependencies, and that effect traverses the entire GLB, recomputes
   // every bounding box and re-patches every material. Passing an inline arrow
   // here re-ran all of that on every render, wrote the world store each time
   // (which always notifies, since it bumps a version), and re-rendered this
   // component straight back — an unbounded loop over a 9 MB model.
-  //
   // The volatile reads go through a ref so the callback itself never changes.
   const boundsContext = useRef({
     viewMode,
@@ -733,7 +718,6 @@ export function SceneContent({
 
   const handleModelBounds = useCallback(
     (bbox: THREE.Box3) => {
-      // Fit the environment to this model.
       const centre = bbox.getCenter(new THREE.Vector3());
       const radius = bbox.getSize(new THREE.Vector3()).length() * 0.5;
       setWorldBounds({
@@ -743,7 +727,6 @@ export function SceneContent({
         max: [bbox.max.x, bbox.max.y, bbox.max.z],
       });
 
-      // Feed the minimap bounds, unless a dedicated bounds model does.
       const { viewMode: mode, boundsUrl, modelKey } = boundsContext.current;
       if (!(mode === "firstPerson" && boundsUrl)) {
         modelCallbacksFor(modelKey).onBounds(bbox);
@@ -752,8 +735,7 @@ export function SceneContent({
     [setWorldBounds, modelCallbacksFor],
   );
 
-
-  // ── Notify parent whenever a specific model key finishes loading ────────
+  // Notify parent whenever a specific model key finishes loading
   // The parent uses this to gate fade-out duration: it waits until the
   // destination model is actually in the scene tree before lowering the
   // blackout, so the user never sees the "model pops in after fade-out
@@ -765,7 +747,7 @@ export function SceneContent({
     if (latestLoadedKey) onModelLoadedRef.current?.(latestLoadedKey);
   }, [latestLoadedKey]);
 
-  // ── Force-finalize the crossfade uniform on entering first-person ────────
+  // Force-finalize the crossfade uniform on entering first-person
   // The progress smoother is exponential and asymptotes toward 1.0 without
   // reaching it. When the user clicks "enter" and we transition to first
   // person, the patched mesh materials' fragment shader is still discarding
@@ -778,7 +760,7 @@ export function SceneContent({
     if (sharedUniforms) sharedUniforms.uGlobalAlpha.value = 1.0;
   }, [viewMode, sharedUniforms]);
 
-  // ── Centralized furniture toggle ─────────────────────────────────────────
+  // Centralized furniture toggle
   // Runs whole-scene traversal whenever the active model changes (dollhouse ↔
   // first-person, or floor switches in first-person). The latched ref is
   // keyed on currentModelKey so each new model gets a fresh setup pass.
@@ -873,7 +855,6 @@ export function SceneContent({
     [setActiveRoomId],
   );
 
-  // ── Floor switching, zone sync, all navigation ────────────────────────────
   const { handleZoneChange } = useSceneNavigation({
     floors,
     pathfinding,
@@ -894,7 +875,7 @@ export function SceneContent({
     scene,
   });
 
-  // ── Enter-interior portal cinematic ───────────────────────────────────────
+  // Enter-interior portal cinematic
   // A FREE-camera fly (ignores the navmesh) from the live pose to the authored
   // transition camera — just outside the building's window — then a fade + model
   // swap to the interior floor. The player is disabled (cinematicActive) for the
@@ -960,7 +941,6 @@ export function SceneContent({
       if (cams.length === 0) { swap(); return; }
       setCinematicActive?.(true);
 
-      // yaw/pitch (roll-free) for a waypoint from its authored XYZ-Euler rotation.
       const toYP = (rot: [number, number, number]) => {
         const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2], "XYZ"));
         const e = new THREE.Euler().setFromQuaternion(q, "YXZ");
@@ -1130,7 +1110,6 @@ export function SceneContent({
           onLoaded={handleFurnitureLibraryLoaded}
         />
       )}
-
 
       {activeFloor && navmeshUrl && (
         <SingleNavmesh

@@ -40,7 +40,6 @@ export function SingleModelContent({
   const { actions } = useAnimations(animations, scene);
   const { gl, camera, scene: rootScene } = useThree();
 
-  // ── GPU warm-up ────────────────────────────────────────────────────────────
   // three compiles a material's shader program the FIRST time it enters the
   // frustum — which, mid-walk, is exactly when a turn sweeps the camera toward
   // unseen geometry: the walk froze ~1s on those corners. Compile every shader
@@ -54,7 +53,6 @@ export function SingleModelContent({
         await gl.compileAsync(scene, camera, rootScene);
         if (cancelled) return;
         // Textures still upload lazily on first draw — push them now too.
-        //
         // DESKTOP ONLY. Uploading a whole venue's texture set in one burst is a
         // VRAM spike, and a phone answers a spike it cannot fit by dropping the
         // WebGL context — which here is fatal rather than recoverable, because
@@ -119,7 +117,6 @@ export function SingleModelContent({
   useLayoutEffect(() => {
     if (!scene) return;
 
-    // Patch before first paint
     if (sharedUniforms) {
       patchMeshForReveal(scene, sharedUniforms);
     }

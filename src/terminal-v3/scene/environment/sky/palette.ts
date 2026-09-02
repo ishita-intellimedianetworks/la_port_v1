@@ -204,7 +204,6 @@ export function sampleSky(t: number, aim?: SunAim | null): SkySample {
   // even though its sun is lifted to the floor, and what stops an unlinked sun
   // from dragging a sunset around the sky with it.
   const elevation = sunElevation(t);
-  // The DISK, meanwhile, goes exactly where the light goes.
   const a = sunAngles(t, aim);
   const sunDir = sunRay(a.elevation, a.azimuth);
 
@@ -225,7 +224,6 @@ export function sampleSky(t: number, aim?: SunAim | null): SkySample {
       sunBase[2] * intensity,
     ]),
     sunBase: color(sunBase),
-    // haze = deep*1.4 + horizon*0.25, as the study built it.
     haze: color([
       deep[0] * 1.4 + horizon[0] * 0.25,
       deep[1] * 1.4 + horizon[1] * 0.25,
@@ -233,8 +231,6 @@ export function sampleSky(t: number, aim?: SunAim | null): SkySample {
     ]),
   };
 }
-
-// ── Scene lighting, derived from the same palette ────────────────────────────
 
 /**
  * Floor on the sun's elevation, in radians. 0.26 ≈ 15°.

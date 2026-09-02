@@ -91,7 +91,6 @@ export function useFadeTransition(): FadeTransitionAPI {
     };
 
     if (!waitUntil) {
-      // No predicate — use the static blackout hold (0 by default).
       if (BLACKOUT_VISIBLE_MS > 0) {
         timerRef.current = setTimeout(lower, BLACKOUT_VISIBLE_MS);
       } else {
@@ -100,10 +99,8 @@ export function useFadeTransition(): FadeTransitionAPI {
       return;
     }
 
-    // Already ready? Lower immediately.
     if (waitUntil()) { lower(); return; }
 
-    // Poll on rAF until ready or safety cap elapses.
     const start = performance.now();
     const tick = () => {
       if (!mountedRef.current) return;

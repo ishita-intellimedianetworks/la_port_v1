@@ -38,8 +38,6 @@ export type LayoutCamera = {
   target?: Vec3;
 };
 
-// ── site.json › stream — the adaptive chunk streamer ──────────────────────────
-
 /** One quality band. `distance` is metres from the camera to the chunk SURFACE
  *  at which this band starts applying; `texture` is the rung its materials
  *  sample. Bands are walked near → mid → far and the FIRST match wins, so
@@ -64,7 +62,6 @@ export type StreamTier = {
  * is not a failure mode worth having.
  */
 export type StreamHideRule = {
-  /** Authoring note — data, not config. */
   _note?: string;
   /** Which source mesh this rule stands for. Documentation only. */
   _mesh?: string;
@@ -354,7 +351,6 @@ export type StreamVariantConfig = {
  * pixels — only on its own rect being right.
  */
 export type MapConfig = {
-  /** Authoring note — data, not config. */
   _note?: string;
   /**
    * OPTIONAL context layer, drawn UNDER `plan` — the surrounding port and city,
@@ -368,7 +364,6 @@ export type MapConfig = {
    * without touching navigation.
    */
   base?: {
-    /** Authoring note — data, not config. */
     _note?: string;
     /** BARE FILENAME, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
      *  `/floorplan`). An absolute URL is honoured verbatim. */
@@ -383,7 +378,6 @@ export type MapConfig = {
    * read "naturally" — minX < maxX here mirrors the map east-west.
    */
   plan?: {
-    /** Authoring note — data, not config. */
     _note?: string;
     /** BARE FILENAME, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
      *  `/floorplan`). An absolute URL is honoured verbatim. */
@@ -401,8 +395,6 @@ export type MapConfig = {
    */
   zone?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
-
-// ── site.json › the site record ───────────────────────────────────────────────
 
 export type SceneConfig = {
   meta: {
@@ -576,7 +568,6 @@ export type SceneConfig = {
  * pass. See `terminal/scene/environment/sky`.
  */
 export type SkyConfig = {
-  /** Authoring note — data, not config. */
   _note?: string;
   /** `off` = the flat background colour (the previous backdrop). */
   mode: "day" | "afternoon" | "dusk" | "off";
@@ -629,8 +620,6 @@ export type SkyConfig = {
   >;
 };
 
-// ── site.json › presentation ──────────────────────────────────────────────────
-
 export interface InstructionItemCopy {
   icon: string;
   text: string;
@@ -644,7 +633,6 @@ export interface InstructionGroupCopy {
 
 export interface InstructionsCopy {
   title: string;
-  /** Optional line under the title. */
   subtitle?: string;
   actionLabel: string;
   /** Tiles per row on a normal viewport. Defaults to 2. */
@@ -671,8 +659,6 @@ export type UiConfig = {
   };
   tones: Record<Tone, string[]>;
 };
-
-// ── site.json › layouts table ─────────────────────────────────────────────────
 
 export type ZoneKey = "waterside" | "yard" | "landside" | "rail" | "executive";
 
@@ -704,8 +690,6 @@ export type LayoutConfig = {
 
 /** A layout row as `site.json` stores it — no derived `hotspots` list. */
 export type LayoutRow = Omit<LayoutConfig, "hotspots">;
-
-// ── site.json › hotspots table ────────────────────────────────────────────────
 
 export type FieldType =
   | "string"
@@ -798,8 +782,6 @@ export type HotspotConfig = {
   fields: HotspotField[];
 };
 
-// ── site.json › the document ──────────────────────────────────────────────────
-
 /**
  * The one config file, shaped as DB tables.
  *
@@ -813,7 +795,6 @@ export type HotspotConfig = {
  * `ui.*` reader keeps working untouched.
  */
 export type SiteConfig = {
-  /** Authoring note — data, not config. */
   _note?: string;
   meta: SceneConfig["meta"];
   /**
@@ -842,8 +823,6 @@ export type SiteConfig = {
   layouts: LayoutRow[];
   hotspots: HotspotConfig[];
 };
-
-// ── Runtime ───────────────────────────────────────────────────────────────────
 
 export type Phase = "loading" | "instructions" | "dollhouse" | "firstPerson";
 

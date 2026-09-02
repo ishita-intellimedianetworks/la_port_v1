@@ -85,7 +85,6 @@ export function useDoubleClickNav({
   playerControllerRef,
   navigateToFloor,
 }: DoubleClickNavOptions) {
-  // Always-current ref — keeps listeners stable even if the callback changes
   const navigateToFloorRef = useRef(navigateToFloor);
   useLayoutEffect(() => { navigateToFloorRef.current = navigateToFloor; });
 
@@ -111,7 +110,6 @@ export function useDoubleClickNav({
     const onDblClick = (e: MouseEvent) => {
       if (drag || !navReady) return;
 
-      // Convert screen coords → Normalized Device Coordinates (NDC)
       const rect  = dom.getBoundingClientRect();
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width)  *  2 - 1,
@@ -270,6 +268,5 @@ export function useDoubleClickNav({
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("dblclick",    onDblClick);
     };
-    // navigateToFloor intentionally excluded — handled by always-current ref above
   }, [gl, enabled, navReady, floors, pathfinding, camera, raycaster, scene, playerControllerRef]);
 }
