@@ -1,26 +1,22 @@
 "use client";
 
 /**
- * Step 1 — add the model. Everything else waits on it.
+ * Step 1 — drop in something to look at.
  *
- * PLACING A HOTSPOT, FRAMING A CAMERA AND JUDGING A LIGHT ALL MEAN LOOKING AT
- * GEOMETRY, so with nothing loaded the remaining steps are number entry
- * against a black rectangle. The viewport is therefore not shown at all until
- * a model is added: an empty canvas invites you to start working in it, and
- * every gesture in it would be meaningless.
+ * THE GLB IS A STAND-IN, NOT A SETTING. The terminal never loads a whole-zone
+ * model: it streams distance-tiered chunks, chosen per device and per camera
+ * distance, so there is no single file to point the runtime at and nothing
+ * here is written to `site.json`. What the studio needs is geometry roughly
+ * where the real thing will be, so that a camera can be framed against it and
+ * a hotspot dropped on the right quay.
  *
- * And loading it is not a formality here. `assets.modelUrl` points at
- * `/models/la-port-zone-c5-25-compressed.glb`, which a checkout does NOT ship:
- * the terminal streams distance-tiered chunks instead, and that GLB lives in
- * the bake repo. So a drop zone is the ordinary path rather than a fallback,
- * and the URL is the secondary option under it.
+ * That is why this is a file picker and not a URL field. A URL implies the
+ * value is the answer to something; this one is scaffolding, discarded when
+ * the tab closes.
  *
- * The shape is the 3di admin's basic-details step — a drop box that becomes a
- * preview card with a delete button once something is in it, and stacked
- * full-width fields under it. The site record is DELIBERATELY just the label:
- * the ids, the hero container and the asset paths are site.json's own business
- * and are edited there, and a studio that offered them would be a JSON editor
- * with a 3D view attached.
+ * It comes first because nothing else works without it. Framing a camera,
+ * placing a hotspot and judging a light all mean LOOKING at geometry, so the
+ * viewport does not appear until something is loaded.
  */
 
 import { useRef, useState } from "react";
@@ -50,20 +46,20 @@ function DropBox({ onFile }: { onFile: (file: File) => void }) {
         const file = e.dataTransfer.files?.[0];
         if (file) onFile(file);
       }}
-      className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl px-6 py-10
+      className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl px-6 py-12
         outline-dashed outline-2 transition ${
           over
             ? "bg-[#0457a9]/15 text-slate-100 outline-[#0457a9]"
             : "bg-[#374151] text-slate-300 outline-[#4b5563] hover:outline-[#0457a9]"
         }`}
     >
-      <UploadCloud size={26} className="text-slate-400" />
+      <UploadCloud size={28} className="text-slate-400" />
       <p className="text-sm">
-        Drag &amp; drop or <span className="font-semibold text-slate-100">choose a GLB</span> to add
-        the model
+        Drag &amp; drop or <span className="font-semibold text-slate-100">choose a GLB</span> to
+        look at
       </p>
       <p className="text-[11px] text-slate-500">
-        .glb / .gltf — Draco, KTX2 and meshopt all open, same as the terminal
+        .glb / .gltf — Draco, KTX2 and meshopt all open, same loader as the terminal
       </p>
       <input
         ref={input}
@@ -93,21 +89,19 @@ export function SceneStep() {
   const requestFrame = useViewerStore((s) => s.requestFrame);
 
   const loaded = model.kind !== "none";
-  const span = bounds
-    ? ([0, 1, 2] as const).map((i) => bounds.max[i] - bounds.min[i])
-    : null;
+  const span = bounds ? ([0, 1, 2] as const).map((i) => bounds.max[i] - bounds.min[i]) : null;
 
   return (
     <Panel
-      title="1 · Scene"
+      title="1 · Model"
       description={
         loaded
-          ? "The model is in. The viewport above is what every other step edits against."
-          : "Add a model. The viewport appears once there is something in it."
+          ? "Reference geometry for the steps that follow. Nothing about it is saved."
+          : "Drop in a bake to work against. The viewport appears once there is something in it."
       }
       actions={loaded ? <Button onClick={requestFrame}>Frame model</Button> : undefined}
     >
-      <Group title="Model">
+      <Group title="Reference model">
         {!loaded ? (
           <>
             <DropBox
@@ -115,45 +109,12 @@ export function SceneStep() {
                 setModel({ kind: "file", url: URL.createObjectURL(file), label: file.name })
               }
             />
-
-            <div className="flex items-center gap-3 pt-1">
-              <span className="h-px flex-1 bg-[#374151]" />
-              <span className="text-[10px] uppercase tracking-wider text-slate-500">or</span>
-              <span className="h-px flex-1 bg-[#374151]" />
-            </div>
-
-            <Row label="Model URL" hint="assets.modelUrl">
-              <div className="flex gap-2">
-                <TextField
-                  value={draft.assets.modelUrl}
-                  mono
-                  onChange={(modelUrl) =>
-                    update((d) => {
-                      d.assets.modelUrl = modelUrl;
-                    })
-                  }
-                />
-                <Button
-                  tone="primary"
-                  disabled={!draft.assets.modelUrl}
-                  onClick={() =>
-                    setModel({
-                      kind: "url",
-                      url: draft.assets.modelUrl,
-                      label: draft.assets.modelUrl,
-                    })
-                  }
-                >
-                  Load
-                </Button>
-              </div>
-            </Row>
-
             <Note>
-              A checkout ships no whole-zone GLB — the terminal streams chunks, and{" "}
-              <code className="font-mono">assets.modelUrl</code> names a file that lives in the
-              bake repo. Dropping it in from disk is the normal way in; the URL is for a build
-              that does serve one.
+              This is scaffolding, not a setting — it is never written to{" "}
+              <code className="font-mono">site.json</code> and it goes when the tab closes. The
+              terminal streams distance-tiered chunks chosen per device, so there is no one model
+              file for it to be. Any bake of the zone will do; the cameras and hotspots you author
+              against it are what gets saved.
             </Note>
           </>
         ) : (

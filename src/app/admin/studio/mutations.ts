@@ -16,8 +16,6 @@
 
 import type {
   HotspotConfig,
-  HotspotField,
-  HotspotIcon,
   LayoutCamera,
   LayoutRow,
   SiteConfig,
@@ -336,55 +334,3 @@ export function reparentHotspot(hotspotId: string, layoutId: string) {
     draft.hotspots.splice(insertAt, 0, row);
   });
 }
-
-// ── Hotspot fields ────────────────────────────────────────────────────────────
-
-export function patchField(hotspotId: string, index: number, patch: Partial<HotspotField>) {
-  update((draft) => {
-    const hotspot = draft.hotspots.find((h) => h.id === hotspotId);
-    if (!hotspot?.fields[index]) return;
-    hotspot.fields[index] = { ...hotspot.fields[index], ...patch };
-  });
-}
-
-export function addField(hotspotId: string) {
-  update((draft) => {
-    const hotspot = draft.hotspots.find((h) => h.id === hotspotId);
-    if (!hotspot) return;
-    hotspot.fields.push({ name: "", label: "", type: "string", value: "" });
-  });
-}
-
-export function removeField(hotspotId: string, index: number) {
-  update((draft) => {
-    const hotspot = draft.hotspots.find((h) => h.id === hotspotId);
-    if (!hotspot) return;
-    hotspot.fields.splice(index, 1);
-  });
-}
-
-export function moveField(hotspotId: string, index: number, delta: number) {
-  update((draft) => {
-    const hotspot = draft.hotspots.find((h) => h.id === hotspotId);
-    if (!hotspot) return;
-    const to = Math.min(hotspot.fields.length - 1, Math.max(0, index + delta));
-    if (to === index) return;
-    const [field] = hotspot.fields.splice(index, 1);
-    hotspot.fields.splice(to, 0, field);
-  });
-}
-
-export const HOTSPOT_ICONS: HotspotIcon[] = [
-  "vessel",
-  "container",
-  "crane",
-  "reefer",
-  "yard",
-  "equipment",
-  "gate",
-  "rail",
-  "kpi",
-  "safety",
-  "sustainability",
-  "journey",
-];

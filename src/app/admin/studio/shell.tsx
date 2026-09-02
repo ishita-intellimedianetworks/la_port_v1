@@ -52,11 +52,11 @@ import { validate } from "./validate";
 import { Button } from "./ui";
 
 const STEPS = [
-  { id: "scene", n: 1, label: "Scene", group: "place" },
+  { id: "scene", n: 1, label: "Model", group: "place" },
   { id: "cameras", n: 2, label: "Cameras", group: "place" },
   { id: "import", n: 3, label: "Import", group: "place" },
   { id: "resources", n: 4, label: "Layouts", group: "place" },
-  { id: "hotspots", n: 5, label: "Resources", group: "place" },
+  { id: "hotspots", n: 5, label: "Hotspots", group: "place" },
   { id: "fov", n: 6, label: "Field of view", group: "extra" },
   { id: "lighting", n: 7, label: "Lighting", group: "extra" },
   { id: "review", n: 8, label: "Review & save", group: "save" },

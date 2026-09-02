@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Step 4 — the layouts table: the PARENTS in the resource tree.
+ * Step 4 — the layouts table: the PARENTS in the hotspot tree.
  *
- * A layout is one saved viewpoint plus the resources filed under it, and the
+ * A layout is one saved viewpoint plus the hotspots filed under it, and the
  * Resources panel renders exactly that nesting. But the file stores no tree:
  * `layouts` and `hotspots` are sibling arrays joined by `hotspots[].layoutId`,
  * and `config/index.ts` rebuilds the nesting at import. So parentage is set on
@@ -36,7 +36,6 @@ import {
   Panel,
   Row,
   Select,
-  TextArea,
   TextField,
   Toggle,
   Vec3Field,
@@ -63,7 +62,7 @@ export function ResourcesStep() {
   return (
     <Panel
       title="4 · Layouts"
-      description="The parents in the resource tree — one saved viewpoint each. Drag a row by its grip to set the order the panel lists them in."
+      description="One saved viewpoint each, with the hotspots filed under it. Drag a row by its grip to set the order the panel lists them in."
       actions={
         <Button
           tone="primary"
@@ -111,7 +110,7 @@ export function ResourcesStep() {
                   <span className="font-mono text-xs text-slate-400">{layout.id}</span>
                   <span className="truncate text-sm text-slate-100">{layout.name}</span>
                   <span className="shrink-0 text-[10px] text-slate-500">
-                    {children.length} resource{children.length === 1 ? "" : "s"}
+                    {children.length} hotspot{children.length === 1 ? "" : "s"}
                     {layout.walkable ? " · walkable" : " · aerial"}
                     {!placed && " · no camera"}
                   </span>
@@ -138,7 +137,7 @@ export function ResourcesStep() {
                   tone="danger"
                   title={
                     children.length
-                      ? `Delete — takes ${children.length} resource(s) with it`
+                      ? `Delete — takes ${children.length} hotspot(s) with it`
                       : "Delete layout"
                   }
                   onClick={() => {
@@ -164,7 +163,7 @@ export function ResourcesStep() {
                       }}
                     />
                   </Row>
-                  <Row label="Name">
+                  <Row label="Name" hint="labels the layout in the scene and the panel">
                     <TextField value={layout.name} onChange={(name) => patchLayout(layout.id, { name })} />
                   </Row>
                   <Row label="Zone" hint="the category the panel files it under">
@@ -174,14 +173,6 @@ export function ResourcesStep() {
                       onChange={(zoneKey) => patchLayout(layout.id, { zone: zoneKey })}
                     />
                   </Row>
-                  <Row label="Description">
-                    <TextArea
-                      value={layout.description}
-                      rows={2}
-                      onChange={(description) => patchLayout(layout.id, { description })}
-                    />
-                  </Row>
-
                   <Row label="Marker position" hint="where the layout itself sits">
                     <Vec3Field
                       value={layout.position}
@@ -236,7 +227,7 @@ export function ResourcesStep() {
 
                   <div className="pt-1">
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Camera — shared by every resource under this layout that has none of its own
+                      Camera — shared by every hotspot under this layout that has none of its own
                     </p>
                     <CameraEditor
                       camera={layout.camera}
@@ -255,8 +246,8 @@ export function ResourcesStep() {
 
       <div className="mt-5">
         <Note>
-          Deleting a layout deletes its resources too. <code className="font-mono">hotspots[].layoutId</code>{" "}
-          is a foreign key, and an orphaned resource is the one edit the runtime validator complains
+          Deleting a layout deletes its hotspots too. <code className="font-mono">hotspots[].layoutId</code>{" "}
+          is a foreign key, and an orphaned hotspot is the one edit the runtime validator complains
           about on every page load.
         </Note>
       </div>

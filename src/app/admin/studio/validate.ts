@@ -78,23 +78,23 @@ export function validate(draft: SiteConfig): Problem[] {
   // ── Hotspots ───────────────────────────────────────────────────────────────
   const hotspotIds = new Set<string>();
   for (const hotspot of draft.hotspots) {
-    if (hotspotIds.has(hotspot.id)) error("hotspots", `Duplicate resource id "${hotspot.id}".`);
+    if (hotspotIds.has(hotspot.id)) error("hotspots", `Duplicate hotspot id "${hotspot.id}".`);
     hotspotIds.add(hotspot.id);
 
     if (!HOTSPOT_ID.test(hotspot.id)) {
       warn(
         "hotspots",
-        `Resource id "${hotspot.id}" is outside H01–H30, which config/index.ts asserts at load.`,
+        `Hotspot id "${hotspot.id}" is outside H01–H30, which config/index.ts asserts at load.`,
       );
     }
     if (!layoutIds.has(hotspot.layoutId)) {
-      error("hotspots", `Resource ${hotspot.id} names unknown layout "${hotspot.layoutId}".`);
+      error("hotspots", `Hotspot ${hotspot.id} names unknown layout "${hotspot.layoutId}".`);
     }
     if (!hotspot.popupTitle.trim()) {
-      warn("hotspots", `Resource ${hotspot.id} has no popup title — its card opens unheaded.`);
+      warn("hotspots", `Hotspot ${hotspot.id} has no popup title — its card opens unheaded.`);
     }
     if (isPlaceholder(hotspot.position)) {
-      warn("hotspots", `Resource ${hotspot.id} sits at the origin, so its marker is suppressed.`);
+      warn("hotspots", `Hotspot ${hotspot.id} sits at the origin, so its marker is suppressed.`);
     }
 
     // The demo's one cross-row invariant: every mention of the hero container
@@ -103,7 +103,7 @@ export function validate(draft: SiteConfig): Problem[] {
       if (field.ref === "hero" && field.value !== draft.globals.heroContainerId) {
         error(
           "hotspots",
-          `Resource ${hotspot.id} field "${field.name}" is marked hero but reads "${field.value}" ` +
+          `Hotspot ${hotspot.id} field "${field.name}" is marked hero but reads "${field.value}" ` +
             `(expected "${draft.globals.heroContainerId}").`,
         );
       }
@@ -113,10 +113,10 @@ export function validate(draft: SiteConfig): Problem[] {
     // one narrative the demo is built around.
     for (const step of hotspot.journey ?? []) {
       if (!layoutIds.has(step.layoutId)) {
-        error("hotspots", `Resource ${hotspot.id} journey step "${step.stage}" names unknown layout "${step.layoutId}".`);
+        error("hotspots", `Hotspot ${hotspot.id} journey step "${step.stage}" names unknown layout "${step.layoutId}".`);
       }
       if (!hotspotIds.has(step.hotspotId) && !draft.hotspots.some((h) => h.id === step.hotspotId)) {
-        error("hotspots", `Resource ${hotspot.id} journey step "${step.stage}" names unknown resource "${step.hotspotId}".`);
+        error("hotspots", `Hotspot ${hotspot.id} journey step "${step.stage}" names unknown hotspot "${step.hotspotId}".`);
       }
     }
   }
