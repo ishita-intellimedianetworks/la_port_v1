@@ -49,6 +49,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useDraftStore } from "./draft-store";
+import { isPlaceholder, poseForCamera } from "./pose";
 import { useViewerStore } from "./viewer-store";
 import { CamerasStep } from "./steps/cameras";
 import { HotspotsStep } from "./steps/hotspots";
@@ -182,26 +183,76 @@ function ViewportToolbar() {
       <Button small tone="ghost" onClick={viewer.requestFrame} title="Frame the whole model">
         Frame
       </Button>
+      {viewer.anchored && (
+        <span
+          className="rounded-full bg-[#0457a9]/25 px-2 py-0.5 text-[10px] text-slate-200"
+          title="Dragging re-aims from the previewed camera's position; the wheel moves along its view axis. Frame releases it."
+        >
+          anchored
+        </span>
+      )}
     </div>
   );
 }
 
-/** What is selected, said in words — the gizmo alone does not tell you whether
- *  you are about to move L04's camera or its marker. */
-function SelectionReadout() {
-  const selection = useViewerStore((s) => s.selection);
-  const clear = useViewerStore((s) => s.select);
-  if (selection.kind === "none") return null;
+/**
+ * Every authored camera, one click from the picture it makes.
+ *
+ * Checking a shot is the studio's whole reason to exist, and it is not a step:
+ * you want it while dialling the field of view, while judging a light, and
+ * while deciding whether the layout you just took is better than the one
+ * before it. Burying each camera's Preview inside its own expanded row made
+ * comparing two of them a four-click round trip.
+ *
+ * Flying here anchors the orbit on the camera you land on, so the next drag
+ * re-aims that shot rather than swinging it — see `controls.tsx`.
+ */
+function PreviewStrip() {
+  const cameras = useDraftStore((s) => s.draft.cameras);
+  const layouts = useDraftStore((s) => s.draft.layouts);
+  const zones = useDraftStore((s) => s.draft.zones);
+  const requestFly = useViewerStore((s) => s.requestFly);
 
-  const label =
-    selection.kind === "sceneCamera" ? `cameras.${selection.id}` : `${selection.id} · ${selection.part}`;
+  const scene = [
+    { id: "dollhouse" as const, label: "Dollhouse" },
+    { id: "spawn" as const, label: "Spawn" },
+    { id: "firstPerson" as const, label: "Drop" },
+  ].filter((slot) => !!cameras[slot.id]);
+
+  if (!scene.length && !layouts.length) return null;
 
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-[#0457a9] bg-[#111827]/85 px-3 py-1.5 text-xs text-slate-100 backdrop-blur">
-      <span className="font-mono">{label}</span>
-      <button type="button" className="text-slate-400 hover:text-white" onClick={() => clear({ kind: "none" })} title="Deselect">
-        ✕
-      </button>
+    <div className="pointer-events-auto absolute inset-x-3 bottom-3 flex items-center gap-1.5 overflow-x-auto rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2 py-1.5 backdrop-blur">
+      <span className="shrink-0 pr-1 text-[10px] uppercase tracking-wider text-slate-500">
+        Preview
+      </span>
+      {scene.map((slot) => (
+        <button
+          key={slot.id}
+          type="button"
+          onClick={() => requestFly(cameras[slot.id]!)}
+          className="shrink-0 rounded-md border border-[#4b5563] px-2 py-1 text-[11px] text-slate-300 transition hover:border-[#0457a9] hover:text-white"
+        >
+          {slot.label}
+        </button>
+      ))}
+      {!!scene.length && !!layouts.length && <span className="mx-1 h-4 w-px shrink-0 bg-[#4b5563]" />}
+      {layouts.map((layout) => (
+        <button
+          key={layout.id}
+          type="button"
+          disabled={isPlaceholder(layout.camera.position)}
+          onClick={() => requestFly(poseForCamera(layout.camera))}
+          title={layout.name}
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[#4b5563] px-2 py-1 font-mono text-[11px] text-slate-300 transition hover:border-[#0457a9] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: zones[layout.zone]?.color ?? "#64748b" }}
+          />
+          {layout.id}
+        </button>
+      ))}
     </div>
   );
 }
@@ -313,12 +364,12 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
             {viewport}
             <div className="pointer-events-none absolute inset-0">
               <ViewportToolbar />
-              <SelectionReadout />
+              <PreviewStrip />
               <button
                 type="button"
                 onClick={() => setPanelOpen(!panelOpen)}
                 title={panelOpen ? "Hide the form and fill the pane" : "Show the form"}
-                className="pointer-events-auto absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2.5 py-1.5 text-[11px] text-slate-300 backdrop-blur transition hover:text-white"
+                className="pointer-events-auto absolute bottom-14 right-3 flex items-center gap-1.5 rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2.5 py-1.5 text-[11px] text-slate-300 backdrop-blur transition hover:text-white"
               >
                 {panelOpen ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
                 {panelOpen ? "Bigger view" : "Show form"}
@@ -331,7 +382,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
           className={`shrink-0 overflow-y-auto rounded-lg border border-[#374151] bg-[#1f2937] ${
             // With no model this pane IS the page — step 1's drop box wants the
             // room. With one, it is the smaller half of a split.
-            !hasModel ? "min-h-0 flex-1" : panelOpen ? "max-h-[34vh]" : "hidden"
+            !hasModel ? "min-h-0 flex-1" : panelOpen ? "max-h-[42vh]" : "hidden"
           }`}
         >
           {step === "scene" && <SceneStep />}

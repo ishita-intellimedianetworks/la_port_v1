@@ -15,7 +15,7 @@
  */
 
 import { useState } from "react";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, Eye, Trash2 } from "lucide-react";
 import type { ZoneKey } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
 import {
@@ -94,29 +94,44 @@ export function ResourcesStep() {
           const placed = !isPlaceholder(layout.camera.position);
 
           return (
-            <div className="rounded-lg border border-[#374151] bg-[#111827]">
-              <div className="flex items-center gap-1.5 px-2 py-2">
+            <div
+              className={`overflow-hidden rounded-lg border bg-[#111827] transition-colors ${
+                isOpen ? "border-[#0457a9]" : "border-[#374151] hover:border-[#4b5563]"
+              }`}
+            >
+              <div className={`flex items-center gap-2 px-2 py-2.5 ${isOpen ? "bg-[#0457a9]/10" : ""}`}>
                 {handle}
+                {/* The whole left side is the disclosure: a chevron that turns,
+                    then everything that identifies the row. One target, and it
+                    is the obvious one — an "edit" icon off on the right made
+                    you hunt for a control the row already was. */}
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                   onClick={() => setOpen(isOpen ? null : layout.id)}
+                  title={isOpen ? "Collapse" : "Expand"}
                 >
+                  <ChevronRight
+                    size={15}
+                    className={`shrink-0 text-slate-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                  />
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ background: zone?.color ?? "#64748b" }}
                   />
-                  <span className="font-mono text-xs text-slate-400">{layout.id}</span>
-                  <span className="truncate text-sm text-slate-100">{layout.name}</span>
+                  <span className="w-10 shrink-0 font-mono text-xs text-slate-400">{layout.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{layout.name}</span>
                   <span className="shrink-0 text-[10px] text-slate-500">
                     {children.length} hotspot{children.length === 1 ? "" : "s"}
                     {layout.walkable ? " · walkable" : " · aerial"}
-                    {!placed && " · no camera"}
                   </span>
+                  {!placed && (
+                    <span className="shrink-0 rounded-full bg-[#f59e0b]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
+                      no camera
+                    </span>
+                  )}
                 </button>
 
-                {/* The 3di admin's row actions, same order and same meanings:
-                    look through it, edit it, delete it. */}
                 <IconButton
                   tone="warning"
                   title="Fly the viewport to this layout's camera"
@@ -124,13 +139,6 @@ export function ResourcesStep() {
                   onClick={() => requestFly(poseForCamera(layout.camera))}
                 >
                   <Eye size={14} />
-                </IconButton>
-                <IconButton
-                  tone={isOpen ? "primary" : "accent"}
-                  title={isOpen ? "Close" : "Edit"}
-                  onClick={() => setOpen(isOpen ? null : layout.id)}
-                >
-                  <Pencil size={13} />
                 </IconButton>
                 <IconButton
                   tone="danger"

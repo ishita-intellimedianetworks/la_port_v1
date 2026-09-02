@@ -22,15 +22,27 @@
  * authored pose is the opposite: a position and a rotation, no target
  * anywhere. So
  *
- *   flying TO a pose  seats the camera, then puts the target ON the pose's own
- *                     view ray, at the distance of whatever the ray hits (the
- *                     thing being framed) or, failing a hit, at a distance
- *                     derived from the model's size. Land the target somewhere
- *                     off the ray and the very first orbit drag snaps the view
- *                     somewhere the author did not leave it.
+ *   flying TO a pose  seats the camera and ANCHORS the pivot to the camera's
+ *                     own position, so the next drag re-aims the shot from
+ *                     where it stands instead of swinging it around something
+ *                     out in the scene. Previewing a camera is what you do
+ *                     just before adjusting it, and an orbit that moved the
+ *                     position threw away the half you had already got right.
  *
  *   reading it BACK   just reads the camera's quaternion. The target is a
  *                     separate answer to a separate question, not part of it.
+ *
+ * ANCHORING IS A PIVOT AT ARM'S LENGTH, not at zero: OrbitControls clamps the
+ * camera-target distance to `minDistance`, so a target ON the camera would be
+ * shoved back out and take the authored position with it. The pivot therefore
+ * sits just past that clamp — sub-metre on a 2 km site — which makes a drag a
+ * look-around in all but the last decimal.
+ *
+ * That leaves the wheel with nothing to do, since dollying toward a pivot
+ * 0.6 m away is over before it starts. So while anchored the wheel is taken
+ * over and moves the camera AND its pivot along the view axis together, which
+ * is what "zoom" means when you are standing somewhere deciding what to look
+ * at. `Frame model` releases the anchor and hands both back.
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -41,13 +53,9 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { forwardOf, poseFromCamera, roundVec } from "../pose";
 import { boundsCentre, boundsSpan, useViewerStore } from "../viewer-store";
 
-/** Scratch for the focus raycast, so a fly-to allocates nothing. */
-const _ray = new THREE.Raycaster();
-const _hit: THREE.Intersection[] = [];
-
 export function StudioControls() {
   const camera = useThree((s) => s.camera);
-  const scene = useThree((s) => s.scene);
+  const gl = useThree((s) => s.gl);
 
   const orbitRef = useRef<OrbitControlsImpl>(null);
 
@@ -57,31 +65,14 @@ export function StudioControls() {
   const frameRequest = useViewerStore((s) => s.frameRequest);
   const publishPose = useViewerStore((s) => s.publishPose);
   const publishTarget = useViewerStore((s) => s.publishTarget);
+  const anchored = useViewerStore((s) => s.anchored);
+  const setAnchored = useViewerStore((s) => s.setAnchored);
 
   const span = boundsSpan(bounds);
-
-  /**
-   * How far along a view ray the thing being looked at sits.
-   *
-   * Cast into the model and take the first hit; with no hit — an aerial camera
-   * pointed at open water, or no model loaded at all — fall back to a fraction
-   * of the model's longest edge, which at least puts the pivot at a plausible
-   * scale rather than one metre in front of the lens.
-   */
-  const focusDistance = useCallback(
-    (origin: THREE.Vector3, direction: THREE.Vector3) => {
-      const model = scene.getObjectByName("studio-model");
-      if (model) {
-        _hit.length = 0;
-        _ray.set(origin, direction);
-        _ray.far = span * 4;
-        _ray.intersectObject(model, true, _hit);
-        if (_hit.length) return _hit[0].distance;
-      }
-      return span * 0.25;
-    },
-    [scene, span],
-  );
+  /** The closest OrbitControls will let the camera sit to its own pivot. Used
+   *  both as the dolly clamp and as the anchored pivot distance, so the two
+   *  cannot disagree and shunt the camera on the first frame. */
+  const nearPivot = Math.max(0.05, span / 5000);
 
   /** Publish both readings. `end` covers drags; subscribing to `change` alone
    *  fires per pointer move and would re-render the panel continuously. */
@@ -102,15 +93,18 @@ export function StudioControls() {
     camera.updateMatrixWorld();
 
     if (controls) {
+      // Just past the dolly clamp, on the pose's own view ray. Off the ray and
+      // the very first drag would snap the view somewhere the author did not
+      // leave it; further along it and the drag would swing the position.
       const forward = forwardOf(pose.rotation);
-      const distance = focusDistance(camera.position, forward);
-      controls.target.copy(camera.position).addScaledVector(forward, distance);
+      controls.target.copy(camera.position).addScaledVector(forward, nearPivot * 1.5);
       controls.update();
     }
 
+    setAnchored(true);
     publish();
     clearFly();
-  }, [flyRequest, camera, clearFly, focusDistance, publish]);
+  }, [flyRequest, camera, clearFly, nearPivot, setAnchored, publish]);
 
   // ── Frame the whole model ──────────────────────────────────────────────────
   useEffect(() => {
@@ -132,8 +126,9 @@ export function StudioControls() {
       controls.target.copy(centre);
       controls.update();
     }
+    setAnchored(false);
     publish();
-  }, [frameRequest, bounds, camera, span, publish]);
+  }, [frameRequest, bounds, camera, span, setAnchored, publish]);
 
   // ── Near / far, sized to the model ─────────────────────────────────────────
   //
@@ -155,6 +150,34 @@ export function StudioControls() {
     perspective.updateProjectionMatrix();
   }, [store, span]);
 
+  // ── The wheel, while anchored ──────────────────────────────────────────────
+  //
+  // Moves the camera and its pivot along the view axis TOGETHER, so the aim
+  // survives and the pivot stays at arm's length. Bound non-passively because
+  // it has to preventDefault to stop the page scrolling under it.
+  useEffect(() => {
+    if (!anchored) return;
+    const element = gl.domElement;
+    const forward = new THREE.Vector3();
+
+    const onWheel = (event: WheelEvent) => {
+      const controls = orbitRef.current;
+      if (!controls) return;
+      event.preventDefault();
+      camera.getWorldDirection(forward);
+      // Proportional to the model, or a 2 km terminal takes a hundred notches
+      // to cross and a 10 m room is left behind in one.
+      const step = span * 0.02 * (event.deltaY > 0 ? -1 : 1);
+      camera.position.addScaledVector(forward, step);
+      controls.target.addScaledVector(forward, step);
+      controls.update();
+      publish();
+    };
+
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [anchored, camera, gl, span, publish]);
+
   return (
     <OrbitControls
       ref={orbitRef}
@@ -169,7 +192,10 @@ export function StudioControls() {
       // default step is imperceptible; on a 10 m one it overshoots.
       panSpeed={1}
       zoomSpeed={1.1}
-      minDistance={Math.max(0.05, span / 5000)}
+      // Anchored, the pivot is at `nearPivot` and there is nowhere to dolly to;
+      // the wheel handler above does the job instead.
+      enableZoom={!anchored}
+      minDistance={nearPivot}
       maxDistance={span * 6}
       onEnd={publish}
     />

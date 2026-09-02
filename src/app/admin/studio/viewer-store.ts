@@ -121,6 +121,17 @@ export type ViewerState = {
   publishTarget: (target: Vec3) => void;
 
   /**
+   * True while the orbit pivots on a previewed camera's own position rather
+   * than on something out in the scene.
+   *
+   * Published only so the toolbar can say so — dragging and the wheel behave
+   * differently in the two, and a control whose feel changes without saying
+   * why reads as a bug. `Frame model` releases it.
+   */
+  anchored: boolean;
+  setAnchored: (anchored: boolean) => void;
+
+  /**
    * A pending "put the camera here" request, consumed once by the controls.
    *
    * A counter rather than a boolean flag because flying to the SAME pose twice
@@ -189,6 +200,9 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
 
   liveTarget: [0, 0, 0],
   publishTarget: (liveTarget) => set({ liveTarget }),
+
+  anchored: false,
+  setAnchored: (anchored) => set({ anchored }),
 
   flyRequest: null,
   requestFly: (pose) => set({ flyRequest: { pose, nonce: ++nonce } }),

@@ -28,7 +28,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Eye, MapPin, Trash2 } from "lucide-react";
+import { ChevronRight, Eye, MapPin, Trash2 } from "lucide-react";
 import { useDraftStore } from "../draft-store";
 import {
   addHotspot,
@@ -119,8 +119,12 @@ export function HotspotsStep() {
           const unplaced = isPlaceholder(hotspot.position);
 
           return (
-            <div className="rounded-lg border border-[#374151] bg-[#111827]">
-              <div className="flex items-center gap-1.5 px-2 py-2">
+            <div
+              className={`overflow-hidden rounded-lg border bg-[#111827] transition-colors ${
+                isOpen ? "border-[#0457a9]" : "border-[#374151] hover:border-[#4b5563]"
+              }`}
+            >
+              <div className={`flex items-center gap-2 px-2 py-2.5 ${isOpen ? "bg-[#0457a9]/10" : ""}`}>
                 {handle}
                 <button
                   type="button"
@@ -129,16 +133,21 @@ export function HotspotsStep() {
                     setOpen(isOpen ? null : hotspot.id);
                     select({ kind: "hotspot", id: hotspot.id, part: "position" });
                   }}
+                  title={isOpen ? "Collapse" : "Expand"}
                 >
+                  <ChevronRight
+                    size={15}
+                    className={`shrink-0 text-slate-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                  />
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ background: zone?.color ?? "#64748b" }}
                   />
-                  <span className="font-mono text-xs text-slate-400">{hotspot.id}</span>
-                  <span className="truncate text-sm text-slate-100">{hotspot.name}</span>
+                  <span className="w-10 shrink-0 font-mono text-xs text-slate-400">{hotspot.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{hotspot.name}</span>
                   <span className="shrink-0 text-[10px] text-slate-500">
                     {hotspot.layoutId}
-                    {hotspot.camera ? " · own camera" : " · layout camera"}
+                    {hotspot.camera ? " · own camera" : ""}
                   </span>
                   {unplaced && (
                     <span className="shrink-0 rounded-full bg-[#f59e0b]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
