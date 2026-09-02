@@ -47,7 +47,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { useDraftStore } from "./draft-store";
 import { isPlaceholder, poseForCamera } from "./pose";
 import { useViewerStore } from "./viewer-store";
@@ -71,6 +71,29 @@ const STEPS = [
   { id: "review", n: 7, label: "Review & save", group: "save" },
 ] as const;
 
+/**
+ * What a step needs before it can do anything.
+ *
+ * Not busywork — a hard dependency each time. Every step from 2 on is a
+ * judgement made by LOOKING (does this camera frame the crane, is that marker
+ * on the quay, is that sun angle right), so with no model they are number
+ * entry against a black rectangle; and a hotspot is filed under a layout, so
+ * with no layouts there is nothing to file one under.
+ *
+ * Returns the reason it is locked, or null. The reason is the tooltip, so a
+ * disabled step always says what would unlock it — a greyed control with no
+ * explanation is worse than one that lets you make the mistake.
+ */
+function lockedBecause(
+  id: StepId,
+  state: { hasModel: boolean; layouts: number },
+): string | null {
+  if (id === "scene") return null;
+  if (!state.hasModel) return "Add a model in step 1 — every step from here is judged by looking at it";
+  if (id === "hotspots" && !state.layouts) return "Add a layout in step 4 first — a hotspot is filed under one";
+  return null;
+}
+
 /** What each step is about, drawn and nothing else. */
 const STEP_LAYERS: Record<
   (typeof STEPS)[number]["id"],
@@ -93,17 +116,21 @@ function StepButton({
   step,
   state,
   problem,
+  locked,
   onClick,
 }: {
   step: (typeof STEPS)[number];
   state: "done" | "current" | "todo";
   problem: "error" | "warning" | null;
+  /** The reason it cannot be opened, or null. Doubles as the tooltip. */
+  locked: string | null;
   onClick: () => void;
 }) {
   // One colour, three weights: solid green here, faded green behind you, grey
   // ahead. A second accent for "current" would compete with the buttons.
-  const disc =
-    state === "current"
+  const disc = locked
+    ? "bg-[#1f2937] text-slate-600"
+    : state === "current"
       ? "bg-[#22c55e] text-[#06210f] ring-2 ring-[#22c55e]/35"
       : state === "done"
         ? "bg-[#22c55e]/25 text-[#4ade80]"
@@ -113,15 +140,17 @@ function StepButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-[#1f2937] ${
-        state === "current" ? "bg-[#1f2937]" : ""
-      }`}
+      disabled={!!locked}
+      title={locked ?? undefined}
+      className={`group flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+        locked ? "cursor-not-allowed" : "hover:bg-[#1f2937]"
+      } ${state === "current" ? "bg-[#1f2937]" : ""}`}
     >
       <span
         className={`relative flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition ${disc}`}
       >
-        {step.n}
-        {problem && (
+        {locked ? <Lock size={11} /> : state === "done" ? <Check size={13} /> : step.n}
+        {!locked && problem && (
           <span
             className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-[#111827] ${
               problem === "error" ? "bg-[#ef4444]" : "bg-[#f59e0b]"
@@ -132,7 +161,11 @@ function StepButton({
       </span>
       <span
         className={`whitespace-nowrap text-xs font-medium transition ${
-          state === "current" ? "text-slate-50" : "text-slate-300 group-hover:text-white"
+          locked
+            ? "text-slate-600"
+            : state === "current"
+              ? "text-slate-50"
+              : "text-slate-300 group-hover:text-white"
         }`}
       >
         {step.label}
@@ -274,13 +307,6 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
   // client's first render has to produce that same tree or hydration fails.
   useEffect(hydrate, [hydrate]);
 
-  // Draw what this step is about. Depending on `step` alone and not on the
-  // layer values is the point: a manual toggle afterwards must survive until
-  // the step actually changes, which it would not if this re-ran on its own
-  // output.
-  useEffect(() => {
-    setLayers(STEP_LAYERS[step]);
-  }, [step, setLayers]);
   const draft = useDraftStore((s) => s.draft);
   const dirty = useDraftStore((s) => s.dirty);
   const undo = useDraftStore((s) => s.undo);
@@ -295,7 +321,26 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
   const errorSteps = new Set(problems.filter((p) => p.level === "error").map((p) => p.step));
   const warningSteps = new Set(problems.filter((p) => p.level === "warning").map((p) => p.step));
 
-  const index = STEPS.findIndex((s) => s.id === step);
+  const layoutCount = draft.layouts.length;
+  const lockedFor = (id: StepId) => lockedBecause(id, { hasModel, layouts: layoutCount });
+
+  // Removing the model mid-session locks everything behind you. Derived rather
+  // than corrected in an effect: `step` is what you asked for, `current` is
+  // what you get, and an effect that wrote the state back would be a second
+  // render deciding what the first should have.
+  const current: StepId = lockedFor(step) ? "scene" : step;
+
+  // Draw what this step is about. Depending on `step` alone and not on the
+  // layer values is the point: a manual toggle afterwards must survive until
+  // the step actually changes, which it would not if this re-ran on its own
+  // output.
+  useEffect(() => {
+    setLayers(STEP_LAYERS[current]);
+  }, [current, setLayers]);
+
+  const index = STEPS.findIndex((s) => s.id === current);
+  const nextStep = STEPS[index + 1];
+  const nextBlockedBy = nextStep ? lockedFor(nextStep.id) : null;
   const stateOf = (i: number) => (i === index ? "current" : i < index ? "done" : "todo");
   const problemOf = (id: string) =>
     errorSteps.has(id) ? ("error" as const) : warningSteps.has(id) ? ("warning" as const) : null;
@@ -333,6 +378,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
               step={entry}
               state={stateOf(STEPS.indexOf(entry))}
               problem={problemOf(entry.id)}
+              locked={lockedFor(entry.id)}
               onClick={() => setStep(entry.id)}
             />
             {i < all.length - 1 && <Rule />}
@@ -349,6 +395,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
             step={entry}
             state={stateOf(STEPS.indexOf(entry))}
             problem={problemOf(entry.id)}
+            locked={lockedFor(entry.id)}
             onClick={() => setStep(entry.id)}
           />
         ))}
@@ -360,6 +407,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
             step={entry}
             state={stateOf(STEPS.indexOf(entry))}
             problem={problemOf(entry.id)}
+            locked={lockedFor(entry.id)}
             onClick={() => setStep(entry.id)}
           />
         ))}
@@ -393,16 +441,16 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
             !hasModel ? "min-h-0 flex-1" : panelOpen ? "max-h-[42vh]" : "hidden"
           }`}
         >
-          {step === "scene" && <SceneStep />}
-          {step === "cameras" && <CamerasStep />}
-          {step === "import" && <ImportStep />}
-          {step === "resources" && <ResourcesStep />}
-          {step === "hotspots" && <HotspotsStep />}
-            {step === "lighting" && <LightingStep />}
-          {step === "review" && <ReviewStep onGoToStep={(id) => setStep(id as StepId)} />}
+          {current === "scene" && <SceneStep />}
+          {current === "cameras" && <CamerasStep />}
+          {current === "import" && <ImportStep />}
+          {current === "resources" && <ResourcesStep />}
+          {current === "hotspots" && <HotspotsStep />}
+            {current === "lighting" && <LightingStep />}
+          {current === "review" && <ReviewStep onGoToStep={(id) => setStep(id as StepId)} />}
         </div>
 
-        <div className="flex shrink-0 items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between gap-4">
           {/* Back is navigation, not destruction. Red here and red on Delete
               cannot both mean what red means. */}
           <Button
@@ -413,10 +461,20 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
           >
             Back
           </Button>
+
+          {/* The reason is said out loud, not just hovered for. A disabled
+              Next with nothing beside it is the studio looking broken. */}
+          {nextBlockedBy && (
+            <p className="min-w-0 flex-1 text-right text-[11px] leading-tight text-[#fbbf24]">
+              {nextBlockedBy}
+            </p>
+          )}
+
           <Button
             wide
             tone="primary"
-            disabled={index === STEPS.length - 1}
+            disabled={index === STEPS.length - 1 || !!nextBlockedBy}
+            title={nextBlockedBy ?? undefined}
             onClick={() => setStep(STEPS[Math.min(STEPS.length - 1, index + 1)].id)}
           >
             {index === STEPS.length - 2 ? "Review & save →" : "Next →"}

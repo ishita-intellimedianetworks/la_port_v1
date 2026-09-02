@@ -122,15 +122,23 @@ export function validate(draft: SiteConfig): Problem[] {
   }
 
   // ── Scene record ───────────────────────────────────────────────────────────
-  if (!draft.assets.modelUrl) warn("scene", "No model URL is set.");
   if (draft.world.fov <= 0 || draft.world.fov >= 180) {
     error("scene", `Field of view ${draft.world.fov}° is not a usable angle.`);
   }
-  for (const id of ["dollhouse", "spawn", "firstPerson"] as const) {
+
+  // `dollhouse` and `spawn` are not optional in the schema and the runtime has
+  // nowhere to open or nowhere to land without them, so a missing one is an
+  // error rather than a note — it blocks the save, and puts a red mark on step
+  // 2 from wherever you happen to be working.
+  for (const id of ["dollhouse", "spawn"] as const) {
     const pose = draft.cameras[id];
-    if (pose && isPlaceholder(pose.position) && id !== "firstPerson") {
-      warn("cameras", `cameras.${id} is still at the origin.`);
+    if (!pose) error("cameras", `cameras.${id} has not been taken yet.`);
+    else if (isPlaceholder(pose.position)) {
+      warn("cameras", `cameras.${id} is still at the origin — orbit to the shot and take it.`);
     }
+  }
+  if (draft.cameras.firstPerson && isPlaceholder(draft.cameras.firstPerson.position)) {
+    warn("cameras", "cameras.firstPerson is still at the origin.");
   }
 
   return problems;
