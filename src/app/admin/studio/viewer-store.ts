@@ -70,6 +70,18 @@ export type ViewerState = {
   bounds: { min: [number, number, number]; max: [number, number, number] } | null;
   setBounds: (bounds: ViewerState["bounds"]) => void;
 
+  /**
+   * Download progress, 0–1, or null when nothing is in flight.
+   *
+   * It reaches 1 well BEFORE the model appears: Draco and KTX2 decoding
+   * happen after the last byte lands and take seconds on a big bake, so the
+   * number is cleared when the scene is actually published rather than when
+   * the transfer finishes. A bar that sat at 100% over an empty canvas would
+   * be describing the wrong thing.
+   */
+  modelProgress: number | null;
+  setModelProgress: (progress: number | null) => void;
+
   /** What actually came out of the GLB. Published so the Scene step can say
    *  "12 clips playing" rather than leaving the author to guess whether a
    *  still-looking model has no animation or a broken mixer. */
@@ -129,13 +141,24 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
   setModel: (next) => {
     const current = get().model;
     if (current.kind === "file") URL.revokeObjectURL(current.url);
-    set({ model: next, modelError: null, bounds: null, modelStats: null });
+    set({
+      model: next,
+      modelError: null,
+      bounds: null,
+      modelStats: null,
+      // Straight to 0 rather than null: the loader has not reported yet, but
+      // the load HAS started, and the overlay is what says so.
+      modelProgress: next.kind === "none" ? null : 0,
+    });
   },
   modelError: null,
   setModelError: (modelError) => set({ modelError }),
 
   bounds: null,
   setBounds: (bounds) => set({ bounds }),
+
+  modelProgress: null,
+  setModelProgress: (modelProgress) => set({ modelProgress }),
 
   modelStats: null,
   setModelStats: (modelStats) => set({ modelStats }),

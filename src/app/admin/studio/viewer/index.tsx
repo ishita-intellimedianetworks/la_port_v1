@@ -82,6 +82,50 @@ function StudioGrid() {
   );
 }
 
+/**
+ * Covers the canvas until there is something on it.
+ *
+ * The canvas is mounted the instant a file is chosen and stays black through
+ * the download AND the decode — Draco and KTX2 unpacking is the long half on a
+ * big bake, and it happens after the last byte lands. Without this the studio
+ * looks broken for those seconds, in exactly the way that makes someone pick
+ * the file a second time.
+ *
+ * Determinate while the transfer reports a length, indeterminate when it does
+ * not, and "Decoding" once the bytes are in — three states because they fail
+ * differently, and a bar parked at 100% would be describing the wrong one.
+ */
+function LoadingOverlay() {
+  const progress = useViewerStore((s) => s.modelProgress);
+  const label = useViewerStore((s) => (s.model.kind === "none" ? "" : s.model.label));
+  if (progress === null) return null;
+
+  const percent = Math.round(progress * 100);
+  const decoding = progress >= 1;
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#05070c]">
+      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#0457a9]" />
+      <div className="w-64 text-center">
+        <p className="truncate font-mono text-[11px] text-slate-400">{label}</p>
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#374151]">
+          <div
+            className={`h-full rounded-full bg-[#0457a9] ${
+              // No length to measure against: sweep instead of pretending to
+              // know how far along it is.
+              progress > 0 ? "transition-[width] duration-200" : "w-1/3 animate-pulse"
+            }`}
+            style={progress > 0 ? { width: `${percent}%` } : undefined}
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          {decoding ? "Decoding geometry and textures…" : progress > 0 ? `${percent}%` : "Loading…"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function StudioViewer() {
   const grade = useDraftStore((s) => s.draft.world.grade);
   const error = useViewerStore((s) => s.modelError);
@@ -121,6 +165,8 @@ export function StudioViewer() {
         <StudioMarkers />
         <StudioControls />
       </Canvas>
+
+      <LoadingOverlay />
 
       {/* No "nothing loaded" state here: the shell does not mount this until a
           model exists, so the only empty canvas is one that failed to load —

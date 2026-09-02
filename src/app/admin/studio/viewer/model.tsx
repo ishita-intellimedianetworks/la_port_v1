@@ -70,6 +70,7 @@ export function StudioModel() {
   const setBounds = useViewerStore((s) => s.setBounds);
   const setModelError = useViewerStore((s) => s.setModelError);
   const setModelStats = useViewerStore((s) => s.setModelStats);
+  const setModelProgress = useViewerStore((s) => s.setModelProgress);
   const requestFrame = useViewerStore((s) => s.requestFrame);
   // The renderer is read out of the R3F store INSIDE the effect rather than
   // subscribed to — the same idiom `canvas-with-wrapper` uses for the exposure
@@ -142,13 +143,24 @@ export function StudioModel() {
 
         setLoadedScene({ url, scene: gltf.scene });
         setModelError(null);
+        // Cleared HERE, not when the transfer finished — decoding is the long
+        // half on a Draco bake, and the overlay covers it.
+        setModelProgress(null);
         requestFrame();
       },
-      undefined,
+      (event) => {
+        if (!alive) return;
+        // `total` is 0 whenever the server sends the body compressed and
+        // omits a content-length, which is the usual case for a `blob:` URL's
+        // remote cousin. The overlay reads null as "still working" and spins
+        // without a bar rather than showing a percentage it made up.
+        setModelProgress(event.total > 0 ? event.loaded / event.total : 0);
+      },
       (error) => {
         if (!alive) return;
         setBounds(null);
         setModelStats(null);
+        setModelProgress(null);
         setModelError(
           `Could not load ${label} — ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -161,7 +173,7 @@ export function StudioModel() {
       mixerRef.current = null;
       if (loaded) disposeScene(loaded);
     };
-  }, [source, store, setBounds, setModelError, setModelStats, requestFrame]);
+  }, [source, store, setBounds, setModelError, setModelStats, setModelProgress, requestFrame]);
 
   useFrame((_, delta) => mixerRef.current?.update(delta));
 

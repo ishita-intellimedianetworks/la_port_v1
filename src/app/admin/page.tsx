@@ -29,9 +29,13 @@ import { StudioShell } from "./studio/shell";
 
 const StudioViewer = dynamic(() => import("./studio/viewer").then((m) => m.StudioViewer), {
   ssr: false,
+  // The phase before the model's own loader: three, drei and the GLTF/Draco/
+  // KTX2 loaders being fetched. Same shape as the overlay that follows it, so
+  // the two read as one wait rather than two false starts.
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-black text-xs text-slate-500">
-      Starting the viewport…
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#05070c]">
+      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#0457a9]" />
+      <p className="text-[11px] text-slate-500">Starting the viewport…</p>
     </div>
   ),
 });
