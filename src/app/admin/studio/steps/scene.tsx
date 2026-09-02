@@ -17,13 +17,21 @@
  * It comes first because nothing else works without it. Framing a camera,
  * placing a hotspot and judging a light all mean LOOKING at geometry, so the
  * viewport does not appear until something is loaded.
+ *
+ * FIELD OF VIEW LIVES HERE TOO, for the same reason it used to have a step of
+ * its own and should not have: `world.fov` is ONE number for the whole site —
+ * applied to the Canvas camera at creation and re-asserted by the camera store
+ * onto whatever camera the scene registers, so the dollhouse, the walking view
+ * and all forty authored shots share it. Moving it re-frames every one of
+ * them, which makes it a thing to settle BEFORE any camera is taken, not a
+ * step to arrive at afterwards.
  */
 
 import { useRef, useState } from "react";
 import { Box, Trash2, UploadCloud } from "lucide-react";
 import { useDraftStore } from "../draft-store";
 import { useViewerStore } from "../viewer-store";
-import { Button, Group, Note, Panel, Row, TextField } from "../ui";
+import { Button, Group, Note, Panel, Row, Slider, TextField } from "../ui";
 
 /** The 3di admin's `UploadBox`: one dashed target that takes a drop or a
  *  click. Their version wraps react-dropzone; a single-file picker needs a
@@ -78,6 +86,10 @@ function DropBox({ onFile }: { onFile: (file: File) => void }) {
     </div>
   );
 }
+
+/** Common reference angles, so the slider has landmarks rather than being a
+ *  bare range. Roughly: long lens → normal → wide. */
+const FOV_PRESETS = [24, 32, 35, 50, 70];
 
 export function SceneStep() {
   const draft = useDraftStore((s) => s.draft);
@@ -141,6 +153,51 @@ export function SceneStep() {
           </div>
         )}
       </Group>
+
+      {loaded && (
+        <Group title="Field of view">
+          <Row label="world.fov" hint="one angle, every camera in the site">
+            <Slider
+              value={draft.world.fov}
+              min={5}
+              max={110}
+              step={0.5}
+              suffix="°"
+              onChange={(next) =>
+                update(
+                  (d) => {
+                    d.world.fov = Math.round(next * 100) / 100;
+                  },
+                  // Dragging is one gesture. Each pixel of travel pushing an
+                  // undo entry would bury the value it started from.
+                  { history: false },
+                )
+              }
+            />
+          </Row>
+          <div className="flex flex-wrap gap-1.5">
+            {FOV_PRESETS.map((preset) => (
+              <Button
+                key={preset}
+                small
+                tone={Math.abs(draft.world.fov - preset) < 0.01 ? "primary" : "default"}
+                onClick={() =>
+                  update((d) => {
+                    d.world.fov = preset;
+                  })
+                }
+              >
+                {preset}°
+              </Button>
+            ))}
+          </div>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Settle this before taking any camera — every shot in the site is framed through it,
+            so changing it later re-frames all of them at once. The authoring cameras carried 32°;
+            the site ships 35°.
+          </p>
+        </Group>
+      )}
 
       <Group title="Site record">
         <Row label="Label" hint="meta.label — the name this site goes by">

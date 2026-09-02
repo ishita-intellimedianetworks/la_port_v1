@@ -1,19 +1,26 @@
 "use client";
 
 /**
- * The three ways to move things in the studio viewport, and the one way to
- * read the camera back out.
+ * Orbit the viewport, and read it back out.
  *
- *   ORBIT      drag and zoom, the plain inspection gesture.
- *   FLY TO     seat the camera at an authored pose, so "what does L04 look
- *              like?" is answered by looking rather than by reading a triple.
- *   GIZMO      drag the selected marker in the world.
- *   PLACE      click the model and put the selection where the ray hit.
+ * THAT IS THE WHOLE INTERACTION MODEL. There was a transform gizmo and a
+ * click-the-model place mode; both are gone. Three ways to move a thing meant
+ * three sets of rules about which one was armed, what a click meant in each,
+ * and which of them a drag on a marker was — and the answer to "where does
+ * this camera go" was already "wherever you are looking".
  *
- * ORBIT AND POSES DO NOT NATURALLY AGREE, and reconciling them is most of what
- * this file does. OrbitControls has no concept of a rotation — it derives one
- * from the camera position and a target it pivots around. An authored pose is
- * the opposite: a position and a rotation, with no target anywhere in it. So
+ * So the viewport reports two things and the panels do the rest:
+ *
+ *   `livePose`    where the camera is and how it is aimed. What a camera slot
+ *                 takes when you press "Use this position & rotation".
+ *   `liveTarget`  the point the orbit pivots around — the middle of the view.
+ *                 What a marker takes when you press "Use this point".
+ *
+ * ORBIT AND AUTHORED POSES DO NOT NATURALLY AGREE, and reconciling them is
+ * most of what is left here. OrbitControls has no concept of a rotation — it
+ * derives one from the camera position and the target it pivots around. An
+ * authored pose is the opposite: a position and a rotation, no target
+ * anywhere. So
  *
  *   flying TO a pose  seats the camera, then puts the target ON the pose's own
  *                     view ray, at the distance of whatever the ray hits (the
@@ -22,22 +29,17 @@
  *                     off the ray and the very first orbit drag snaps the view
  *                     somewhere the author did not leave it.
  *
- *   reading it BACK   just reads the camera's quaternion, in both euler orders,
- *                     and hands them to `captureSelection` to pick between.
- *                     The target plays no part — it is scaffolding for the
- *                     gesture, not part of the answer.
+ *   reading it BACK   just reads the camera's quaternion. The target is a
+ *                     separate answer to a separate question, not part of it.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { OrbitControls, TransformControls } from "@react-three/drei";
+import { useCallback, useEffect, useRef } from "react";
+import { OrbitControls } from "@react-three/drei";
 import { useStore, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { useDraftStore } from "../draft-store";
-import { moveSelection } from "../mutations";
 import { forwardOf, poseFromCamera, roundVec } from "../pose";
 import { boundsCentre, boundsSpan, useViewerStore } from "../viewer-store";
-import { selectionForward, selectionPosition } from "./markers";
 
 /** Scratch for the focus raycast, so a fly-to allocates nothing. */
 const _ray = new THREE.Raycaster();
@@ -48,25 +50,13 @@ export function StudioControls() {
   const scene = useThree((s) => s.scene);
 
   const orbitRef = useRef<OrbitControlsImpl>(null);
-  /**
-   * The proxy object the transform gizmo drags.
-   *
-   * TransformControls moves an `Object3D`, and the obvious candidate — the
-   * marker mesh itself — is rebuilt from the draft on every edit, which the
-   * drag causes on every pointer move. Attaching to it would detach the gizmo
-   * on the first millimetre. A stable stand-in that nothing re-creates is the
-   * fix; the effect below keeps it sitting on whatever is selected.
-   */
-  const handle = useMemo(() => new THREE.Object3D(), []);
 
-  const mode = useViewerStore((s) => s.mode);
-  const gizmo = useViewerStore((s) => s.gizmo);
-  const selection = useViewerStore((s) => s.selection);
   const bounds = useViewerStore((s) => s.bounds);
   const flyRequest = useViewerStore((s) => s.flyRequest);
   const clearFly = useViewerStore((s) => s.clearFly);
   const frameRequest = useViewerStore((s) => s.frameRequest);
   const publishPose = useViewerStore((s) => s.publishPose);
+  const publishTarget = useViewerStore((s) => s.publishTarget);
 
   const span = boundsSpan(bounds);
 
@@ -93,12 +83,13 @@ export function StudioControls() {
     [scene, span],
   );
 
-  /** Publish the pose the camera is sitting at, so "Set from view" and the
-   *  read-out have something to read. `end` covers drags; `change` alone
+  /** Publish both readings. `end` covers drags; subscribing to `change` alone
    *  fires per pointer move and would re-render the panel continuously. */
   const publish = useCallback(() => {
     publishPose(poseFromCamera(camera));
-  }, [camera, publishPose]);
+    const controls = orbitRef.current;
+    if (controls) publishTarget(roundVec(controls.target.toArray()));
+  }, [camera, publishPose, publishTarget]);
 
   // ── Fly to an authored pose ────────────────────────────────────────────────
   useEffect(() => {
@@ -131,7 +122,11 @@ export function StudioControls() {
     // dollhouse pose — this is "show me everything", which is a different
     // question from "show me the shot".
     const distance = span * 1.4;
-    camera.position.set(centre.x + distance * 0.7, centre.y + distance * 0.55, centre.z + distance * 0.7);
+    camera.position.set(
+      centre.x + distance * 0.7,
+      centre.y + distance * 0.55,
+      centre.z + distance * 0.7,
+    );
     camera.lookAt(centre);
     if (controls) {
       controls.target.copy(centre);
@@ -160,115 +155,23 @@ export function StudioControls() {
     perspective.updateProjectionMatrix();
   }, [store, span]);
 
-  // ── Place mode: click the model, move the selection there ──────────────────
-  //
-  // Bound on the DOM element rather than as an R3F `onClick` on the model so a
-  // click that lands on a marker gizmo — which stops propagation to select
-  // itself — cannot also move something.
-  const gl = useThree((s) => s.gl);
-  useEffect(() => {
-    if (mode !== "place" || selection.kind === "none") return;
-    const element = gl.domElement;
-
-    // A click after a drag is an orbit release, not a placement. Distance
-    // rather than time, because a slow careful orbit is still an orbit.
-    let downAt: { x: number; y: number } | null = null;
-    const onDown = (e: PointerEvent) => { downAt = { x: e.clientX, y: e.clientY }; };
-
-    const onUp = (e: PointerEvent) => {
-      if (!downAt) return;
-      const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
-      downAt = null;
-      if (moved > 4) return;
-
-      const model = scene.getObjectByName("studio-model");
-      if (!model) return;
-      const rect = element.getBoundingClientRect();
-      const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
-      );
-      _ray.setFromCamera(ndc, camera);
-      _ray.far = Infinity;
-      _hit.length = 0;
-      _ray.intersectObject(model, true, _hit);
-      if (!_hit.length) return;
-      moveSelection(selection, roundVec(_hit[0].point.toArray()));
-    };
-
-    element.addEventListener("pointerdown", onDown);
-    element.addEventListener("pointerup", onUp);
-    return () => {
-      element.removeEventListener("pointerdown", onDown);
-      element.removeEventListener("pointerup", onUp);
-    };
-  }, [mode, selection, gl, scene, camera]);
-
-  // ── Keep the gizmo handle sitting on the selection ─────────────────────────
-  //
-  // One-way: draft → handle. The drag writes the other way, and this effect is
-  // what re-seats the handle afterwards, so a value typed into a number field
-  // moves the gizmo too.
-  const draft = useDraftStore((s) => s.draft);
-  useEffect(() => {
-    const position = selectionPosition(draft, selection);
-    if (position) handle.position.copy(position);
-  }, [draft, selection, handle]);
-
-  const showGizmo = gizmo && selection.kind !== "none" && !!selectionPosition(draft, selection);
-
   return (
-    <>
-      <OrbitControls
-        ref={orbitRef}
-        makeDefault
-        enableDamping
-        dampingFactor={0.12}
-        // Pan with the right button and with two fingers — the studio is used
-        // to line a camera up on a specific crane, which is panning, not
-        // orbiting the whole terminal.
-        screenSpacePanning
-        // Scale the wheel and pan steps to the model. On a 2 km scene the
-        // default step is imperceptible; on a 10 m one it overshoots.
-        panSpeed={1}
-        zoomSpeed={1.1}
-        minDistance={Math.max(0.05, span / 5000)}
-        maxDistance={span * 6}
-        onEnd={publish}
-      />
-
-      {showGizmo && (
-        <>
-          <primitive object={handle} />
-          <TransformControls
-            object={handle}
-            mode="translate"
-            // Sized to the model, or a 2 km scene gets a gizmo the size of a
-            // pixel and a 10 m one gets a gizmo the size of the building.
-            size={0.9}
-            // Suspend the orbit for the duration of a drag, and write the
-            // final position WITH history so the whole gesture is one undo.
-            onMouseDown={() => {
-              const controls = orbitRef.current;
-              if (controls) controls.enabled = false;
-            }}
-            onMouseUp={() => {
-              const controls = orbitRef.current;
-              if (controls) controls.enabled = true;
-              moveSelection(selection, roundVec(handle.position.toArray()), true);
-            }}
-            onObjectChange={() => {
-              // history: false — a drag is hundreds of these, and each one
-              // pushing an undo entry would bury the state before the drag.
-              moveSelection(selection, roundVec(handle.position.toArray()), false);
-            }}
-          />
-        </>
-      )}
-    </>
+    <OrbitControls
+      ref={orbitRef}
+      makeDefault
+      enableDamping
+      dampingFactor={0.12}
+      // Pan with the right button and with two fingers — the studio is used to
+      // line a camera up on a specific crane, which is panning, not orbiting
+      // the whole terminal.
+      screenSpacePanning
+      // Scale the wheel and pan steps to the model. On a 2 km scene the
+      // default step is imperceptible; on a 10 m one it overshoots.
+      panSpeed={1}
+      zoomSpeed={1.1}
+      minDistance={Math.max(0.05, span / 5000)}
+      maxDistance={span * 6}
+      onEnd={publish}
+    />
   );
 }
-
-/** Re-exported so the panels can ask "which way is this camera looking?"
- *  without importing from the markers module directly. */
-export { selectionForward, selectionPosition };

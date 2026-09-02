@@ -20,16 +20,24 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import type { SiteConfig, Vec3 } from "@/config/schema";
+import type { Vec3 } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
-import { forwardOf, isPlaceholder, poseForCamera } from "../pose";
+import { isPlaceholder, poseForCamera } from "../pose";
 import { sameSelection, useViewerStore, type Selection } from "../viewer-store";
 
-/** Selected markers go white; everything else keeps its own colour, so the
- *  selection reads at a glance without a second highlight object. */
+/**
+ * Selected markers go white; everything else keeps its own colour, so the
+ * selection reads at a glance without a second highlight object.
+ *
+ * Deliberately COOL AND FEW. An earlier pass gave scene cameras a hot pink and
+ * drew their view rays six marker-widths long, which on a scene with forty
+ * other markers read as a haze over the model rather than as three cameras.
+ * Nothing here should compete with the geometry being judged: the model is the
+ * subject, these are annotations on it.
+ */
 const SELECTED = "#ffffff";
 const CAMERA_COLOUR = "#38bdf8";
-const SCENE_CAMERA_COLOUR = "#f472b6";
+const SCENE_CAMERA_COLOUR = "#e2e8f0";
 const LAYOUT_COLOUR = "#facc15";
 
 /**
@@ -62,18 +70,19 @@ function CameraGizmo({
         onSelect();
       }}
     >
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -size * 0.5]}>
-        <coneGeometry args={[size * 0.5, size * 1.4, 4]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -size * 0.4]}>
+        <coneGeometry args={[size * 0.35, size, 4]} />
         <meshBasicMaterial color={colour} wireframe />
       </mesh>
-      {/* The view ray, so the aim reads from any angle. */}
-      <mesh position={[0, 0, -size * 3]}>
-        <boxGeometry args={[size * 0.06, size * 0.06, size * 6]} />
+      {/* The view ray, so the aim reads from any angle. Short and thin: it
+          says which way, it is not trying to reach what is being looked at. */}
+      <mesh position={[0, 0, -size * 1.4]}>
+        <boxGeometry args={[size * 0.03, size * 0.03, size * 2]} />
         <meshBasicMaterial color={colour} />
       </mesh>
-      {/* A solid core, so a gizmo seen end-on is still pickable. */}
+      {/* A solid core, so a gizmo seen end-on still reads. */}
       <mesh>
-        <sphereGeometry args={[size * 0.28, 10, 10]} />
+        <sphereGeometry args={[size * 0.2, 8, 8]} />
         <meshBasicMaterial color={colour} />
       </mesh>
     </group>
@@ -99,8 +108,8 @@ function Bead({
         onSelect();
       }}
     >
-      <sphereGeometry args={[size, 16, 16]} />
-      <meshBasicMaterial color={colour} transparent opacity={0.85} />
+      <sphereGeometry args={[size * 0.55, 12, 12]} />
+      <meshBasicMaterial color={colour} />
     </mesh>
   );
 }
@@ -225,42 +234,4 @@ export function StudioMarkers() {
         ))}
     </group>
   );
-}
-
-/** The world position the current selection points at, or null. The transform
- *  gizmo and "focus" both need it, and neither should re-derive it. */
-export function selectionPosition(draft: SiteConfig, selection: Selection): THREE.Vector3 | null {
-  if (selection.kind === "none") return null;
-  if (selection.kind === "sceneCamera") {
-    const pose = draft.cameras[selection.id];
-    return pose ? new THREE.Vector3(...pose.position) : null;
-  }
-  if (selection.kind === "layout") {
-    const layout = draft.layouts.find((l) => l.id === selection.id);
-    if (!layout) return null;
-    const source = selection.part === "camera" ? layout.camera.position : layout.position;
-    return new THREE.Vector3(...source);
-  }
-  const hotspot = draft.hotspots.find((h) => h.id === selection.id);
-  if (!hotspot) return null;
-  const source = selection.part === "camera" ? hotspot.camera?.position : hotspot.position;
-  return source ? new THREE.Vector3(...source) : null;
-}
-
-/** Unit forward of the current selection, when it is a camera — so "focus"
- *  can frame a camera from BEHIND rather than dropping the orbit inside it. */
-export function selectionForward(draft: SiteConfig, selection: Selection): THREE.Vector3 | null {
-  if (selection.kind === "sceneCamera") {
-    const pose = draft.cameras[selection.id];
-    return pose ? forwardOf(pose.rotation) : null;
-  }
-  if (selection.kind === "layout" && selection.part === "camera") {
-    const layout = draft.layouts.find((l) => l.id === selection.id);
-    return layout ? forwardOf(poseForCamera(layout.camera).rotation) : null;
-  }
-  if (selection.kind === "hotspot" && selection.part === "camera") {
-    const hotspot = draft.hotspots.find((h) => h.id === selection.id);
-    return hotspot?.camera ? forwardOf(poseForCamera(hotspot.camera).rotation) : null;
-  }
-  return null;
 }

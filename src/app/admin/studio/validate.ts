@@ -124,7 +124,7 @@ export function validate(draft: SiteConfig): Problem[] {
   // ── Scene record ───────────────────────────────────────────────────────────
   if (!draft.assets.modelUrl) warn("scene", "No model URL is set.");
   if (draft.world.fov <= 0 || draft.world.fov >= 180) {
-    error("fov", `Field of view ${draft.world.fov}° is not a usable angle.`);
+    error("scene", `Field of view ${draft.world.fov}° is not a usable angle.`);
   }
   for (const id of ["dollhouse", "spawn", "firstPerson"] as const) {
     const pose = draft.cameras[id];

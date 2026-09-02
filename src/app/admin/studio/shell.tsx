@@ -30,18 +30,27 @@
  * framing and judging a light all mean looking at geometry. So step 1 gets the
  * whole pane to add a model in, and the viewport appears when it lands.
  *
- * The steps split three ways. Steps 1–5 are the spatial work — where the
- * cameras are and where the resources sit — which is what a viewport is for.
- * Field of view and lighting are whole-scene extras, judged against content
- * that already exists, so they come after. Review is the way out.
+ * ONE GESTURE. You orbit; the viewport reports where the camera is and what it
+ * is centred on; a button in the panel takes one of those. There was a
+ * transform gizmo and a click-the-model place mode as well, and three ways to
+ * move a thing meant three sets of rules about which was armed and what a drag
+ * meant in each. They are gone.
+ *
+ * LAYERS FOLLOW THE STEP. Forty markers and three camera gizmos drawn at once
+ * is a scene you cannot read, so entering a step turns on what that step is
+ * about and turns off the rest. The toolbar still overrides it — this is a
+ * default per step, not a lock.
+ *
+ * The steps split three ways: 1–5 are the spatial work, which is what a
+ * viewport is for; lighting is the whole-scene look, judged against content
+ * that already exists; review is the way out.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useDraftStore } from "./draft-store";
 import { useViewerStore } from "./viewer-store";
 import { CamerasStep } from "./steps/cameras";
-import { FovStep } from "./steps/fov";
 import { HotspotsStep } from "./steps/hotspots";
 import { ImportStep } from "./steps/import";
 import { LightingStep } from "./steps/lighting";
@@ -57,10 +66,23 @@ const STEPS = [
   { id: "import", n: 3, label: "Import", group: "place" },
   { id: "resources", n: 4, label: "Layouts", group: "place" },
   { id: "hotspots", n: 5, label: "Hotspots", group: "place" },
-  { id: "fov", n: 6, label: "Field of view", group: "extra" },
-  { id: "lighting", n: 7, label: "Lighting", group: "extra" },
-  { id: "review", n: 8, label: "Review & save", group: "save" },
+  { id: "lighting", n: 6, label: "Lighting", group: "extra" },
+  { id: "review", n: 7, label: "Review & save", group: "save" },
 ] as const;
+
+/** What each step is about, drawn and nothing else. */
+const STEP_LAYERS: Record<
+  (typeof STEPS)[number]["id"],
+  { showSceneCameras: boolean; showLayouts: boolean; showHotspots: boolean }
+> = {
+  scene: { showSceneCameras: false, showLayouts: false, showHotspots: false },
+  cameras: { showSceneCameras: true, showLayouts: false, showHotspots: false },
+  import: { showSceneCameras: false, showLayouts: true, showHotspots: true },
+  resources: { showSceneCameras: false, showLayouts: true, showHotspots: false },
+  hotspots: { showSceneCameras: false, showLayouts: false, showHotspots: true },
+  lighting: { showSceneCameras: false, showLayouts: false, showHotspots: false },
+  review: { showSceneCameras: false, showLayouts: true, showHotspots: true },
+};
 
 type StepId = (typeof STEPS)[number]["id"];
 
@@ -128,23 +150,6 @@ function ViewportToolbar() {
 
   return (
     <div className="pointer-events-auto absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2 py-1.5 backdrop-blur">
-      <Button
-        small
-        tone={viewer.mode === "place" ? "primary" : "ghost"}
-        title="Click the model to move the selected marker there"
-        onClick={() => viewer.setMode(viewer.mode === "place" ? "orbit" : "place")}
-      >
-        {viewer.mode === "place" ? "Placing" : "Place"}
-      </Button>
-      <Button
-        small
-        tone={viewer.gizmo ? "primary" : "ghost"}
-        title="Drag the selected marker with a transform gizmo"
-        onClick={() => viewer.setGizmo(!viewer.gizmo)}
-      >
-        Drag
-      </Button>
-      <Rule />
       <Button small tone={viewer.showLayouts ? "default" : "ghost"} onClick={() => viewer.toggle("showLayouts")}>
         Layouts
       </Button>
@@ -208,6 +213,15 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
    *  is a bigger view rather than a different mode. */
   const [panelOpen, setPanelOpen] = useState(true);
   const hasModel = useViewerStore((s) => s.model.kind !== "none");
+  const setLayers = useViewerStore((s) => s.setLayers);
+
+  // Draw what this step is about. Depending on `step` alone and not on the
+  // layer values is the point: a manual toggle afterwards must survive until
+  // the step actually changes, which it would not if this re-ran on its own
+  // output.
+  useEffect(() => {
+    setLayers(STEP_LAYERS[step]);
+  }, [step, setLayers]);
   const draft = useDraftStore((s) => s.draft);
   const dirty = useDraftStore((s) => s.dirty);
   const undo = useDraftStore((s) => s.undo);
@@ -325,8 +339,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
           {step === "import" && <ImportStep />}
           {step === "resources" && <ResourcesStep />}
           {step === "hotspots" && <HotspotsStep />}
-          {step === "fov" && <FovStep />}
-          {step === "lighting" && <LightingStep />}
+            {step === "lighting" && <LightingStep />}
           {step === "review" && <ReviewStep onGoToStep={(id) => setStep(id as StepId)} />}
         </div>
 

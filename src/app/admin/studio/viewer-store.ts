@@ -19,24 +19,21 @@
 
 import * as THREE from "three";
 import { create } from "zustand";
-import type { CameraPose } from "@/config/schema";
+import type { CameraPose, Vec3 } from "@/config/schema";
 
-/** What a click in the viewport is FOR. */
-export type ViewerMode =
-  /** Orbit only. Clicking a marker selects it. */
-  | "orbit"
-  /** Clicking the model writes the hit point into the selected entity's
-   *  position — the fastest way to place a hotspot on a crane. */
-  | "place";
-
-/** The thing the step panels and the viewer both consider "current". A gizmo
- *  in the scene is drawn highlighted for it and TransformControls attaches to
- *  it, so both halves of the app agree what a drag will move. */
+/**
+ * What the panels and the viewer both consider "current".
+ *
+ * It is a HIGHLIGHT and nothing more: the matching marker is drawn white so
+ * you can find it among forty others. It used to be what a transform gizmo
+ * attached to and what a click in place mode moved, and dropping both of those
+ * is what left this doing one legible job.
+ */
 export type Selection =
   | { kind: "none" }
   /** One of the three `cameras.*` poses. */
   | { kind: "sceneCamera"; id: "dollhouse" | "spawn" | "firstPerson" }
-  /** A layout — `part` says whether the gizmo is its marker or its camera. */
+  /** A layout — `part` says whether it is its marker or its camera. */
   | { kind: "layout"; id: string; part: "position" | "camera" }
   | { kind: "hotspot"; id: string; part: "position" | "camera" };
 
@@ -88,16 +85,8 @@ export type ViewerState = {
   modelStats: { clips: number; meshes: number } | null;
   setModelStats: (stats: ViewerState["modelStats"]) => void;
 
-  mode: ViewerMode;
-  setMode: (mode: ViewerMode) => void;
-
   selection: Selection;
   select: (selection: Selection) => void;
-
-  /** Drag the selected gizmo in the viewport. Off by default: an always-on
-   *  transform gizmo swallows the orbit drag people reach for first. */
-  gizmo: boolean;
-  setGizmo: (on: boolean) => void;
 
   /** Marker radius in world units. The terminal is ~2 km across and authored
    *  1:1 in metres, so there is no size that reads at both the dollhouse
@@ -110,11 +99,26 @@ export type ViewerState = {
   showSceneCameras: boolean;
   showGrid: boolean;
   toggle: (key: "showLayouts" | "showHotspots" | "showSceneCameras" | "showGrid") => void;
+  /** Set several at once, for the shell's per-step defaults. */
+  setLayers: (layers: Partial<Pick<ViewerState, "showLayouts" | "showHotspots" | "showSceneCameras">>) => void;
 
-  /** The orbit camera's pose right now, republished as it settles. What "Set
-   *  from view" reads. */
+  /** The orbit camera's pose right now, republished as it settles. What
+   *  "Use this position & rotation" reads. */
   livePose: CameraPose;
   publishPose: (pose: CameraPose) => void;
+
+  /**
+   * The point the orbit pivots around — the middle of the view.
+   *
+   * The second half of the interaction model. A camera is "where I am
+   * standing and how I am facing"; a marker is "the thing I am looking at",
+   * and that is exactly what OrbitControls already tracks. So placing a
+   * hotspot is: centre it in the view, press the button. No mode to arm, no
+   * ray to aim, and it works on open water where a click on the model has
+   * nothing to hit.
+   */
+  liveTarget: Vec3;
+  publishTarget: (target: Vec3) => void;
 
   /**
    * A pending "put the camera here" request, consumed once by the controls.
@@ -163,26 +167,28 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
   modelStats: null,
   setModelStats: (modelStats) => set({ modelStats }),
 
-  mode: "orbit",
-  setMode: (mode) => set({ mode }),
-
   selection: { kind: "none" },
   select: (selection) => set({ selection }),
 
-  gizmo: false,
-  setGizmo: (gizmo) => set({ gizmo }),
-
-  markerScale: 8,
+  markerScale: 5,
   setMarkerScale: (markerScale) => set({ markerScale }),
 
-  showLayouts: true,
-  showHotspots: true,
-  showSceneCameras: true,
+  // Layers follow the STEP: the shell turns on whatever the step you are in is
+  // about. Forty markers and three camera gizmos drawn at once is a scene you
+  // cannot read, and the answer is to draw the ones you are working on rather
+  // than to make them all quieter.
+  showLayouts: false,
+  showHotspots: false,
+  showSceneCameras: false,
   showGrid: false,
   toggle: (key) => set({ [key]: !get()[key] } as Partial<ViewerState>),
+  setLayers: (layers) => set(layers),
 
   livePose: IDENTITY_POSE,
   publishPose: (livePose) => set({ livePose }),
+
+  liveTarget: [0, 0, 0],
+  publishTarget: (liveTarget) => set({ liveTarget }),
 
   flyRequest: null,
   requestFly: (pose) => set({ flyRequest: { pose, nonce: ++nonce } }),

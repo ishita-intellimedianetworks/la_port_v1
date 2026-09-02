@@ -47,9 +47,8 @@ export function ResourcesStep() {
   const draft = useDraftStore((s) => s.draft);
   const selection = useViewerStore((s) => s.selection);
   const select = useViewerStore((s) => s.select);
-  const setMode = useViewerStore((s) => s.setMode);
-  const mode = useViewerStore((s) => s.mode);
   const livePose = useViewerStore((s) => s.livePose);
+  const liveTarget = useViewerStore((s) => s.liveTarget);
   const requestFly = useViewerStore((s) => s.requestFly);
 
   const [open, setOpen] = useState<string | null>(draft.layouts[0]?.id ?? null);
@@ -184,25 +183,18 @@ export function ResourcesStep() {
                   <div className="flex flex-wrap items-center gap-3 pt-1">
                     <Button
                       small
-                      tone={
-                        sameSelection(selection, { kind: "layout", id: layout.id, part: "position" })
-                          ? "primary"
-                          : "default"
-                      }
-                      onClick={() => select({ kind: "layout", id: layout.id, part: "position" })}
-                    >
-                      Select marker
-                    </Button>
-                    <Button
-                      small
-                      tone={mode === "place" ? "primary" : "default"}
+                      tone="primary"
+                      // The orbit target is the middle of the view. Centre the
+                      // thing, press the button — no mode to arm, and it works
+                      // over open water where a click on the model has nothing
+                      // to hit.
                       onClick={() => {
                         select({ kind: "layout", id: layout.id, part: "position" });
-                        setMode(mode === "place" ? "orbit" : "place");
+                        patchLayout(layout.id, { position: liveTarget });
                       }}
-                      title="Click the model in the viewport to drop the marker there"
+                      title="Put the marker at the point the viewport is centred on"
                     >
-                      {mode === "place" ? "Placing…" : "Place by clicking"}
+                      Use this point
                     </Button>
                     <Toggle
                       checked={layout.walkable}

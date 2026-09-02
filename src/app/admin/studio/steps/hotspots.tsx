@@ -39,19 +39,17 @@ import {
   reparentHotspot,
   setHotspotCamera,
 } from "../mutations";
-import { isPlaceholder, poseForCamera, yxzToXyz } from "../pose";
+import { isPlaceholder, poseForCamera } from "../pose";
 import { sameSelection, useViewerStore } from "../viewer-store";
 import { Button, Empty, IconButton, Panel, Row, Select, TextField, Vec3Field } from "../ui";
-import { CameraEditor } from "../ui/camera-editor";
+import { AddCamera, CameraEditor } from "../ui/camera-editor";
 import { SortableList } from "../ui/sortable-list";
 
 export function HotspotsStep() {
   const draft = useDraftStore((s) => s.draft);
   const selection = useViewerStore((s) => s.selection);
   const select = useViewerStore((s) => s.select);
-  const mode = useViewerStore((s) => s.mode);
-  const setMode = useViewerStore((s) => s.setMode);
-  const livePose = useViewerStore((s) => s.livePose);
+  const liveTarget = useViewerStore((s) => s.liveTarget);
   const requestFly = useViewerStore((s) => s.requestFly);
 
   const [open, setOpen] = useState<string | null>(null);
@@ -78,13 +76,13 @@ export function HotspotsStep() {
           disabled={!draft.layouts.length}
           onClick={() => {
             const layoutId = layoutFilter || draft.layouts[0].id;
-            const id = addHotspot(layoutId);
+            // Born where you are looking. A new hotspot at the origin has
+            // its marker suppressed, so it would be invisible until placed —
+            // and the centre of the view you are in IS the answer, almost
+            // always.
+            const id = addHotspot(layoutId, { position: liveTarget });
             setOpen(id);
             select({ kind: "hotspot", id, part: "position" });
-            // Straight into place mode — a new hotspot at the origin has its
-            // marker suppressed, so the next thing anyone wants is to put it
-            // somewhere.
-            setMode("place");
           }}
         >
           Add hotspot
@@ -100,11 +98,6 @@ export function HotspotsStep() {
             onChange={setLayoutFilter}
           />
         </div>
-        {mode === "place" && (
-          <Button small tone="primary" onClick={() => setMode("orbit")}>
-            Placing — click the model, or stop
-          </Button>
-        )}
       </div>
 
       {!rows.length && <Empty>No hotspots here yet.</Empty>}
@@ -169,11 +162,11 @@ export function HotspotsStep() {
                   <Eye size={14} />
                 </IconButton>
                 <IconButton
-                  tone={mode === "place" && sameSelection(selection, { kind: "hotspot", id: hotspot.id, part: "position" }) ? "primary" : "accent"}
-                  title="Place by clicking the model"
+                  tone="accent"
+                  title="Move the marker to the point the viewport is centred on"
                   onClick={() => {
                     select({ kind: "hotspot", id: hotspot.id, part: "position" });
-                    setMode("place");
+                    patchHotspot(hotspot.id, { position: liveTarget });
                   }}
                 >
                   <MapPin size={13} />
@@ -226,23 +219,14 @@ export function HotspotsStep() {
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       small
-                      tone={
-                        sameSelection(selection, { kind: "hotspot", id: hotspot.id, part: "position" })
-                          ? "primary"
-                          : "default"
-                      }
-                      onClick={() => select({ kind: "hotspot", id: hotspot.id, part: "position" })}
-                    >
-                      Select marker
-                    </Button>
-                    <Button
-                      small
+                      tone="primary"
                       onClick={() => {
                         select({ kind: "hotspot", id: hotspot.id, part: "position" });
-                        setMode(mode === "place" ? "orbit" : "place");
+                        patchHotspot(hotspot.id, { position: liveTarget });
                       }}
+                      title="Put the marker at the point the viewport is centred on"
                     >
-                      {mode === "place" ? "Stop placing" : "Place by clicking"}
+                      Use this point
                     </Button>
                   </div>
 
@@ -260,26 +244,11 @@ export function HotspotsStep() {
                         onClear={() => setHotspotCamera(hotspot.id, null)}
                       />
                     ) : (
-                      <div className="rounded-lg border border-dashed border-[#4b5563] px-3 py-3">
-                        <p className="mb-2 text-[11px] text-slate-500">
-                          Flies to {hotspot.layoutId}&apos;s camera. Give it one of its own to
-                          frame this hotspot instead.
-                        </p>
-                        <Button
-                          small
-                          onClick={() =>
-                            setHotspotCamera(hotspot.id, {
-                              position: livePose.position,
-                              // The live pose is YXZ; a hotspot camera is
-                              // stored XYZ. `CameraEditor` does this reorder
-                              // for its own capture button, and so does this.
-                              rotation: yxzToXyz(livePose.rotation),
-                            })
-                          }
-                        >
-                          Add camera from current view
-                        </Button>
-                      </div>
+                      <AddCamera
+                        form="xyz"
+                        hint={`Currently flies to ${hotspot.layoutId}.`}
+                        onAdd={(camera) => setHotspotCamera(hotspot.id, camera)}
+                      />
                     )}
                   </div>
                 </div>

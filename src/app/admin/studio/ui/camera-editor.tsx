@@ -1,28 +1,33 @@
 "use client";
 
 /**
- * One camera, edited three ways: dial it, capture it from the viewport, or
- * name a point for it to look at.
+ * One camera.
  *
- * Used by the Cameras step for the three `cameras.*` poses and by the Resources
+ * THE WHOLE INTERACTION IS: fly the viewport to the shot you want, then press
+ * one button. Everything else here is secondary and is folded away, because a
+ * camera is a thing you AIM, not a thing you type — and a panel that puts six
+ * numbers in front of you invites you to try.
+ *
+ * Used by the Cameras step for the three `cameras.*` poses and by the Layouts
  * and Hotspots steps for their per-row cameras, because it is the same job
- * every time. What differs is only the STORAGE FORM, and that is expressed as
- * the `form` prop rather than duplicated:
+ * every time. What differs is only the STORAGE FORM, expressed as the `form`
+ * prop rather than duplicated:
  *
  *   "yxz"  `cameras.dollhouse | spawn | firstPerson` — applied to the camera
  *          verbatim, so the numbers here are the numbers the runtime uses.
  *   "xyz"  `layouts[].camera` and `hotspots[].camera` — the order
  *          `/extract-pos` prints, reordered by `poseForCamera` on the way in.
  *
- * The rotation read-out is in DEGREES while the file stores RADIANS. That is
- * not cosmetic: nobody can look at `-1.7747` and say whether the camera faces
- * the quay, and an authoring tool whose numbers cannot be reasoned about is a
- * JSON editor with extra steps. The conversion happens at the input boundary
- * only, so what is stored is untouched.
+ * Rotation is shown in DEGREES while the file stores RADIANS. Not cosmetic:
+ * nobody can look at `-1.7747` and say whether the camera faces the quay. The
+ * conversion happens at the input boundary only, so what is stored is
+ * untouched.
  */
 
+import { useState } from "react";
+import { Camera, ChevronRight, Crosshair, Eye, Trash2 } from "lucide-react";
 import type { CameraPose, LayoutCamera, Vec3 } from "@/config/schema";
-import { forwardOf, poseForCamera, roundVec, toDeg, toRad, yxzToXyz } from "../pose";
+import { poseForCamera, toDeg, toRad, yxzToXyz } from "../pose";
 import { useViewerStore } from "../viewer-store";
 import { Button, NumberField, Row, Vec3Field } from ".";
 
@@ -34,7 +39,7 @@ function DegreesField({ value, onChange }: { value: Vec3; onChange: (value: Vec3
     <div className="grid grid-cols-3 gap-1.5">
       {(["X", "Y", "Z"] as const).map((axis, i) => (
         <span key={axis} className="relative">
-          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
             {axis}
           </span>
           <NumberField
@@ -53,21 +58,39 @@ function DegreesField({ value, onChange }: { value: Vec3; onChange: (value: Vec3
   );
 }
 
-/**
- * A point on the camera's view ray, for switching a camera to the look-at form.
+/** Read the viewport into a camera of this form.
  *
- * 100 units out is arbitrary and that is fine — the runtime derives the same
- * rotation from ANY point on the ray, so the distance carries no information.
- * What matters is that the direction survives the switch, so changing how a
- * camera is STORED never changes the shot.
- */
-function targetOnRay(pose: CameraPose): Vec3 {
-  const forward = forwardOf(pose.rotation);
-  return roundVec([
-    pose.position[0] + forward.x * 100,
-    pose.position[1] + forward.y * 100,
-    pose.position[2] + forward.z * 100,
-  ]);
+ *  `livePose` is stored YXZ, because that is what a camera IS. A `yxz` slot
+ *  therefore takes it verbatim and an `xyz` slot takes the reorder — one
+ *  quaternion, two readings, so the two forms cannot describe different aims. */
+export function poseFromView(form: CameraForm): LayoutCamera {
+  const live = useViewerStore.getState().livePose;
+  return form === "yxz"
+    ? { position: live.position, rotation: live.rotation }
+    : { position: live.position, rotation: yxzToXyz(live.rotation) };
+}
+
+/** The empty state: no camera here yet, and the one button that makes one. */
+export function AddCamera({
+  form,
+  onAdd,
+  hint,
+}: {
+  form: CameraForm;
+  onAdd: (camera: LayoutCamera) => void;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#4b5563] px-4 py-5 text-center">
+      <Camera size={20} className="text-slate-500" />
+      <p className="text-[11px] leading-relaxed text-slate-500">
+        {hint ?? "Not set yet."} Orbit and zoom the viewport until the shot is right, then take it.
+      </p>
+      <Button tone="primary" small onClick={() => onAdd(poseFromView(form))}>
+        Use this position &amp; rotation
+      </Button>
+    </div>
+  );
 }
 
 export function CameraEditor({
@@ -88,115 +111,101 @@ export function CameraEditor({
   onClear?: () => void;
 }) {
   const requestFly = useViewerStore((s) => s.requestFly);
+  const [numbers, setNumbers] = useState(false);
 
   const stored = camera as LayoutCamera;
-  const usesTarget = !!stored.target && !stored.rotation;
-
   /** The pose the RUNTIME will apply, whichever form this is stored in — what
    *  "Preview" flies to, so the viewport shows the actual shot. */
   const runtimePose: CameraPose = form === "yxz" ? (camera as CameraPose) : poseForCamera(stored);
-
-  /**
-   * Read the viewport camera into this slot.
-   *
-   * `livePose` is stored YXZ, because that is what a camera IS. A `yxz` slot
-   * therefore takes it verbatim and an `xyz` slot takes the reorder — one
-   * quaternion, two readings, so the two forms cannot describe different aims.
-   */
-  const setFromView = () => {
-    const live = useViewerStore.getState().livePose;
-    onChange(
-      form === "yxz"
-        ? { position: live.position, rotation: live.rotation }
-        : { position: live.position, rotation: yxzToXyz(live.rotation) },
-    );
-  };
+  /** A handful of authored cameras aim by naming a point instead of an angle.
+   *  Nothing here writes that form, but it reads and preserves it. */
+  const usesTarget = !!stored.target && !stored.rotation;
 
   return (
-    <div className={`rounded border p-3 ${selected ? "border-sky-400/60 bg-sky-500/5" : "border-white/10"}`}>
-      <div className="mb-3 flex flex-wrap gap-2">
+    <div
+      className={`rounded-lg border ${
+        selected ? "border-[#0457a9] bg-[#0457a9]/10" : "border-[#374151] bg-[#111827]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+        <p className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed text-slate-400">
+          {stored.position.map((n) => n.toFixed(1)).join(", ")}
+          <span className="mx-1.5 text-slate-600">·</span>
+          {usesTarget
+            ? `looks at ${stored.target!.map((n) => n.toFixed(0)).join(", ")}`
+            : (stored.rotation ?? [0, 0, 0]).map((n) => `${toDeg(n).toFixed(1)}°`).join(" ")}
+        </p>
         <Button
           tone="primary"
           small
-          onClick={setFromView}
+          onClick={() => onChange(poseFromView(form))}
           title="Write the viewport's current position and aim into this camera"
         >
-          Set from view
+          Use this position &amp; rotation
         </Button>
         <Button
           small
           onClick={() => requestFly(runtimePose)}
           title="Seat the viewport exactly where this camera sits at runtime"
         >
-          Preview
+          <Eye size={12} /> Preview
         </Button>
         {onSelect && (
-          <Button small tone={selected ? "primary" : "default"} onClick={onSelect}>
-            {selected ? "Selected" : "Select gizmo"}
-          </Button>
-        )}
-        {form === "xyz" && (
           <Button
             small
-            tone="ghost"
-            title={
-              usesTarget
-                ? "Freeze the derived aim into an explicit rotation"
-                : "Aim by naming a point to look at — the rotation is then derived from it"
-            }
-            onClick={() => {
-              const pose = poseForCamera(stored);
-              onChange(
-                usesTarget
-                  ? { position: stored.position, rotation: yxzToXyz(pose.rotation) }
-                  : { position: stored.position, target: targetOnRay(pose) },
-              );
-            }}
+            tone={selected ? "primary" : "default"}
+            onClick={onSelect}
+            title="Attach the drag gizmo to this camera"
           >
-            {usesTarget ? "Use rotation" : "Use look-at target"}
+            <Crosshair size={12} />
           </Button>
         )}
         {onClear && (
-          <Button
-            small
-            tone="danger"
-            onClick={onClear}
-            title="Remove this camera — the resource falls back to its layout's"
-          >
-            Clear
+          <Button small tone="danger" onClick={onClear} title="Remove this camera">
+            <Trash2 size={12} />
           </Button>
         )}
       </div>
 
-      <div className="space-y-2">
-        <Row label="Position" hint="world units">
-          <Vec3Field
-            value={stored.position}
-            step={0.1}
-            onChange={(position) => onChange({ ...stored, position })}
-          />
-        </Row>
+      <button
+        type="button"
+        className="flex w-full items-center gap-1 border-t border-[#374151] px-3 py-1.5 text-left text-[10px] uppercase tracking-wider text-slate-500 transition hover:text-slate-300"
+        onClick={() => setNumbers(!numbers)}
+      >
+        <ChevronRight size={11} className={`transition-transform ${numbers ? "rotate-90" : ""}`} />
+        Numbers
+      </button>
 
-        {usesTarget ? (
-          <Row label="Look at" hint="rotation derived">
+      {numbers && (
+        <div className="space-y-2 border-t border-[#374151] px-3 py-3">
+          <Row label="Position" hint="world units">
             <Vec3Field
-              value={stored.target ?? [0, 0, 0]}
+              value={stored.position}
               step={0.1}
-              onChange={(target) => onChange({ position: stored.position, target })}
+              onChange={(position) => onChange({ ...stored, position })}
             />
           </Row>
-        ) : (
-          <Row
-            label="Rotation"
-            hint={form === "yxz" ? "YXZ, as applied" : "XYZ, as /extract-pos prints"}
-          >
-            <DegreesField
-              value={stored.rotation ?? [0, 0, 0]}
-              onChange={(rotation) => onChange({ position: stored.position, rotation })}
-            />
-          </Row>
-        )}
-      </div>
+          {usesTarget ? (
+            <Row label="Look at" hint="rotation derived from this point">
+              <Vec3Field
+                value={stored.target ?? [0, 0, 0]}
+                step={0.1}
+                onChange={(target) => onChange({ position: stored.position, target })}
+              />
+            </Row>
+          ) : (
+            <Row
+              label="Rotation"
+              hint={form === "yxz" ? "YXZ, as applied" : "XYZ, as /extract-pos prints"}
+            >
+              <DegreesField
+                value={stored.rotation ?? [0, 0, 0]}
+                onChange={(rotation) => onChange({ position: stored.position, rotation })}
+              />
+            </Row>
+          )}
+        </div>
+      )}
     </div>
   );
 }

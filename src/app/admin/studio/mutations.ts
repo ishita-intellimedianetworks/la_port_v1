@@ -19,108 +19,17 @@ import type {
   LayoutCamera,
   LayoutRow,
   SiteConfig,
-  Vec3,
   ZoneKey,
 } from "@/config/schema";
 import { useDraftStore } from "./draft-store";
-import { roundVec } from "./pose";
-import type { Selection } from "./viewer-store";
 
 type Update = (recipe: (draft: SiteConfig) => void, opts?: { history?: boolean }) => void;
 
 const update: Update = (recipe, opts) => useDraftStore.getState().update(recipe, opts);
 
-// ── Writing a position ────────────────────────────────────────────────────────
+// ── Cameras ───────────────────────────────────────────────────────────────────
 
-/**
- * Move whatever is selected to `position`.
- *
- * `history: false` is the drag case — one gesture, one undo step. The gizmo
- * calls this on every pointer move and once more on release WITH history, so
- * undo lands the user back where the drag started rather than one frame into
- * it.
- */
-export function moveSelection(selection: Selection, position: Vec3, history = true) {
-  const p = roundVec(position);
-  update((draft) => {
-    if (selection.kind === "sceneCamera") {
-      const pose = draft.cameras[selection.id];
-      if (pose) pose.position = p;
-      return;
-    }
-    if (selection.kind === "layout") {
-      const layout = draft.layouts.find((l) => l.id === selection.id);
-      if (!layout) return;
-      if (selection.part === "camera") layout.camera.position = p;
-      else layout.position = p;
-      return;
-    }
-    if (selection.kind === "hotspot") {
-      const hotspot = draft.hotspots.find((h) => h.id === selection.id);
-      if (!hotspot) return;
-      if (selection.part === "camera") {
-        // A hotspot with no camera of its own is viewed from its layout's.
-        // Dragging its camera handle is the act of GIVING it one, so create it
-        // here rather than silently doing nothing.
-        hotspot.camera = { ...(hotspot.camera ?? { position: p }), position: p };
-      } else {
-        hotspot.position = p;
-      }
-    }
-  }, { history });
-}
-
-// ── Writing a pose ────────────────────────────────────────────────────────────
-
-/**
- * Write a captured viewpoint into the selection.
- *
- * TWO EULER ORDERS, and this is the only place that has to know which is
- * which: `cameras.*` is applied to the camera verbatim as YXZ, while a layout
- * or hotspot camera goes through `poseForCamera`, which reorders XYZ → YXZ.
- * The caller therefore hands over BOTH readings of the same orientation and
- * this picks; asking the caller to pick is how the two ends up transposed.
- *
- * An authored `target` is DROPPED when a rotation is written, because the two
- * forms are exclusive — `poseForCamera` takes `rotation` first, so leaving a
- * stale target behind would leave a value in the file that no longer describes
- * anything.
- */
-export function captureSelection(
-  selection: Selection,
-  reading: { position: Vec3; yxz: Vec3; xyz: Vec3 },
-) {
-  update((draft) => {
-    if (selection.kind === "sceneCamera") {
-      const pose = draft.cameras[selection.id];
-      if (!pose) return;
-      pose.position = reading.position;
-      pose.rotation = reading.yxz;
-      return;
-    }
-    if (selection.kind === "layout") {
-      const layout = draft.layouts.find((l) => l.id === selection.id);
-      if (!layout) return;
-      if (selection.part === "camera") {
-        layout.camera = { position: reading.position, rotation: reading.xyz };
-      } else {
-        layout.position = reading.position;
-      }
-      return;
-    }
-    if (selection.kind === "hotspot") {
-      const hotspot = draft.hotspots.find((h) => h.id === selection.id);
-      if (!hotspot) return;
-      if (selection.part === "camera") {
-        hotspot.camera = { position: reading.position, rotation: reading.xyz };
-      } else {
-        hotspot.position = reading.position;
-      }
-    }
-  });
-}
-
-/** Write a camera onto one layout by id, whatever is selected. */
+/** Write a camera onto one layout by id. */
 export function setLayoutCamera(layoutId: string, camera: LayoutCamera) {
   update((draft) => {
     const layout = draft.layouts.find((l) => l.id === layoutId);
