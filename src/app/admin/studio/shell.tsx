@@ -1,22 +1,33 @@
 "use client";
 
 /**
- * The studio shell: a step rail on the left, the step's panel beside it, and
- * ONE viewport filling the rest.
+ * The studio shell: a step bar across the top, the viewport under it, and the
+ * current step's form under that.
  *
- * The layout is the argument. Steps are panels next to a persistent canvas
- * rather than pages that own one, because every step is a judgement made by
- * LOOKING — is that camera framing the crane, is that bead on the quay, is
- * that sun angle right. A wizard that swapped the canvas between steps would
- * re-download the model, re-compile its shaders and throw away the vantage the
- * author had just lined up, four times a minute.
+ * The shape is the 3di admin's scene editor — numbered steps along the top,
+ * one `aspect-video` viewer, the step's table beneath it, Back and the primary
+ * action pinned to the bottom corners — because that is the tool this one sits
+ * beside, and two admin tools for the same kind of work should not need to be
+ * learned twice.
  *
- * The steps are ordered by dependency, not by importance: nothing can be
- * placed before a model is loaded (1), cameras are worth capturing before
- * layouts refer to them (2–4), resources hang off layouts (5), and the two
- * whole-scene knobs (6–7) are judged against content that already exists. The
- * rail lets you jump anywhere regardless — the order is advice, and the review
- * step's links skip straight to whatever is wrong.
+ * TWO DEPARTURES FROM IT, both deliberate:
+ *
+ *   The canvas is mounted ONCE, by the page, and handed in here. The 3di steps
+ *   each build their own `CanvasWithWrapper`, so moving between them
+ *   re-downloads the model, re-compiles its shaders and discards the vantage
+ *   you had just lined up. Every step here is a judgement made by LOOKING —
+ *   is that camera framing the crane, is that bead on the quay — so the view
+ *   survives the step change.
+ *
+ *   The viewer takes the SPARE height rather than a fixed 16:9 block, and the
+ *   form scrolls beneath it. A step with two controls gets a big picture; the
+ *   thirty-row resources table gets its list, with the model still in shot
+ *   while a marker is dragged.
+ *
+ * The steps split three ways. Steps 1–5 are the spatial work — where the
+ * cameras are and where the resources sit — which is what a viewport is for.
+ * Field of view and lighting are whole-scene extras, judged against content
+ * that already exists, so they come after. Review is the way out.
  */
 
 import { useState } from "react";
@@ -34,17 +45,73 @@ import { validate } from "./validate";
 import { Button } from "./ui";
 
 const STEPS = [
-  { id: "scene", n: 1, label: "Scene", blurb: "Model & site record" },
-  { id: "cameras", n: 2, label: "Cameras", blurb: "Dollhouse, spawn, drop" },
-  { id: "import", n: 3, label: "Import", blurb: "Poses from a GLB" },
-  { id: "resources", n: 4, label: "Layouts", blurb: "Parents & their cameras" },
-  { id: "hotspots", n: 5, label: "Resources", blurb: "Titles, order, parentage" },
-  { id: "fov", n: 6, label: "Field of view", blurb: "One angle, whole site" },
-  { id: "lighting", n: 7, label: "Lighting", blurb: "Sky, lights, grade" },
-  { id: "review", n: 8, label: "Review & save", blurb: "Validate, write site.json" },
+  { id: "scene", n: 1, label: "Scene", group: "place" },
+  { id: "cameras", n: 2, label: "Cameras", group: "place" },
+  { id: "import", n: 3, label: "Import", group: "place" },
+  { id: "resources", n: 4, label: "Layouts", group: "place" },
+  { id: "hotspots", n: 5, label: "Resources", group: "place" },
+  { id: "fov", n: 6, label: "Field of view", group: "extra" },
+  { id: "lighting", n: 7, label: "Lighting", group: "extra" },
+  { id: "review", n: 8, label: "Review & save", group: "save" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
+
+/** One step in the bar. daisyUI's `step` shape: a numbered disc with its label
+ *  beside it, green once reached, joined to its neighbour by a rule. */
+function StepButton({
+  step,
+  state,
+  problem,
+  onClick,
+}: {
+  step: (typeof STEPS)[number];
+  state: "done" | "current" | "todo";
+  problem: "error" | "warning" | null;
+  onClick: () => void;
+}) {
+  const disc =
+    state === "current"
+      ? "bg-[#0457a9] text-white ring-2 ring-[#0457a9]/40"
+      : state === "done"
+        ? "bg-[#22c55e] text-[#111827]"
+        : "bg-[#374151] text-slate-400";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-[#1f2937] ${
+        state === "current" ? "bg-[#1f2937]" : ""
+      }`}
+    >
+      <span
+        className={`relative flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition ${disc}`}
+      >
+        {step.n}
+        {problem && (
+          <span
+            className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-[#111827] ${
+              problem === "error" ? "bg-[#ef4444]" : "bg-[#f59e0b]"
+            }`}
+            title={problem === "error" ? "Has errors" : "Has warnings"}
+          />
+        )}
+      </span>
+      <span
+        className={`whitespace-nowrap text-xs font-medium transition ${
+          state === "current" ? "text-slate-100" : "text-slate-400 group-hover:text-slate-200"
+        }`}
+      >
+        {step.label}
+      </span>
+    </button>
+  );
+}
+
+function Rule() {
+  return <span className="h-px w-4 shrink-0 bg-[#4b5563]" />;
+}
 
 /** The controls that belong to the VIEWPORT rather than to any one step —
  *  what is drawn, how big, and what a click does. They sit over the canvas
@@ -53,7 +120,7 @@ function ViewportToolbar() {
   const viewer = useViewerStore((s) => s);
 
   return (
-    <div className="pointer-events-auto absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-black/70 px-2 py-1.5 backdrop-blur">
+    <div className="pointer-events-auto absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2 py-1.5 backdrop-blur">
       <Button
         small
         tone={viewer.mode === "place" ? "primary" : "ghost"}
@@ -70,25 +137,29 @@ function ViewportToolbar() {
       >
         Drag
       </Button>
-      <span className="mx-1 h-4 w-px bg-white/15" />
+      <Rule />
       <Button small tone={viewer.showLayouts ? "default" : "ghost"} onClick={() => viewer.toggle("showLayouts")}>
         Layouts
       </Button>
       <Button small tone={viewer.showHotspots ? "default" : "ghost"} onClick={() => viewer.toggle("showHotspots")}>
         Resources
       </Button>
-      <Button small tone={viewer.showSceneCameras ? "default" : "ghost"} onClick={() => viewer.toggle("showSceneCameras")}>
+      <Button
+        small
+        tone={viewer.showSceneCameras ? "default" : "ghost"}
+        onClick={() => viewer.toggle("showSceneCameras")}
+      >
         Cameras
       </Button>
       <Button small tone={viewer.showGrid ? "default" : "ghost"} onClick={() => viewer.toggle("showGrid")}>
         Grid
       </Button>
-      <span className="mx-1 h-4 w-px bg-white/15" />
+      <Rule />
       <label className="flex items-center gap-1.5 text-[10px] text-slate-400" title="Marker radius in world units">
         size
         <input
           type="range"
-          className="h-1 w-20 cursor-pointer appearance-none rounded bg-white/15 accent-sky-400"
+          className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#0457a9]"
           min={0.5}
           max={40}
           step={0.5}
@@ -111,19 +182,12 @@ function SelectionReadout() {
   if (selection.kind === "none") return null;
 
   const label =
-    selection.kind === "sceneCamera"
-      ? `cameras.${selection.id}`
-      : `${selection.id} · ${selection.part}`;
+    selection.kind === "sceneCamera" ? `cameras.${selection.id}` : `${selection.id} · ${selection.part}`;
 
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-sky-400/40 bg-black/70 px-3 py-1.5 text-xs text-sky-100 backdrop-blur">
+    <div className="pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-[#0457a9] bg-[#111827]/85 px-3 py-1.5 text-xs text-slate-100 backdrop-blur">
       <span className="font-mono">{label}</span>
-      <button
-        type="button"
-        className="text-slate-400 hover:text-white"
-        onClick={() => clear({ kind: "none" })}
-        title="Deselect"
-      >
+      <button type="button" className="text-slate-400 hover:text-white" onClick={() => clear({ kind: "none" })} title="Deselect">
         ✕
       </button>
     </div>
@@ -140,112 +204,120 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
   const canRedo = useDraftStore((s) => s.future.length > 0);
 
   // Cheap enough to run on every draft change — the whole document is a few
-  // hundred rows — and it is what puts the error dot on the rail, so a problem
+  // hundred rows — and it is what puts the dot on the step bar, so a problem
   // introduced in step 2 is visible while working in step 5.
   const problems = validate(draft);
   const errorSteps = new Set(problems.filter((p) => p.level === "error").map((p) => p.step));
   const warningSteps = new Set(problems.filter((p) => p.level === "warning").map((p) => p.step));
 
   const index = STEPS.findIndex((s) => s.id === step);
+  const stateOf = (i: number) => (i === index ? "current" : i < index ? "done" : "todo");
+  const problemOf = (id: string) =>
+    errorSteps.has(id) ? ("error" as const) : warningSteps.has(id) ? ("warning" as const) : null;
 
   return (
-    <div className="flex h-full min-h-0 w-full bg-[#070b12] text-slate-200">
-      {/* ── Rail ─────────────────────────────────────────────────────────── */}
-      <nav className="flex w-56 shrink-0 flex-col border-r border-white/10">
-        <div className="border-b border-white/10 px-4 py-4">
-          <h1 className="text-sm font-semibold text-white">Site studio</h1>
-          <p className="mt-0.5 text-[10px] leading-tight text-slate-500">
-            {draft.meta.label}
-            <br />
+    <div className="flex h-full min-h-0 w-full flex-col bg-[#111827] text-slate-200">
+      {/* ── Title bar ─────────────────────────────────────────────────────── */}
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#374151] px-4 py-2.5">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-sm font-semibold text-slate-100">Site studio</h1>
+          <span className="text-[11px] text-slate-500">{draft.meta.label}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              dirty ? "bg-[#f59e0b]/15 text-[#f59e0b]" : "bg-[#22c55e]/15 text-[#22c55e]"
+            }`}
+          >
             {dirty ? "draft — unsaved" : "in step with site.json"}
-          </p>
+          </span>
+          <Button small tone="ghost" onClick={undo} disabled={!canUndo} title="Undo">
+            ↶ Undo
+          </Button>
+          <Button small tone="ghost" onClick={redo} disabled={!canRedo} title="Redo">
+            ↷ Redo
+          </Button>
         </div>
+      </header>
 
-        <ol className="min-h-0 flex-1 overflow-y-auto py-2">
-          {STEPS.map((entry) => {
-            const active = entry.id === step;
-            return (
-              <li key={entry.id}>
-                <button
-                  type="button"
-                  onClick={() => setStep(entry.id)}
-                  className={`flex w-full items-start gap-2.5 px-4 py-2 text-left transition ${
-                    active ? "bg-sky-500/15 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                      active ? "bg-sky-400 text-slate-900" : "bg-white/10 text-slate-400"
-                    }`}
-                  >
-                    {entry.n}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-xs font-medium">
-                      {entry.label}
-                      {errorSteps.has(entry.id) && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-400" title="Has errors" />
-                      )}
-                      {!errorSteps.has(entry.id) && warningSteps.has(entry.id) && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="Has warnings" />
-                      )}
-                    </span>
-                    <span className="block truncate text-[10px] text-slate-500">{entry.blurb}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
+      {/* ── Steps ─────────────────────────────────────────────────────────── */}
+      <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[#374151] px-4 py-2">
+        {STEPS.filter((s) => s.group === "place").map((entry, i, all) => (
+          <div key={entry.id} className="flex items-center gap-1">
+            <StepButton
+              step={entry}
+              state={stateOf(STEPS.indexOf(entry))}
+              problem={problemOf(entry.id)}
+              onClick={() => setStep(entry.id)}
+            />
+            {i < all.length - 1 && <Rule />}
+          </div>
+        ))}
 
-        <div className="space-y-2 border-t border-white/10 px-3 py-3">
-          <div className="flex gap-1.5">
-            <Button small onClick={undo} disabled={!canUndo} title="Undo">
-              ↶ Undo
-            </Button>
-            <Button small onClick={redo} disabled={!canRedo} title="Redo">
-              ↷ Redo
-            </Button>
-          </div>
-          <div className="flex gap-1.5">
-            <Button
-              small
-              tone="ghost"
-              disabled={index === 0}
-              onClick={() => setStep(STEPS[Math.max(0, index - 1)].id)}
-            >
-              ← Back
-            </Button>
-            <Button
-              small
-              tone="primary"
-              disabled={index === STEPS.length - 1}
-              onClick={() => setStep(STEPS[Math.min(STEPS.length - 1, index + 1)].id)}
-            >
-              Next →
-            </Button>
-          </div>
-        </div>
+        <span className="mx-3 h-6 w-px shrink-0 bg-[#4b5563]" />
+        <span className="shrink-0 pr-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Extras
+        </span>
+        {STEPS.filter((s) => s.group === "extra").map((entry) => (
+          <StepButton
+            key={entry.id}
+            step={entry}
+            state={stateOf(STEPS.indexOf(entry))}
+            problem={problemOf(entry.id)}
+            onClick={() => setStep(entry.id)}
+          />
+        ))}
+
+        <span className="mx-3 h-6 w-px shrink-0 bg-[#4b5563]" />
+        {STEPS.filter((s) => s.group === "save").map((entry) => (
+          <StepButton
+            key={entry.id}
+            step={entry}
+            state={stateOf(STEPS.indexOf(entry))}
+            problem={problemOf(entry.id)}
+            onClick={() => setStep(entry.id)}
+          />
+        ))}
       </nav>
 
-      {/* ── Step panel ───────────────────────────────────────────────────── */}
-      <div className="flex w-[26rem] min-w-0 shrink-0 flex-col border-r border-white/10">
-        {step === "scene" && <SceneStep />}
-        {step === "cameras" && <CamerasStep />}
-        {step === "import" && <ImportStep />}
-        {step === "resources" && <ResourcesStep />}
-        {step === "hotspots" && <HotspotsStep />}
-        {step === "fov" && <FovStep />}
-        {step === "lighting" && <LightingStep />}
-        {step === "review" && <ReviewStep onGoToStep={(id) => setStep(id as StepId)} />}
-      </div>
+      {/* ── Viewer + step ─────────────────────────────────────────────────── */}
+      <div className="mx-auto flex w-full min-h-0 max-w-[100rem] flex-1 flex-col gap-3 px-4 py-3">
+        <div className="relative min-h-[13rem] flex-1 overflow-hidden rounded-lg border border-[#374151] bg-black">
+          {viewport}
+          <div className="pointer-events-none absolute inset-0">
+            <ViewportToolbar />
+            <SelectionReadout />
+          </div>
+        </div>
 
-      {/* ── Viewport ─────────────────────────────────────────────────────── */}
-      <div className="relative min-w-0 flex-1">
-        {viewport}
-        <div className="pointer-events-none absolute inset-0">
-          <ViewportToolbar />
-          <SelectionReadout />
+        <div className="max-h-[48vh] shrink-0 overflow-y-auto rounded-lg border border-[#374151] bg-[#1f2937]">
+          {step === "scene" && <SceneStep />}
+          {step === "cameras" && <CamerasStep />}
+          {step === "import" && <ImportStep />}
+          {step === "resources" && <ResourcesStep />}
+          {step === "hotspots" && <HotspotsStep />}
+          {step === "fov" && <FovStep />}
+          {step === "lighting" && <LightingStep />}
+          {step === "review" && <ReviewStep onGoToStep={(id) => setStep(id as StepId)} />}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between">
+          <Button
+            wide
+            tone="danger"
+            disabled={index === 0}
+            onClick={() => setStep(STEPS[Math.max(0, index - 1)].id)}
+          >
+            Back
+          </Button>
+          <Button
+            wide
+            tone="primary"
+            disabled={index === STEPS.length - 1}
+            onClick={() => setStep(STEPS[Math.min(STEPS.length - 1, index + 1)].id)}
+          >
+            {index === STEPS.length - 2 ? "Review & save →" : "Next →"}
+          </Button>
         </div>
       </div>
     </div>

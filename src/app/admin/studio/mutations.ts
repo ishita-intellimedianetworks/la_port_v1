@@ -290,26 +290,17 @@ export function renameHotspot(from: string, to: string) {
 // ── Ordering ──────────────────────────────────────────────────────────────────
 
 /**
- * Move a row within its table.
+ * Put a row at `toIndex` in its table — what a drag lands as.
  *
  * ORDER IS DATA HERE. `config/index.ts` derives each layout's child list by
  * filtering `hotspots[]` IN TABLE ORDER, so the order of the hotspots array is
  * literally the order the Resources panel lists them in — there is no separate
  * sort key to set, and no way to reorder the panel other than this.
+ *
+ * The row is spliced OUT before it is inserted, so `toIndex` is read against
+ * the array without it. `SortableList` accounts for that; a caller computing
+ * an index by hand has to as well.
  */
-export function moveRow(table: "layouts" | "hotspots", id: string, delta: number) {
-  update((draft) => {
-    const rows = draft[table] as Array<{ id: string }>;
-    const from = rows.findIndex((r) => r.id === id);
-    if (from < 0) return;
-    const to = Math.min(rows.length - 1, Math.max(0, from + delta));
-    if (to === from) return;
-    const [row] = rows.splice(from, 1);
-    rows.splice(to, 0, row);
-  });
-}
-
-/** Drag-and-drop reorder: put `id` at `toIndex` in its table. */
 export function reorderRow(table: "layouts" | "hotspots", id: string, toIndex: number) {
   update((draft) => {
     const rows = draft[table] as Array<{ id: string }>;

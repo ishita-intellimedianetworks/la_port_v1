@@ -10,26 +10,28 @@
  * the CHILD, in step 5 — this step owns everything else about the parent.
  *
  * ORDER IS DATA. The order of this table is the order the panel lists zones
- * and layouts in; there is no sort key, so the arrows here are the only way to
- * change it.
+ * and layouts in; there is no sort key, so dragging a row by its grip is the
+ * only way to change it.
  */
 
 import { useState } from "react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import type { ZoneKey } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
 import {
   addLayout,
   deleteLayout,
-  moveRow,
   patchLayout,
   renameLayout,
+  reorderRow,
   setLayoutCamera,
 } from "../mutations";
-import { isPlaceholder } from "../pose";
+import { isPlaceholder, poseForCamera } from "../pose";
 import { sameSelection, useViewerStore } from "../viewer-store";
 import {
   Button,
   Empty,
+  IconButton,
   Note,
   Panel,
   Row,
@@ -40,6 +42,7 @@ import {
   Vec3Field,
 } from "../ui";
 import { CameraEditor } from "../ui/camera-editor";
+import { SortableList } from "../ui/sortable-list";
 
 export function ResourcesStep() {
   const draft = useDraftStore((s) => s.draft);
@@ -48,6 +51,7 @@ export function ResourcesStep() {
   const setMode = useViewerStore((s) => s.setMode);
   const mode = useViewerStore((s) => s.mode);
   const livePose = useViewerStore((s) => s.livePose);
+  const requestFly = useViewerStore((s) => s.requestFly);
 
   const [open, setOpen] = useState<string | null>(draft.layouts[0]?.id ?? null);
 
@@ -59,7 +63,7 @@ export function ResourcesStep() {
   return (
     <Panel
       title="4 · Layouts"
-      description="The parents in the resource tree — one saved viewpoint each. Resources are filed under them in step 5."
+      description="The parents in the resource tree — one saved viewpoint each. Drag a row by its grip to set the order the panel lists them in."
       actions={
         <Button
           tone="primary"
@@ -81,15 +85,20 @@ export function ResourcesStep() {
     >
       {!draft.layouts.length && <Empty>No layouts yet. “Add layout here” captures the current view.</Empty>}
 
-      <div className="space-y-2">
-        {draft.layouts.map((layout, index) => {
+      <SortableList
+        items={draft.layouts}
+        onReorder={(from, to) => reorderRow("layouts", draft.layouts[from].id, to)}
+      >
+        {(layout, _index, handle) => {
           const isOpen = open === layout.id;
           const children = draft.hotspots.filter((h) => h.layoutId === layout.id);
           const zone = draft.zones[layout.zone];
+          const placed = !isPlaceholder(layout.camera.position);
 
           return (
-            <div key={layout.id} className="rounded-lg border border-white/10 bg-white/[0.02]">
-              <div className="flex items-center gap-2 px-3 py-2">
+            <div className="rounded-lg border border-[#374151] bg-[#111827]">
+              <div className="flex items-center gap-1.5 px-2 py-2">
+                {handle}
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
@@ -104,38 +113,56 @@ export function ResourcesStep() {
                   <span className="shrink-0 text-[10px] text-slate-500">
                     {children.length} resource{children.length === 1 ? "" : "s"}
                     {layout.walkable ? " · walkable" : " · aerial"}
-                    {isPlaceholder(layout.camera.position) && " · no camera"}
+                    {!placed && " · no camera"}
                   </span>
                 </button>
-                <Button small tone="ghost" title="Move up" onClick={() => moveRow("layouts", layout.id, -1)} disabled={index === 0}>
-                  ↑
-                </Button>
-                <Button
-                  small
-                  tone="ghost"
-                  title="Move down"
-                  onClick={() => moveRow("layouts", layout.id, 1)}
-                  disabled={index === draft.layouts.length - 1}
+
+                {/* The 3di admin's row actions, same order and same meanings:
+                    look through it, edit it, delete it. */}
+                <IconButton
+                  tone="warning"
+                  title="Fly the viewport to this layout's camera"
+                  disabled={!placed}
+                  onClick={() => requestFly(poseForCamera(layout.camera))}
                 >
-                  ↓
-                </Button>
+                  <Eye size={14} />
+                </IconButton>
+                <IconButton
+                  tone={isOpen ? "primary" : "accent"}
+                  title={isOpen ? "Close" : "Edit"}
+                  onClick={() => setOpen(isOpen ? null : layout.id)}
+                >
+                  <Pencil size={13} />
+                </IconButton>
+                <IconButton
+                  tone="danger"
+                  title={
+                    children.length
+                      ? `Delete — takes ${children.length} resource(s) with it`
+                      : "Delete layout"
+                  }
+                  onClick={() => {
+                    deleteLayout(layout.id);
+                    setOpen(null);
+                  }}
+                >
+                  <Trash2 size={13} />
+                </IconButton>
               </div>
 
               {isOpen && (
-                <div className="space-y-3 border-t border-white/10 px-4 py-4">
+                <div className="space-y-3 border-t border-[#374151] px-4 py-4">
                   <Row label="Id" hint="primary key — renaming carries every reference with it">
-                    <div className="flex gap-2">
-                      <TextField
-                        value={layout.id}
-                        mono
-                        onChange={(next) => {
-                          if (next && next !== layout.id) {
-                            renameLayout(layout.id, next);
-                            setOpen(next);
-                          }
-                        }}
-                      />
-                    </div>
+                    <TextField
+                      value={layout.id}
+                      mono
+                      onChange={(next) => {
+                        if (next && next !== layout.id) {
+                          renameLayout(layout.id, next);
+                          setOpen(next);
+                        }
+                      }}
+                    />
                   </Row>
                   <Row label="Name">
                     <TextField value={layout.name} onChange={(name) => patchLayout(layout.id, { name })} />
@@ -166,7 +193,11 @@ export function ResourcesStep() {
                   <div className="flex flex-wrap items-center gap-3 pt-1">
                     <Button
                       small
-                      tone={sameSelection(selection, { kind: "layout", id: layout.id, part: "position" }) ? "primary" : "default"}
+                      tone={
+                        sameSelection(selection, { kind: "layout", id: layout.id, part: "position" })
+                          ? "primary"
+                          : "default"
+                      }
                       onClick={() => select({ kind: "layout", id: layout.id, part: "position" })}
                     >
                       Select marker
@@ -215,36 +246,18 @@ export function ResourcesStep() {
                       onChange={(camera) => setLayoutCamera(layout.id, camera)}
                     />
                   </div>
-
-                  <div className="flex justify-between pt-2">
-                    <span className="text-[11px] text-slate-500">
-                      {children.length
-                        ? `Deleting removes ${children.length} resource${children.length === 1 ? "" : "s"} with it.`
-                        : "No resources filed under this layout."}
-                    </span>
-                    <Button
-                      small
-                      tone="danger"
-                      onClick={() => {
-                        deleteLayout(layout.id);
-                        setOpen(null);
-                      }}
-                    >
-                      Delete layout
-                    </Button>
-                  </div>
                 </div>
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      </SortableList>
 
       <div className="mt-5">
         <Note>
-          Deleting a layout deletes its resources too. `hotspots[].layoutId` is a foreign key, and
-          an orphaned resource is the one edit the runtime validator complains about on every page
-          load.
+          Deleting a layout deletes its resources too. <code className="font-mono">hotspots[].layoutId</code>{" "}
+          is a foreign key, and an orphaned resource is the one edit the runtime validator complains
+          about on every page load.
         </Note>
       </div>
     </Panel>

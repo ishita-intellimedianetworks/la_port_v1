@@ -30,7 +30,7 @@ import { StudioShell } from "./studio/shell";
 const StudioViewer = dynamic(() => import("./studio/viewer").then((m) => m.StudioViewer), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-[#05070c] text-xs text-slate-500">
+    <div className="flex h-full w-full items-center justify-center bg-black text-xs text-slate-500">
       Starting the viewport…
     </div>
   ),

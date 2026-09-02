@@ -1,11 +1,15 @@
 "use client";
 
 /**
- * Step 5 — the resources table, and the two things the brief actually asks of
- * it: a configurable title, and an order you choose.
+ * Step 5 — the resources table: where each resource SITS, and what looks at it.
  *
- * BOTH ARE STORED IN NON-OBVIOUS PLACES, which is why this step is worth
- * having rather than editing the JSON:
+ * The step is built around the two things a viewport is needed for — the
+ * position and the camera — with everything that is really site.json's own UI
+ * (the card title, the icon, the fields it lists) folded away under "Card
+ * content". You can still edit it here; it just is not what this step is for.
+ *
+ * THREE THINGS ARE STORED IN NON-OBVIOUS PLACES, which is why the step is
+ * worth having rather than editing the JSON:
  *
  *   the title      is TWO fields. `name` labels the marker and the row in the
  *                  Resources panel; `popupTitle` heads the data card that
@@ -16,14 +20,15 @@
  *   the order      is the ORDER OF THE ARRAY. `config/index.ts` derives each
  *                  layout's child list by filtering `hotspots[]` in table
  *                  order, so there is no sort key to set and no other way to
- *                  reorder the panel. The arrows here move the row.
+ *                  reorder the panel. Drag a row by its grip.
  *
  *   the parent     is `layoutId` on the child, stated once. Re-parenting also
  *                  moves the row next to its new siblings, because a row left
  *                  stranded mid-table shows up in a position nobody chose.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight, Eye, MapPin, Trash2 } from "lucide-react";
 import type { FieldType, HotspotIcon, Tone } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
 import {
@@ -32,19 +37,20 @@ import {
   deleteHotspot,
   HOTSPOT_ICONS,
   moveField,
-  moveRow,
   patchField,
   patchHotspot,
   removeField,
   renameHotspot,
+  reorderRow,
   reparentHotspot,
   setHotspotCamera,
 } from "../mutations";
-import { isPlaceholder, yxzToXyz } from "../pose";
+import { isPlaceholder, poseForCamera, yxzToXyz } from "../pose";
 import { sameSelection, useViewerStore } from "../viewer-store";
 import {
   Button,
   Empty,
+  IconButton,
   Note,
   Panel,
   Row,
@@ -53,6 +59,7 @@ import {
   Vec3Field,
 } from "../ui";
 import { CameraEditor } from "../ui/camera-editor";
+import { SortableList } from "../ui/sortable-list";
 
 const FIELD_TYPES: FieldType[] = [
   "string",
@@ -67,6 +74,26 @@ const FIELD_TYPES: FieldType[] = [
 
 const TONES: (Tone | "")[] = ["", "ok", "warn", "alert"];
 
+/** A fold. Everything under one is still editable — it is just not what the
+ *  step is for, and an open form of twenty rows buries the two controls that
+ *  need the picture next to them. */
+function Disclosure({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-[#374151]">
+      <button
+        type="button"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition hover:text-slate-200"
+        onClick={() => setOpen(!open)}
+      >
+        <ChevronRight size={13} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+        {title}
+      </button>
+      {open && <div className="space-y-3 border-t border-[#374151] px-3 py-3">{children}</div>}
+    </div>
+  );
+}
+
 export function HotspotsStep() {
   const draft = useDraftStore((s) => s.draft);
   const selection = useViewerStore((s) => s.selection);
@@ -74,6 +101,7 @@ export function HotspotsStep() {
   const mode = useViewerStore((s) => s.mode);
   const setMode = useViewerStore((s) => s.setMode);
   const livePose = useViewerStore((s) => s.livePose);
+  const requestFly = useViewerStore((s) => s.requestFly);
 
   const [open, setOpen] = useState<string | null>(null);
   /** Show one layout's children, or all of them. Thirty resources across ten
@@ -87,14 +115,12 @@ export function HotspotsStep() {
 
   /** Rows IN TABLE ORDER — which is display order, so the list has to show
    *  them exactly as stored rather than grouped or sorted for tidiness. */
-  const rows = draft.hotspots
-    .map((hotspot, index) => ({ hotspot, index }))
-    .filter(({ hotspot }) => !layoutFilter || hotspot.layoutId === layoutFilter);
+  const rows = draft.hotspots.filter((h) => !layoutFilter || h.layoutId === layoutFilter);
 
   return (
     <Panel
       title="5 · Resources"
-      description="Titles, order, parentage and per-resource cameras. The order of this list is the order the Resources panel shows."
+      description="Where each resource sits and what looks at it. Drag a row by its grip to set the order the Resources panel lists them in."
       actions={
         <Button
           tone="primary"
@@ -132,14 +158,26 @@ export function HotspotsStep() {
 
       {!rows.length && <Empty>No resources here yet.</Empty>}
 
-      <div className="space-y-2">
-        {rows.map(({ hotspot, index }) => {
+      <SortableList
+        items={rows}
+        onReorder={(from, to) => {
+          // Indices are into the FILTERED list; the array being reordered is
+          // the whole table. Landing "at filtered position `to`" means landing
+          // where that row currently is in the full array — which is the right
+          // answer whether the drag went up or down, since `reorderRow` splices
+          // the row out before it inserts.
+          reorderRow("hotspots", rows[from].id, draft.hotspots.indexOf(rows[to]));
+        }}
+      >
+        {(hotspot, _index, handle) => {
           const isOpen = open === hotspot.id;
           const zone = draft.zones[draft.layouts.find((l) => l.id === hotspot.layoutId)?.zone ?? "waterside"];
+          const unplaced = isPlaceholder(hotspot.position);
 
           return (
-            <div key={hotspot.id} className="rounded-lg border border-white/10 bg-white/[0.02]">
-              <div className="flex items-center gap-2 px-3 py-2">
+            <div className="rounded-lg border border-[#374151] bg-[#111827]">
+              <div className="flex items-center gap-1.5 px-2 py-2">
+                {handle}
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
@@ -155,36 +193,54 @@ export function HotspotsStep() {
                   <span className="font-mono text-xs text-slate-400">{hotspot.id}</span>
                   <span className="truncate text-sm text-slate-100">{hotspot.name}</span>
                   <span className="shrink-0 text-[10px] text-slate-500">
-                    {hotspot.layoutId} · {hotspot.icon} · {hotspot.fields.length} fields
-                    {isPlaceholder(hotspot.position) && " · unplaced"}
+                    {hotspot.layoutId} · {hotspot.fields.length} fields
                     {hotspot.camera && " · own camera"}
                   </span>
+                  {unplaced && (
+                    <span className="shrink-0 rounded-full bg-[#f59e0b]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
+                      unplaced
+                    </span>
+                  )}
                 </button>
-                {/* Index in the FULL table, not the filtered view — moving a
-                    row past a hidden sibling is still a move, and pretending
-                    otherwise would make the arrows lie. */}
-                <Button
-                  small
-                  tone="ghost"
-                  title="Move earlier in the list"
-                  onClick={() => moveRow("hotspots", hotspot.id, -1)}
-                  disabled={index === 0}
+
+                <IconButton
+                  tone="warning"
+                  title="Fly the viewport to what looks at this resource"
+                  onClick={() =>
+                    requestFly(
+                      poseForCamera(
+                        hotspot.camera ??
+                          draft.layouts.find((l) => l.id === hotspot.layoutId)!.camera,
+                      ),
+                    )
+                  }
                 >
-                  ↑
-                </Button>
-                <Button
-                  small
-                  tone="ghost"
-                  title="Move later in the list"
-                  onClick={() => moveRow("hotspots", hotspot.id, 1)}
-                  disabled={index === draft.hotspots.length - 1}
+                  <Eye size={14} />
+                </IconButton>
+                <IconButton
+                  tone={mode === "place" && sameSelection(selection, { kind: "hotspot", id: hotspot.id, part: "position" }) ? "primary" : "accent"}
+                  title="Place by clicking the model"
+                  onClick={() => {
+                    select({ kind: "hotspot", id: hotspot.id, part: "position" });
+                    setMode("place");
+                  }}
                 >
-                  ↓
-                </Button>
+                  <MapPin size={13} />
+                </IconButton>
+                <IconButton
+                  tone="danger"
+                  title="Delete resource"
+                  onClick={() => {
+                    deleteHotspot(hotspot.id);
+                    setOpen(null);
+                  }}
+                >
+                  <Trash2 size={13} />
+                </IconButton>
               </div>
 
               {isOpen && (
-                <div className="space-y-3 border-t border-white/10 px-4 py-4">
+                <div className="space-y-3 border-t border-[#374151] px-4 py-4">
                   <Row label="Id" hint="primary key — journeys reference it">
                     <TextField
                       value={hotspot.id}
@@ -207,32 +263,12 @@ export function HotspotsStep() {
                   <Row label="Marker title" hint="labels the marker and the panel row">
                     <TextField value={hotspot.name} onChange={(name) => patchHotspot(hotspot.id, { name })} />
                   </Row>
-                  <Row label="Card title" hint="heads the data card the marker opens">
-                    <TextField
-                      value={hotspot.popupTitle}
-                      onChange={(popupTitle) => patchHotspot(hotspot.id, { popupTitle })}
-                    />
-                  </Row>
-                  <Row label="Icon">
-                    <Select
-                      value={hotspot.icon}
-                      options={HOTSPOT_ICONS.map((icon) => ({ value: icon, label: icon }))}
-                      onChange={(icon) => patchHotspot(hotspot.id, { icon: icon as HotspotIcon })}
-                    />
-                  </Row>
 
                   <Row label="Position">
                     <Vec3Field
                       value={hotspot.position}
                       step={0.1}
                       onChange={(position) => patchHotspot(hotspot.id, { position })}
-                    />
-                  </Row>
-                  <Row label="Rotation" hint="data only — the marker bead is a sphere">
-                    <Vec3Field
-                      value={hotspot.rotation}
-                      step={0.01}
-                      onChange={(rotation) => patchHotspot(hotspot.id, { rotation })}
                     />
                   </Row>
 
@@ -257,12 +293,9 @@ export function HotspotsStep() {
                     >
                       {mode === "place" ? "Stop placing" : "Place by clicking"}
                     </Button>
-                    <Button small tone="danger" onClick={() => { deleteHotspot(hotspot.id); setOpen(null); }}>
-                      Delete
-                    </Button>
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-1">
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                       Own camera
                     </p>
@@ -276,7 +309,7 @@ export function HotspotsStep() {
                         onClear={() => setHotspotCamera(hotspot.id, null)}
                       />
                     ) : (
-                      <div className="rounded border border-dashed border-white/15 px-3 py-3">
+                      <div className="rounded-lg border border-dashed border-[#4b5563] px-3 py-3">
                         <p className="mb-2 text-[11px] text-slate-500">
                           Viewed from {hotspot.layoutId}&apos;s camera. Give it one to frame this
                           resource on its own.
@@ -299,11 +332,30 @@ export function HotspotsStep() {
                     )}
                   </div>
 
-                  <div className="pt-2">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Card fields — shown in this order
-                      </p>
+                  <Disclosure title="Card content — what the tapped card says">
+                    <Row label="Card title" hint="heads the data card the marker opens">
+                      <TextField
+                        value={hotspot.popupTitle}
+                        onChange={(popupTitle) => patchHotspot(hotspot.id, { popupTitle })}
+                      />
+                    </Row>
+                    <Row label="Icon">
+                      <Select
+                        value={hotspot.icon}
+                        options={HOTSPOT_ICONS.map((icon) => ({ value: icon, label: icon }))}
+                        onChange={(icon) => patchHotspot(hotspot.id, { icon: icon as HotspotIcon })}
+                      />
+                    </Row>
+                    <Row label="Rotation" hint="data only — the marker bead is a sphere">
+                      <Vec3Field
+                        value={hotspot.rotation}
+                        step={0.01}
+                        onChange={(rotation) => patchHotspot(hotspot.id, { rotation })}
+                      />
+                    </Row>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[11px] text-slate-400">Fields — shown in this order</p>
                       <Button small onClick={() => addField(hotspot.id)}>
                         Add field
                       </Button>
@@ -339,10 +391,14 @@ export function HotspotsStep() {
                                 // units) have something to work with. A
                                 // half-typed "1." stays a string until it
                                 // parses, exactly as NumberField does.
-                                const numeric = field.type === "integer" || field.type === "decimal" || field.type === "percentage";
+                                const numeric =
+                                  field.type === "integer" ||
+                                  field.type === "decimal" ||
+                                  field.type === "percentage";
                                 const parsed = Number(raw);
                                 patchField(hotspot.id, fieldIndex, {
-                                  value: numeric && raw.trim() !== "" && Number.isFinite(parsed) ? parsed : raw,
+                                  value:
+                                    numeric && raw.trim() !== "" && Number.isFinite(parsed) ? parsed : raw,
                                 });
                               }}
                             />
@@ -355,11 +411,18 @@ export function HotspotsStep() {
                               value={field.tone ?? ""}
                               options={TONES.map((t) => ({ value: t, label: t || "auto" }))}
                               onChange={(tone) =>
-                                patchField(hotspot.id, fieldIndex, { tone: (tone || undefined) as Tone | undefined })
+                                patchField(hotspot.id, fieldIndex, {
+                                  tone: (tone || undefined) as Tone | undefined,
+                                })
                               }
                             />
                             <span className="flex gap-0.5">
-                              <Button small tone="ghost" onClick={() => moveField(hotspot.id, fieldIndex, -1)} disabled={fieldIndex === 0}>
+                              <Button
+                                small
+                                tone="ghost"
+                                onClick={() => moveField(hotspot.id, fieldIndex, -1)}
+                                disabled={fieldIndex === 0}
+                              >
                                 ↑
                               </Button>
                               <Button
@@ -382,13 +445,13 @@ export function HotspotsStep() {
                         </p>
                       </div>
                     )}
-                  </div>
+                  </Disclosure>
                 </div>
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      </SortableList>
 
       <div className="mt-5">
         <Note>

@@ -5,14 +5,21 @@
  *
  * Every step is a form over one part of `site.json`, so the same half-dozen
  * shapes recur: a labelled number, a vec3, a slider with a live read-out, a
- * dropdown over a fixed enum, a colour. Defining them once is what keeps eight
+ * dropdown over a fixed enum, a colour. Defining them once is what keeps the
  * step files readable and, more usefully, what makes them behave the same —
  * particularly `NumberField`, which has one non-obvious job described below.
+ *
+ * The look is the 3di admin's: daisyUI's button, card and table shapes over
+ * the `theme-3di` palette, transcribed in `theme.ts` rather than pulled in as
+ * a plugin. See that file for why.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Vec3 } from "@/config/schema";
+import { CARD, FIELD } from "./theme";
 
+/** One step's form. The header is sticky so the step's own actions stay put
+ *  while a thirty-row table scrolls under them. */
 export function Panel({
   title,
   description,
@@ -25,34 +32,40 @@ export function Panel({
   actions?: ReactNode;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-white/10 px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            {description && (
-              <p className="mt-1 max-w-prose text-xs leading-relaxed text-slate-400">
-                {description}
-              </p>
-            )}
-          </div>
-          {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
+    <section className="flex min-h-0 flex-col">
+      <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#374151] bg-[#1f2937] px-5 py-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-slate-100">{title}</h2>
+          {description && (
+            <p className="mt-0.5 max-w-prose text-xs leading-relaxed text-slate-400">
+              {description}
+            </p>
+          )}
         </div>
+        {actions && <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div>}
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </section>
   );
 }
 
-export function Group({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
+export function Group({
+  title,
+  children,
+  right,
+}: {
+  title: string;
+  children: ReactNode;
+  right?: ReactNode;
+}) {
   return (
-    <fieldset className="mb-5 rounded-lg border border-white/10 bg-white/[0.02] p-4">
-      <legend className="flex items-center gap-3 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-        {title}
+    <section className={`mb-4 ${CARD} p-4`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
         {right}
-      </legend>
+      </div>
       <div className="space-y-3">{children}</div>
-    </fieldset>
+    </section>
   );
 }
 
@@ -69,7 +82,7 @@ export function Row({
   children: ReactNode;
 }) {
   return (
-    <label className="grid grid-cols-[9rem_1fr] items-center gap-3 text-sm">
+    <label className="grid grid-cols-[10rem_1fr] items-center gap-3 text-sm">
       <span className="text-slate-300">
         {label}
         {hint && <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{hint}</span>}
@@ -78,10 +91,6 @@ export function Row({
     </label>
   );
 }
-
-const inputClass =
-  "w-full rounded border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-slate-100 " +
-  "outline-none focus:border-sky-500/70 disabled:opacity-40";
 
 export function TextField({
   value,
@@ -98,7 +107,7 @@ export function TextField({
 }) {
   return (
     <input
-      className={`${inputClass} ${mono ? "font-mono text-xs" : ""}`}
+      className={`${FIELD} ${mono ? "font-mono text-xs" : ""}`}
       value={value}
       placeholder={placeholder}
       disabled={disabled}
@@ -118,7 +127,7 @@ export function TextArea({
 }) {
   return (
     <textarea
-      className={`${inputClass} resize-y leading-relaxed`}
+      className={`${FIELD} resize-y leading-relaxed`}
       rows={rows}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -164,12 +173,14 @@ export function NumberField({
   return (
     <span className="relative flex items-center">
       <input
-        className={`${inputClass} font-mono text-xs ${suffix ? "pr-8" : ""}`}
+        className={`${FIELD} font-mono text-xs ${suffix ? "pr-8" : ""}`}
         type="number"
         step={step}
         value={text}
         disabled={disabled}
-        onFocus={() => { focused.current = true; }}
+        onFocus={() => {
+          focused.current = true;
+        }}
         onBlur={() => {
           focused.current = false;
           // Snap the box back to the committed value, so an abandoned
@@ -204,7 +215,7 @@ export function Vec3Field({
     <div className="grid grid-cols-3 gap-1.5">
       {([0, 1, 2] as const).map((i) => (
         <span key={i} className="relative">
-          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
             {labels[i]}
           </span>
           <NumberField
@@ -238,10 +249,10 @@ export function Slider({
   suffix?: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <input
         type="range"
-        className="h-1 flex-1 cursor-pointer appearance-none rounded bg-white/15 accent-sky-400"
+        className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#0457a9]"
         min={min}
         max={max}
         step={step}
@@ -268,13 +279,13 @@ export function Select<T extends string>({
 }) {
   return (
     <select
-      className={inputClass}
+      className={FIELD}
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as T)}
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value} className="bg-[#0b1220]">
+        <option key={option.value} value={option.value} className="bg-[#1f2937]">
           {option.label}
         </option>
       ))}
@@ -287,7 +298,7 @@ export function ColorField({ value, onChange }: { value: string; onChange: (valu
     <div className="flex items-center gap-2">
       <input
         type="color"
-        className="h-7 w-10 shrink-0 cursor-pointer rounded border border-white/10 bg-transparent"
+        className="h-8 w-10 shrink-0 cursor-pointer rounded-lg border border-[#4b5563] bg-transparent"
         value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -296,6 +307,8 @@ export function ColorField({ value, onChange }: { value: string; onChange: (valu
   );
 }
 
+/** daisyUI's `toggle`, which reads as on/off at a glance where a checkbox
+ *  reads as "one of a set". */
 export function Toggle({
   checked,
   onChange,
@@ -306,25 +319,41 @@ export function Toggle({
   label?: string;
 }) {
   return (
-    <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-      <input
-        type="checkbox"
-        className="h-4 w-4 accent-sky-400"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
+    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-slate-300">
+      <span
+        className={`relative h-5 w-9 shrink-0 rounded-full border transition ${
+          checked ? "border-[#22c55e] bg-[#22c55e]/30" : "border-[#4b5563] bg-[#111827]"
+        }`}
+      >
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span
+          className={`absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all ${
+            checked ? "left-[1.15rem] bg-[#22c55e]" : "left-0.5 bg-slate-400"
+          }`}
+        />
+      </span>
       {label}
     </label>
   );
 }
 
-type ButtonTone = "default" | "primary" | "danger" | "ghost";
+type ButtonTone = "default" | "primary" | "danger" | "warning" | "accent" | "ghost";
 
+/** daisyUI's filled buttons for the two that commit (primary, error) and its
+ *  outline buttons for the rest, which is what keeps a row of six actions from
+ *  reading as six equally important things. */
 const TONES: Record<ButtonTone, string> = {
-  default: "border-white/15 bg-white/5 text-slate-200 hover:bg-white/10",
-  primary: "border-sky-500/50 bg-sky-500/20 text-sky-100 hover:bg-sky-500/30",
-  danger: "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20",
-  ghost: "border-transparent bg-transparent text-slate-400 hover:text-white",
+  default: "border-[#4b5563] bg-[#374151] text-slate-200 hover:bg-[#4b5563]",
+  primary: "border-[#0457a9] bg-[#0457a9] text-white hover:bg-[#0569cc]",
+  danger: "border-[#ef4444] bg-transparent text-[#ef4444] hover:bg-[#ef4444] hover:text-white",
+  warning: "border-[#f59e0b] bg-transparent text-[#f59e0b] hover:bg-[#f59e0b] hover:text-[#111827]",
+  accent: "border-[#22c55e] bg-transparent text-[#22c55e] hover:bg-[#22c55e] hover:text-[#111827]",
+  ghost: "border-transparent bg-transparent text-slate-400 hover:bg-[#374151] hover:text-slate-100",
 };
 
 export function Button({
@@ -334,6 +363,7 @@ export function Button({
   disabled,
   title,
   small,
+  wide,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -341,6 +371,9 @@ export function Button({
   disabled?: boolean;
   title?: string;
   small?: boolean;
+  /** daisyUI `btn-wide` — the fixed width the 3di admin gives the two footer
+   *  buttons, so Back and Save sit in the same place on every step. */
+  wide?: boolean;
 }) {
   return (
     <button
@@ -348,9 +381,40 @@ export function Button({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded border font-medium transition disabled:cursor-not-allowed disabled:opacity-35 ${
-        small ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
-      } ${TONES[tone]}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium transition
+        disabled:cursor-not-allowed disabled:opacity-35 ${
+          small ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-2 text-xs"
+        } ${wide ? "min-w-[8rem]" : ""} ${TONES[tone]}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** daisyUI `btn-square btn-outline btn-sm` — the icon-only action the 3di
+ *  admin puts in its table rows. */
+export function IconButton({
+  children,
+  onClick,
+  tone = "default",
+  title,
+  disabled,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  tone?: ButtonTone;
+  title: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition
+        disabled:cursor-not-allowed disabled:opacity-30 ${TONES[tone]}`}
     >
       {children}
     </button>
@@ -361,7 +425,7 @@ export function Button({
  *  of a studio is that the picture answers most questions. */
 export function Note({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/80">
+    <p className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 px-3 py-2 text-[11px] leading-relaxed text-[#f59e0b]/90">
       {children}
     </p>
   );
@@ -369,7 +433,7 @@ export function Note({ children }: { children: ReactNode }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded border border-dashed border-white/15 px-4 py-6 text-center text-xs text-slate-500">
+    <p className="rounded-lg border border-dashed border-[#4b5563] px-4 py-8 text-center text-xs text-slate-500">
       {children}
     </p>
   );
