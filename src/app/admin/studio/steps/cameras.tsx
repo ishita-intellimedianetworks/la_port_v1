@@ -20,7 +20,7 @@
 import type { CameraPose, LayoutCamera } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
 import { sameSelection, useViewerStore } from "../viewer-store";
-import { Button, Group, Note, Panel, Row } from "../ui";
+import { Button, Group, Note, Panel, Row, Select } from "../ui";
 import { CameraEditor } from "../ui/camera-editor";
 
 const SLOTS = [
@@ -56,9 +56,26 @@ export function CamerasStep() {
       title="2 · Cameras"
       description="Orbit the viewport until the shot is right, then capture it. Preview seats the viewport exactly where the runtime will."
     >
+      <Group title="Opening shot">
+        <Row
+          label="Opens on"
+          hint="startLayoutId — a foreign key into the layouts table, not a fourth pose"
+        >
+          <Select
+            value={draft.startLayoutId}
+            options={draft.layouts.map((l) => ({ value: l.id, label: `${l.id} — ${l.name}` }))}
+            onChange={(startLayoutId) =>
+              update((d) => {
+                d.startLayoutId = startLayoutId;
+              })
+            }
+          />
+        </Row>
+      </Group>
+
       <Group title="Viewport">
         <Row label="Live pose" hint="what Set from view writes">
-          <p className="rounded border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-slate-300">
+          <p className="rounded-lg border border-[#4b5563] bg-[#111827] px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-slate-300">
             pos [{livePose.position.map((n) => n.toFixed(1)).join(", ")}]
             <br />
             rot [{livePose.rotation.map((n) => n.toFixed(3)).join(", ")}] YXZ

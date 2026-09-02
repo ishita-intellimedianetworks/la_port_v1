@@ -70,6 +70,12 @@ export type ViewerState = {
   bounds: { min: [number, number, number]; max: [number, number, number] } | null;
   setBounds: (bounds: ViewerState["bounds"]) => void;
 
+  /** What actually came out of the GLB. Published so the Scene step can say
+   *  "12 clips playing" rather than leaving the author to guess whether a
+   *  still-looking model has no animation or a broken mixer. */
+  modelStats: { clips: number; meshes: number } | null;
+  setModelStats: (stats: ViewerState["modelStats"]) => void;
+
   mode: ViewerMode;
   setMode: (mode: ViewerMode) => void;
 
@@ -123,13 +129,16 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
   setModel: (next) => {
     const current = get().model;
     if (current.kind === "file") URL.revokeObjectURL(current.url);
-    set({ model: next, modelError: null, bounds: null });
+    set({ model: next, modelError: null, bounds: null, modelStats: null });
   },
   modelError: null,
   setModelError: (modelError) => set({ modelError }),
 
   bounds: null,
   setBounds: (bounds) => set({ bounds }),
+
+  modelStats: null,
+  setModelStats: (modelStats) => set({ modelStats }),
 
   mode: "orbit",
   setMode: (mode) => set({ mode }),

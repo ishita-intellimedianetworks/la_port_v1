@@ -69,6 +69,7 @@ export function StudioModel() {
   const source = useViewerStore((s) => s.model);
   const setBounds = useViewerStore((s) => s.setBounds);
   const setModelError = useViewerStore((s) => s.setModelError);
+  const setModelStats = useViewerStore((s) => s.setModelStats);
   const requestFrame = useViewerStore((s) => s.requestFrame);
   // The renderer is read out of the R3F store INSIDE the effect rather than
   // subscribed to — the same idiom `canvas-with-wrapper` uses for the exposure
@@ -109,22 +110,35 @@ export function StudioModel() {
         const box = new THREE.Box3().setFromObject(gltf.scene);
         setBounds({ min: box.min.toArray() as [number, number, number], max: box.max.toArray() as [number, number, number] });
 
-        // Every clip, looping — the studio's job is to show what the terminal
-        // shows, and the terminal autoplays all of them (model-content).
+        // EVERY clip, on a forever loop — spelled out exactly as
+        // `model-content` and `chunk-manager` do it rather than leaning on
+        // `play()`'s defaults, because the studio's whole claim is that what
+        // you see here is what the terminal draws. A clip authored as a
+        // one-shot would otherwise fire once on load and then sit still,
+        // which reads as "this bake has no animation".
         if (gltf.animations.length) {
           const mixer = new THREE.AnimationMixer(gltf.scene);
-          for (const clip of gltf.animations) mixer.clipAction(clip).play();
+          for (const clip of gltf.animations) {
+            const action = mixer.clipAction(clip);
+            action.reset();
+            action.setLoop(THREE.LoopRepeat, Infinity);
+            action.clampWhenFinished = false;
+            action.play();
+          }
           mixerRef.current = mixer;
         } else {
           mixerRef.current = null;
         }
 
+        let meshes = 0;
         gltf.scene.traverse((node) => {
           const mesh = node as THREE.Mesh;
           if (!mesh.isMesh) return;
+          meshes++;
           mesh.castShadow = true;
           mesh.receiveShadow = true;
         });
+        setModelStats({ clips: gltf.animations.length, meshes });
 
         setLoadedScene({ url, scene: gltf.scene });
         setModelError(null);
@@ -134,6 +148,7 @@ export function StudioModel() {
       (error) => {
         if (!alive) return;
         setBounds(null);
+        setModelStats(null);
         setModelError(
           `Could not load ${label} — ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -146,7 +161,7 @@ export function StudioModel() {
       mixerRef.current = null;
       if (loaded) disposeScene(loaded);
     };
-  }, [source, store, setBounds, setModelError, requestFrame]);
+  }, [source, store, setBounds, setModelError, setModelStats, requestFrame]);
 
   useFrame((_, delta) => mixerRef.current?.update(delta));
 

@@ -24,7 +24,7 @@
 import type { SiteConfig } from "@/config/schema";
 import { useDraftStore } from "../draft-store";
 import type { SkyLights } from "../schema-ext";
-import { Button, ColorField, Group, Note, Panel, Row, Select, Slider, Toggle, Vec3Field } from "../ui";
+import { Button, ColorField, Group, Note, Panel, Row, Select, Slider, TextField, Toggle, Vec3Field } from "../ui";
 
 /** Intensities the sky block may override. Colours and the sun direction are
  *  DERIVED from the sky palette every frame, so they are never authored here —
@@ -53,6 +53,8 @@ export function LightingStep() {
   const sky = draft.sky;
   const skyLights = (sky?.lights ?? {}) as SkyLights;
   const grade = draft.world.grade ?? {};
+  const shadows = draft.world.shadows;
+  const envFile = draft.assets.envFile;
 
   /** Continuous edits — sliders and colour pickers — collapse into one undo
    *  step per gesture rather than one per pixel of travel. */
@@ -238,7 +240,18 @@ export function LightingStep() {
             onChange={(v) => setLight("hemiIntensity", v)}
           />
         </Row>
-        <Row label="Env (HDRI)" hint={overrideBadge("envIntensity")}>
+        <Row label="Env HDRI" hint="assets.envFile — the same map the terminal loads">
+          <TextField
+            value={envFile}
+            mono
+            onChange={(next) =>
+              update((d) => {
+                d.assets.envFile = next;
+              })
+            }
+          />
+        </Row>
+        <Row label="Env intensity" hint={overrideBadge("envIntensity")}>
           <Slider
             value={lights.envIntensity}
             min={0}
@@ -278,6 +291,17 @@ export function LightingStep() {
       </Group>
 
       <Group title="Shadows">
+        <Row label="Cast shadows" hint="world.shadows — the master switch every row below hangs off">
+          <Toggle
+            checked={shadows}
+            label={shadows ? "On" : "Off — nothing below has any effect"}
+            onChange={(next) =>
+              update((d) => {
+                d.world.shadows = next;
+              })
+            }
+          />
+        </Row>
         <Row label="Map size" hint="square resolution">
           <Select
             value={String(lights.shadowMapSize)}

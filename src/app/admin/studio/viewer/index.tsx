@@ -85,7 +85,6 @@ function StudioGrid() {
 export function StudioViewer() {
   const grade = useDraftStore((s) => s.draft.world.grade);
   const error = useViewerStore((s) => s.modelError);
-  const model = useViewerStore((s) => s.model);
 
   // The LDR half of the grade, on the canvas element exactly as the terminal
   // applies it — so what the author judges here is the composited image the
@@ -123,17 +122,11 @@ export function StudioViewer() {
         <StudioControls />
       </Canvas>
 
-      {model.kind === "none" && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p className="max-w-sm rounded-lg border border-white/10 bg-black/60 px-4 py-3 text-center text-sm text-slate-300">
-            No model loaded. Open <strong className="text-white">1 · Scene</strong> and either
-            load the configured URL or pick a GLB from disk.
-          </p>
-        </div>
-      )}
-
+      {/* No "nothing loaded" state here: the shell does not mount this until a
+          model exists, so the only empty canvas is one that failed to load —
+          which says so below. */}
       {error && (
-        <div className="absolute inset-x-4 bottom-4 rounded-lg border border-red-500/40 bg-red-950/80 px-4 py-3 text-sm text-red-200">
+        <div className="absolute inset-x-4 bottom-4 rounded-lg border border-[#ef4444]/50 bg-[#ef4444]/15 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
       )}

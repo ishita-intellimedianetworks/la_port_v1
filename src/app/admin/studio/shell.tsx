@@ -22,7 +22,13 @@
  *   The viewer takes the SPARE height rather than a fixed 16:9 block, and the
  *   form scrolls beneath it. A step with two controls gets a big picture; the
  *   thirty-row resources table gets its list, with the model still in shot
- *   while a marker is dragged.
+ *   while a marker is dragged. It can also be given the whole pane, since some
+ *   judgements are only about the picture.
+ *
+ * AND IT DOES NOT EXIST UNTIL A MODEL DOES. An empty canvas invites you to
+ * start working in it, and every gesture in it would be meaningless — placing,
+ * framing and judging a light all mean looking at geometry. So step 1 gets the
+ * whole pane to add a model in, and the viewport appears when it lands.
  *
  * The steps split three ways. Steps 1–5 are the spatial work — where the
  * cameras are and where the resources sit — which is what a viewport is for.
@@ -31,6 +37,7 @@
  */
 
 import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useDraftStore } from "./draft-store";
 import { useViewerStore } from "./viewer-store";
 import { CamerasStep } from "./steps/cameras";
@@ -196,6 +203,11 @@ function SelectionReadout() {
 
 export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
   const [step, setStep] = useState<StepId>("scene");
+  /** Fold the form away when the answer is entirely in the picture — lining a
+   *  camera up, reading a sun angle. The step bar and the footer stay, so it
+   *  is a bigger view rather than a different mode. */
+  const [panelOpen, setPanelOpen] = useState(true);
+  const hasModel = useViewerStore((s) => s.model.kind !== "none");
   const draft = useDraftStore((s) => s.draft);
   const dirty = useDraftStore((s) => s.dirty);
   const undo = useDraftStore((s) => s.undo);
@@ -282,15 +294,32 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
 
       {/* ── Viewer + step ─────────────────────────────────────────────────── */}
       <div className="mx-auto flex w-full min-h-0 max-w-[100rem] flex-1 flex-col gap-3 px-4 py-3">
-        <div className="relative min-h-[13rem] flex-1 overflow-hidden rounded-lg border border-[#374151] bg-black">
-          {viewport}
-          <div className="pointer-events-none absolute inset-0">
-            <ViewportToolbar />
-            <SelectionReadout />
+        {hasModel && (
+          <div className="relative min-h-[16rem] flex-1 overflow-hidden rounded-lg border border-[#374151] bg-black">
+            {viewport}
+            <div className="pointer-events-none absolute inset-0">
+              <ViewportToolbar />
+              <SelectionReadout />
+              <button
+                type="button"
+                onClick={() => setPanelOpen(!panelOpen)}
+                title={panelOpen ? "Hide the form and fill the pane" : "Show the form"}
+                className="pointer-events-auto absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2.5 py-1.5 text-[11px] text-slate-300 backdrop-blur transition hover:text-white"
+              >
+                {panelOpen ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                {panelOpen ? "Bigger view" : "Show form"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="max-h-[48vh] shrink-0 overflow-y-auto rounded-lg border border-[#374151] bg-[#1f2937]">
+        <div
+          className={`shrink-0 overflow-y-auto rounded-lg border border-[#374151] bg-[#1f2937] ${
+            // With no model this pane IS the page — step 1's drop box wants the
+            // room. With one, it is the smaller half of a split.
+            !hasModel ? "min-h-0 flex-1" : panelOpen ? "max-h-[34vh]" : "hidden"
+          }`}
+        >
           {step === "scene" && <SceneStep />}
           {step === "cameras" && <CamerasStep />}
           {step === "import" && <ImportStep />}
