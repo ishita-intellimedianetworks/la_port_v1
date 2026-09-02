@@ -72,12 +72,9 @@ export default function Overlays() {
   const atHome = useNavUiStore((s) => s.atHome);
   const setAtHome = useNavUiStore((s) => s.setAtHome);
   const goHome = useNavUiStore((s) => s.goHome);
-  // WHICH ROUTE. This tree only ever runs as `/v3`, so `uiFrozen` is always
-  // false here and the newer chrome is always on. The check is kept rather than
-  // inlined to `false` because it names WHY: `/` is frozen at what the main
-  // version ships (see the two uses below), and this fork inherited the v2 side
-  // of that split. Delete the flag outright once /v3's overlays diverge enough
-  // that the frozen branch is meaningless.
+  // WHICH ROUTE. `/` is frozen at what the main version ships — see the two
+  // uses below; this tree only ever runs as `/v3`, so the newer chrome is
+  // always on.
   const streamVariant = useStreamVariantId();
   const uiFrozen = streamVariant === "v1";
   const setMapExpanded = useNavUiStore((s) => s.setMapExpanded);

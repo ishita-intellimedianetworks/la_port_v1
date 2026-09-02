@@ -441,10 +441,8 @@ export type SceneConfig = {
    *  override of `stream`. Absent, that route resolves to the same thing `/`
    *  does. See `StreamVariantConfig`. */
   streamV2?: StreamVariantConfig;
-  /** A THIRD bake, served at `/v3`, authored the same way — a partial override
-   *  of `stream`. Absent, that route resolves to whatever `/v2` resolved to,
-   *  which is the point: `/v3` is forked from `/v2` and starts identical to it.
-   *  See `StreamVariantConfig`. */
+  /** A THIRD bake, served at `/v3`, authored the same way. Absent, that route
+   *  resolves to whatever `/v2` does. See `StreamVariantConfig`. */
   streamV3?: StreamVariantConfig;
   world: {
     eyeHeight: number;

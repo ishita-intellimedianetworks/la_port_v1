@@ -3,12 +3,9 @@
 /**
  * TerminalExperienceV3 — the Everport digital twin, rendered at /v3.
  *
- * A FULL FORK of `src/terminal`, not a wrapper around it. The two trees were
- * byte-identical at the commit that created this one and share nothing above
- * `@/shared`, `@/streaming` and `@/config`, which is the entire point: /v3 is
- * where this scene gets taken apart, and an edit here must not be able to reach
- * `/` or `/v2`. Do not "de-duplicate" the two by re-exporting one from the
- * other — that would quietly restore the coupling this fork exists to remove.
+ * A full fork of `src/terminal`, byte-identical when it was made. Edits here
+ * cannot reach `/` or `/v2`. Do not re-export one tree from the other — that
+ * restores the coupling this fork exists to remove.
  *
  * Three layers, one provider:
  *   provider.tsx    owns the phase machine, the load gates and the shared state
@@ -31,15 +28,8 @@ interface TerminalExperienceProps {
   /** Optional — defaults to the single configured site. */
   siteId?: string;
   onReady?: () => void;
-  /**
-   * WHICH BAKE to stream.
-   *
-   * Defaults to `v3` here — this tree belongs to that route, so the default is
-   * the honest one, unlike the shared tree where `v1` is the safe fallback. `v3`
-   * resolves to `streamV3` when site.json authors one and to whatever `/v2`
-   * resolved to when it does not, so this route streams the v2 bake until
-   * somebody deliberately points it somewhere else.
-   */
+  /** WHICH BAKE to stream. `v3` resolves to `site.json > streamV3` if that
+   *  block is authored, and to whatever `/v2` resolved to if it is not. */
   streamVariant?: StreamVariantId;
 }
 
