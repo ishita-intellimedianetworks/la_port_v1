@@ -105,12 +105,12 @@ function LoadingOverlay() {
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#05070c]">
-      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#0457a9]" />
+      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#22c55e]" />
       <div className="w-64 text-center">
-        <p className="truncate font-mono text-[11px] text-slate-400">{label}</p>
+        <p className="truncate font-mono text-[11px] text-slate-300">{label}</p>
         <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#374151]">
           <div
-            className={`h-full rounded-full bg-[#0457a9] ${
+            className={`h-full rounded-full bg-[#22c55e] ${
               // No length to measure against: sweep instead of pretending to
               // know how far along it is.
               progress > 0 ? "transition-[width] duration-200" : "w-1/3 animate-pulse"
@@ -118,7 +118,7 @@ function LoadingOverlay() {
             style={progress > 0 ? { width: `${percent}%` } : undefined}
           />
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-slate-300">
           {decoding ? "Decoding geometry and textures…" : progress > 0 ? `${percent}%` : "Loading…"}
         </p>
       </div>

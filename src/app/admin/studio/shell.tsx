@@ -100,11 +100,13 @@ function StepButton({
   problem: "error" | "warning" | null;
   onClick: () => void;
 }) {
+  // One colour, three weights: solid green here, faded green behind you, grey
+  // ahead. A second accent for "current" would compete with the buttons.
   const disc =
     state === "current"
-      ? "bg-[#0457a9] text-white ring-2 ring-[#0457a9]/40"
+      ? "bg-[#22c55e] text-[#06210f] ring-2 ring-[#22c55e]/35"
       : state === "done"
-        ? "bg-[#22c55e] text-[#111827]"
+        ? "bg-[#22c55e]/25 text-[#4ade80]"
         : "bg-[#374151] text-slate-400";
 
   return (
@@ -130,7 +132,7 @@ function StepButton({
       </span>
       <span
         className={`whitespace-nowrap text-xs font-medium transition ${
-          state === "current" ? "text-slate-100" : "text-slate-400 group-hover:text-slate-200"
+          state === "current" ? "text-slate-50" : "text-slate-300 group-hover:text-white"
         }`}
       >
         {step.label}
@@ -172,7 +174,7 @@ function ViewportToolbar() {
         size
         <input
           type="range"
-          className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#0457a9]"
+          className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#22c55e]"
           min={0.5}
           max={40}
           step={0.5}
@@ -185,7 +187,7 @@ function ViewportToolbar() {
       </Button>
       {viewer.anchored && (
         <span
-          className="rounded-full bg-[#0457a9]/25 px-2 py-0.5 text-[10px] text-slate-200"
+          className="rounded-full bg-[#22c55e]/20 px-2 py-0.5 text-[10px] font-semibold text-[#4ade80]"
           title="Dragging re-aims from the previewed camera's position; the wheel moves along its view axis. Frame releases it."
         >
           anchored
@@ -223,7 +225,7 @@ function PreviewStrip() {
 
   return (
     <div className="pointer-events-auto absolute inset-x-3 bottom-3 flex items-center gap-1.5 overflow-x-auto rounded-lg border border-[#4b5563] bg-[#111827]/85 px-2 py-1.5 backdrop-blur">
-      <span className="shrink-0 pr-1 text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="shrink-0 pr-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
         Preview
       </span>
       {scene.map((slot) => (
@@ -231,7 +233,7 @@ function PreviewStrip() {
           key={slot.id}
           type="button"
           onClick={() => requestFly(cameras[slot.id]!)}
-          className="shrink-0 rounded-md border border-[#4b5563] px-2 py-1 text-[11px] text-slate-300 transition hover:border-[#0457a9] hover:text-white"
+          className="shrink-0 rounded-md border border-[#4b5563] px-2 py-1 text-[11px] text-slate-300 transition hover:border-[#22c55e] hover:text-white"
         >
           {slot.label}
         </button>
@@ -244,7 +246,7 @@ function PreviewStrip() {
           disabled={isPlaceholder(layout.camera.position)}
           onClick={() => requestFly(poseForCamera(layout.camera))}
           title={layout.name}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[#4b5563] px-2 py-1 font-mono text-[11px] text-slate-300 transition hover:border-[#0457a9] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[#4b5563] px-2 py-1 font-mono text-[11px] text-slate-300 transition hover:border-[#22c55e] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
         >
           <span
             className="h-1.5 w-1.5 rounded-full"
@@ -304,7 +306,7 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#374151] px-4 py-2.5">
         <div className="flex items-baseline gap-3">
           <h1 className="text-sm font-semibold text-slate-100">Site studio</h1>
-          <span className="text-[11px] text-slate-500">{draft.meta.label}</span>
+          <span className="text-[11px] text-slate-400">{draft.meta.label}</span>
         </div>
         <div className="flex items-center gap-2">
           <span
@@ -401,9 +403,11 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
         </div>
 
         <div className="flex shrink-0 items-center justify-between">
+          {/* Back is navigation, not destruction. Red here and red on Delete
+              cannot both mean what red means. */}
           <Button
             wide
-            tone="danger"
+            tone="default"
             disabled={index === 0}
             onClick={() => setStep(STEPS[Math.max(0, index - 1)].id)}
           >

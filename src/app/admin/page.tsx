@@ -34,8 +34,8 @@ const StudioViewer = dynamic(() => import("./studio/viewer").then((m) => m.Studi
   // the two read as one wait rather than two false starts.
   loading: () => (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#05070c]">
-      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#0457a9]" />
-      <p className="text-[11px] text-slate-500">Starting the viewport…</p>
+      <span className="h-9 w-9 animate-spin rounded-full border-2 border-[#4b5563] border-t-[#22c55e]" />
+      <p className="text-[11px] text-slate-300">Starting the viewport…</p>
     </div>
   ),
 });

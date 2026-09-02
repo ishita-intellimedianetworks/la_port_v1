@@ -39,7 +39,7 @@ function DegreesField({ value, onChange }: { value: Vec3; onChange: (value: Vec3
     <div className="grid grid-cols-3 gap-1.5">
       {(["X", "Y", "Z"] as const).map((axis, i) => (
         <span key={axis} className="relative">
-          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-bold text-slate-400">
             {axis}
           </span>
           <NumberField
@@ -81,9 +81,9 @@ export function AddCamera({
   hint?: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#4b5563] px-4 py-5 text-center">
-      <Camera size={20} className="text-slate-500" />
-      <p className="text-[11px] leading-relaxed text-slate-500">
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#6b7280] px-4 py-5 text-center">
+      <Camera size={22} className="text-[#4ade80]" />
+      <p className="text-[11px] leading-relaxed text-slate-300">
         {hint ?? "Not set yet."} Orbit and zoom the viewport until the shot is right, then take it.
       </p>
       <Button tone="primary" small onClick={() => onAdd(poseFromView(form))}>
@@ -124,13 +124,13 @@ export function CameraEditor({
   return (
     <div
       className={`rounded-lg border ${
-        selected ? "border-[#0457a9] bg-[#0457a9]/10" : "border-[#374151] bg-[#111827]"
+        selected ? "border-[#22c55e] bg-[#22c55e]/10" : "border-[#4b5563] bg-[#0b1220]"
       }`}
     >
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-        <p className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed text-slate-400">
+        <p className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed text-slate-200">
           {stored.position.map((n) => n.toFixed(1)).join(", ")}
-          <span className="mx-1.5 text-slate-600">·</span>
+          <span className="mx-1.5 text-slate-500">·</span>
           {usesTarget
             ? `looks at ${stored.target!.map((n) => n.toFixed(0)).join(", ")}`
             : (stored.rotation ?? [0, 0, 0]).map((n) => `${toDeg(n).toFixed(1)}°`).join(" ")}
@@ -148,28 +148,28 @@ export function CameraEditor({
           onClick={() => requestFly(runtimePose)}
           title="Seat the viewport exactly where this camera sits at runtime"
         >
-          <Eye size={12} /> Preview
+          <Eye size={13} /> Preview
         </Button>
         {onSelect && (
           <Button
             small
             tone={selected ? "primary" : "default"}
             onClick={onSelect}
-            title="Attach the drag gizmo to this camera"
+            title="Highlight this camera in the viewport"
           >
-            <Crosshair size={12} />
+            <Crosshair size={14} />
           </Button>
         )}
         {onClear && (
           <Button small tone="danger" onClick={onClear} title="Remove this camera">
-            <Trash2 size={12} />
+            <Trash2 size={14} />
           </Button>
         )}
       </div>
 
       <button
         type="button"
-        className="flex w-full items-center gap-1 border-t border-[#374151] px-3 py-1.5 text-left text-[10px] uppercase tracking-wider text-slate-500 transition hover:text-slate-300"
+        className="flex w-full items-center gap-1 border-t border-[#374151] px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400 transition hover:text-white"
         onClick={() => setNumbers(!numbers)}
       >
         <ChevronRight size={11} className={`transition-transform ${numbers ? "rotate-90" : ""}`} />

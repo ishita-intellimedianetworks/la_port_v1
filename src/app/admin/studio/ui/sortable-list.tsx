@@ -38,7 +38,7 @@ import { useState, type ReactNode } from "react";
  *  reads as draggable to anyone who has used that tool. */
 function Grip() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       {[6, 12, 18].map((y) =>
         [6, 12, 18].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.6" />),
       )}
@@ -131,7 +131,7 @@ export function SortableList<T extends { id: string }>({
                   // draggable: see the note at the top.
                   onPointerDown={() => setArmed(item.id)}
                   onPointerUp={() => setArmed(null)}
-                  className="flex cursor-grab touch-none items-center px-1 text-slate-500 transition hover:text-slate-200 active:cursor-grabbing"
+                  className="flex cursor-grab touch-none items-center px-1 text-slate-400 transition hover:text-white active:cursor-grabbing"
                   title="Drag to reorder"
                 >
                   <Grip />

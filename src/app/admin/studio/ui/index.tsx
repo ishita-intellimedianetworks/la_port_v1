@@ -37,7 +37,7 @@ export function Panel({
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-100">{title}</h2>
           {description && (
-            <p className="mt-0.5 max-w-prose text-xs leading-relaxed text-slate-400">
+            <p className="mt-1 max-w-prose text-xs leading-relaxed text-slate-300">
               {description}
             </p>
           )}
@@ -61,7 +61,7 @@ export function Group({
   return (
     <section className={`mb-4 ${CARD} p-4`}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">{title}</h3>
         {right}
       </div>
       <div className="space-y-3">{children}</div>
@@ -83,9 +83,9 @@ export function Row({
 }) {
   return (
     <label className="grid grid-cols-[10rem_1fr] items-center gap-3 text-sm">
-      <span className="text-slate-300">
+      <span className="text-slate-100">
         {label}
-        {hint && <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{hint}</span>}
+        {hint && <span className="mt-0.5 block text-[10px] leading-tight text-slate-400">{hint}</span>}
       </span>
       <div className="min-w-0">{children}</div>
     </label>
@@ -194,7 +194,7 @@ export function NumberField({
         }}
       />
       {suffix && (
-        <span className="pointer-events-none absolute right-2 text-[10px] text-slate-500">{suffix}</span>
+        <span className="pointer-events-none absolute right-2 text-[10px] font-semibold text-slate-400">{suffix}</span>
       )}
     </span>
   );
@@ -215,7 +215,7 @@ export function Vec3Field({
     <div className="grid grid-cols-3 gap-1.5">
       {([0, 1, 2] as const).map((i) => (
         <span key={i} className="relative">
-          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-semibold text-slate-500">
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[10px] font-bold text-slate-400">
             {labels[i]}
           </span>
           <NumberField
@@ -252,7 +252,7 @@ export function Slider({
     <div className="flex items-center gap-3">
       <input
         type="range"
-        className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#0457a9]"
+        className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[#4b5563] accent-[#22c55e]"
         min={min}
         max={max}
         step={step}
@@ -319,7 +319,7 @@ export function Toggle({
   label?: string;
 }) {
   return (
-    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-slate-300">
+    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-slate-100">
       <span
         className={`relative h-5 w-9 shrink-0 rounded-full border transition ${
           checked ? "border-[#22c55e] bg-[#22c55e]/30" : "border-[#4b5563] bg-[#111827]"
@@ -344,16 +344,25 @@ export function Toggle({
 
 type ButtonTone = "default" | "primary" | "danger" | "warning" | "accent" | "ghost";
 
-/** daisyUI's filled buttons for the two that commit (primary, error) and its
- *  outline buttons for the rest, which is what keeps a row of six actions from
- *  reading as six equally important things. */
+/**
+ * Two accents and a grey.
+ *
+ * GREEN COMMITS, RED DESTROYS, everything else is neutral. Both are FILLED,
+ * not outlined: an outline button on a dark card is a rectangle of the same
+ * colour as the card with a hairline round it, and at 11px that is not a
+ * button anyone finds. The filled pair is the only thing in the panel with a
+ * saturated background, so "which one do I press" answers itself.
+ *
+ * `accent` and `warning` are the tinted middle ground the icon buttons use —
+ * visible in a row of thirty without thirty solid blocks of colour.
+ */
 const TONES: Record<ButtonTone, string> = {
-  default: "border-[#4b5563] bg-[#374151] text-slate-200 hover:bg-[#4b5563]",
-  primary: "border-[#0457a9] bg-[#0457a9] text-white hover:bg-[#0569cc]",
-  danger: "border-[#ef4444] bg-transparent text-[#ef4444] hover:bg-[#ef4444] hover:text-white",
-  warning: "border-[#f59e0b] bg-transparent text-[#f59e0b] hover:bg-[#f59e0b] hover:text-[#111827]",
-  accent: "border-[#22c55e] bg-transparent text-[#22c55e] hover:bg-[#22c55e] hover:text-[#111827]",
-  ghost: "border-transparent bg-transparent text-slate-400 hover:bg-[#374151] hover:text-slate-100",
+  default: "border-[#6b7280] bg-[#374151] text-slate-100 hover:border-[#9ca3af] hover:bg-[#4b5563]",
+  primary: "border-[#22c55e] bg-[#22c55e] font-semibold text-[#06210f] hover:bg-[#16a34a]",
+  danger: "border-[#ef4444] bg-[#ef4444] font-semibold text-white hover:bg-[#dc2626]",
+  warning: "border-[#f59e0b]/70 bg-[#f59e0b]/15 text-[#fbbf24] hover:bg-[#f59e0b] hover:text-[#111827]",
+  accent: "border-[#22c55e]/70 bg-[#22c55e]/15 text-[#4ade80] hover:bg-[#22c55e] hover:text-[#06210f]",
+  ghost: "border-transparent bg-transparent text-slate-300 hover:bg-[#374151] hover:text-white",
 };
 
 export function Button({
@@ -383,7 +392,7 @@ export function Button({
       onClick={onClick}
       className={`inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium transition
         disabled:cursor-not-allowed disabled:opacity-35 ${
-          small ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-2 text-xs"
+          small ? "px-2.5 py-1.5 text-[11px]" : "px-4 py-2 text-xs"
         } ${wide ? "min-w-[8rem]" : ""} ${TONES[tone]}`}
     >
       {children}
@@ -413,7 +422,7 @@ export function IconButton({
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition
         disabled:cursor-not-allowed disabled:opacity-30 ${TONES[tone]}`}
     >
       {children}
@@ -425,7 +434,7 @@ export function IconButton({
  *  of a studio is that the picture answers most questions. */
 export function Note({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 px-3 py-2 text-[11px] leading-relaxed text-[#f59e0b]/90">
+    <p className="rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-3 py-2 text-[11px] leading-relaxed text-[#fcd34d]">
       {children}
     </p>
   );
@@ -433,7 +442,7 @@ export function Note({ children }: { children: ReactNode }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-lg border border-dashed border-[#4b5563] px-4 py-8 text-center text-xs text-slate-500">
+    <p className="rounded-lg border border-dashed border-[#6b7280] px-4 py-8 text-center text-xs text-slate-400">
       {children}
     </p>
   );

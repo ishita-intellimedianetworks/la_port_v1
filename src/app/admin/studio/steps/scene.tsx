@@ -57,8 +57,8 @@ function DropBox({ onFile }: { onFile: (file: File) => void }) {
       className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl px-6 py-12
         outline-dashed outline-2 transition ${
           over
-            ? "bg-[#0457a9]/15 text-slate-100 outline-[#0457a9]"
-            : "bg-[#374151] text-slate-300 outline-[#4b5563] hover:outline-[#0457a9]"
+            ? "bg-[#22c55e]/15 text-slate-50 outline-[#22c55e]"
+            : "bg-[#374151] text-slate-200 outline-[#6b7280] hover:outline-[#22c55e]"
         }`}
     >
       <UploadCloud size={28} className="text-slate-400" />
@@ -66,7 +66,7 @@ function DropBox({ onFile }: { onFile: (file: File) => void }) {
         Drag &amp; drop or <span className="font-semibold text-slate-100">choose a GLB</span> to
         look at
       </p>
-      <p className="text-[11px] text-slate-500">
+      <p className="text-[11px] text-slate-400">
         .glb / .gltf — Draco, KTX2 and meshopt all open, same loader as the terminal
       </p>
       <input
@@ -136,7 +136,7 @@ export function SceneStep() {
             <Box size={22} className="shrink-0 text-[#22c55e]" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-mono text-xs text-slate-100">{model.label}</p>
-              <p className="mt-0.5 text-[11px] text-slate-500">
+              <p className="mt-0.5 text-[11px] text-slate-400">
                 {span
                   ? `${span[0].toFixed(0)} × ${span[1].toFixed(0)} × ${span[2].toFixed(0)} world units`
                   : "measuring…"}
@@ -198,7 +198,7 @@ export function SceneStep() {
               </Button>
             ))}
           </div>
-          <p className="text-[11px] leading-relaxed text-slate-500">
+          <p className="text-[11px] leading-relaxed text-slate-400">
             Settle this before taking any camera — every shot in the site is framed through it,
             so changing it later re-frames all of them at once. The authoring cameras carried 32°;
             the site ships 35°.

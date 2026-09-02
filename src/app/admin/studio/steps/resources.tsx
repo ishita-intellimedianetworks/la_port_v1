@@ -96,10 +96,10 @@ export function ResourcesStep() {
           return (
             <div
               className={`overflow-hidden rounded-lg border bg-[#111827] transition-colors ${
-                isOpen ? "border-[#0457a9]" : "border-[#374151] hover:border-[#4b5563]"
+                isOpen ? "border-[#22c55e]" : "border-[#4b5563] hover:border-[#6b7280]"
               }`}
             >
-              <div className={`flex items-center gap-2 px-2 py-2.5 ${isOpen ? "bg-[#0457a9]/10" : ""}`}>
+              <div className={`flex items-center gap-2 px-2 py-2.5 ${isOpen ? "bg-[#22c55e]/10" : ""}`}>
                 {handle}
                 {/* The whole left side is the disclosure: a chevron that turns,
                     then everything that identifies the row. One target, and it
@@ -112,8 +112,8 @@ export function ResourcesStep() {
                   title={isOpen ? "Collapse" : "Expand"}
                 >
                   <ChevronRight
-                    size={15}
-                    className={`shrink-0 text-slate-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                    size={16}
+                    className={`shrink-0 text-slate-300 transition-transform ${isOpen ? "rotate-90" : ""}`}
                   />
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -121,7 +121,7 @@ export function ResourcesStep() {
                   />
                   <span className="w-10 shrink-0 font-mono text-xs text-slate-400">{layout.id}</span>
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{layout.name}</span>
-                  <span className="shrink-0 text-[10px] text-slate-500">
+                  <span className="shrink-0 text-[10px] text-slate-400">
                     {children.length} hotspot{children.length === 1 ? "" : "s"}
                     {layout.walkable ? " · walkable" : " · aerial"}
                   </span>
@@ -138,7 +138,7 @@ export function ResourcesStep() {
                   disabled={!placed}
                   onClick={() => requestFly(poseForCamera(layout.camera))}
                 >
-                  <Eye size={14} />
+                  <Eye size={16} />
                 </IconButton>
                 <IconButton
                   tone="danger"
@@ -152,7 +152,7 @@ export function ResourcesStep() {
                     setOpen(null);
                   }}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={15} />
                 </IconButton>
               </div>
 
