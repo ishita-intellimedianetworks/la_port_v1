@@ -44,9 +44,15 @@ import type { Vec3 } from "@/config/schema";
  * not left out for want of nearby navmesh — H18 has walkable road 26 m away and
  * a 5° look-up — but because their card is an AREA fact (block occupancy, yard
  * moves/hour, berth utilisation) and at 1.83 m you see the front row and
- * nothing behind it. Percentages over a block are a plan-view fact. The seven
- * here are each about ONE object at human scale, which is the case where
- * standing next to it beats looking down at it.
+ * nothing behind it. Percentages over a block are a plan-view fact. Most of
+ * the seven here are about ONE object at human scale, which is the case where
+ * standing next to it beats looking down at it. H18 is a deliberate exception
+ * — see its own note.
+ *
+ * That test is about the CARD, not about reach — and reach can change under
+ * you. L05's three hotspots were unreachable on the v6 navmesh and are all
+ * reachable on v8's; H13 joined on merit once it was, while H11 and H12 stayed
+ * out because their cards did not change.
  *
  * HOW THE ANGLES WERE CHOSEN — three rules, all of them photographic
  * ------------------------------------------------------------------
@@ -63,8 +69,9 @@ import type { Vec3 } from "@/config/schema";
  *    `sunDot`: the view direction dotted with the direction to the sun, so +1
  *    is staring into it and -1 is having it straight behind. Every one here is
  *    at most 0.15, and the target is about -0.55 — over the shoulder, raking
- *    across the subject so its form reads. The old H05 sat at +0.86 and the old
- *    H21 at +0.71, which is why those two looked flat and grey.
+ *    across the subject so its form reads. Earlier drafts of this table had a
+ *    crane pose at +0.86 and H21 at +0.71 — both facing straight into it, and
+ *    both looked flat and grey, which is what put this rule here.
  *
  * 2. THERE MUST BE A PATH ONWARD. Every standpoint can walk at least 15 m
  *    further, within +/-30° of where it looks — `walk` records how far. This is
@@ -179,22 +186,6 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
     area: 262,
   },
 
-  // A crane reads from below or not at all, and the card is about THIS crane of
-  // eight (QC-02, its lifts, its health) — so it has to be identifiable, which
-  // means lit. The lit standpoints are all 90-110 m out; the first attempt put
-  // it at 77 m on the wrong side of the machine, sunDot +0.86 — a grey
-  // silhouette. At 97 m the whole 30 m of it stands against the sky.
-  H05: {
-    position: [-1219.5, 0.13, -164.5],
-    rotation: [0.1562, 2.5825, 0],
-    intent: "Whole crane from the lit side, full height in frame",
-    range: 113,
-    pitch: 9,
-    sunDot: -0.47,
-    walk: 23,
-    area: 273,
-  },
-
   // The one hotspot whose subject IS the walkable surface — an apron exclusion
   // zone. "Do not enter while crane is operating" only means anything at
   // standing height; from 300 m up it is a rectangle. Close in at 14 m and
@@ -209,6 +200,43 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
     sunDot: -0.45,
     walk: 40,
     area: 283,
+  },
+
+  // NORTHERN CONTAINER YARD (L05) — the one ground standpoint for that layout,
+  // and it only became possible on v8. Against the v6 navmesh /v2 walks on, all
+  // three of L05's hotspots were unreachable: H11 and H12 sat 102 m from the
+  // nearest walkable ground with ZERO qualifying standpoints anywhere, because
+  // Recast had carved the whole block out as stacked containers. v8 ships
+  // navmesh-v4, which runs service roads through the yard — nearest ground is
+  // now 13 m (H11), 11 m (H12) and 15 m (H13), with over 1,200 qualifying
+  // standpoints each. This is the clearest case so far of the navmesh, not the
+  // camera, deciding what can be seen on foot.
+  //
+  // WHY H13 AND NOT H11 OR H12. All three are now reachable, so the choice is
+  // the same one the rest of this table makes: H13 is a single named machine
+  // (TH-024 — 72% utilisation, 78% battery, health 94, "Container relocation"),
+  // which is the case standing next to it serves. H11 is stack A12-04's
+  // capacity and 81.6% occupancy and H12 is block A12's 4,960 TEU at 77.5% —
+  // both area facts, and at 1.83 m you see the front row and nothing behind it.
+  // Their poses were composed and measured (H11 50 m @ 7°, H12 44 m @ 8°, both
+  // with 40 m of path) and deliberately not adopted.
+  //
+  // CAVEAT WORTH KNOWING. H13's marker sits at y 21.2, but a top handler is
+  // ~13 m at full mast and H16 puts its own top handler's marker at y 5.2 — so
+  // this marker is probably on a stack top rather than on TH-024 itself. The
+  // shot is framed on the marker, so it shows the block face with the yard
+  // working beyond it; if the marker is ever moved onto the machine, re-run
+  // this one, because 59 m is composed for a stack and would be long for a
+  // single vehicle.
+  H13: {
+    position: [-942.5, 0.13, -88.5],
+    rotation: [0.2145, 2.4618, 0],
+    intent: "Top handler TH-024 working the northern yard",
+    range: 59,
+    pitch: 12,
+    sunDot: -0.36,
+    walk: 40,
+    area: 191,
   },
 
   // "Your box is that one, stack A12-04, third tier up." Identification is the
@@ -226,19 +254,29 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
     area: 123,
   },
 
-  // Same identification job, plus -17.8 °C and POWER: CONNECTED are per-unit
-  // facts: you have to see the unit and the cable running to it. Three-quarter
-  // again, on ground that only exists in v8 — the v2 navmesh stopped at Z 550.9
-  // and this stands at Z 514 with the reach behind it.
-  H17: {
-    position: [-1298.5, 0.13, 478.5],
-    rotation: [0.1206, 2.424, 0],
-    intent: "Three-quarter on the reefer row, plugs visible",
-    range: 46,
-    pitch: 7,
-    sunDot: -0.32,
-    walk: 18,
-    area: 221,
+  // SOUTHERN CONTAINER YARD (L07) — the block itself, chosen over the reefer
+  // that used to hold this slot. Note this is a DELIBERATE exception to the
+  // rule the rest of the table follows: block C08's card is 3,840 TEU at 77%
+  // occupancy with a 2.8-day dwell, which is an area fact, and from 1.83 m you
+  // see the face of the block and not the rows behind it. It is here because it
+  // was asked for, not because the card survives the angle — so if it ever
+  // reads thin, H17 (the reefer, 46 m @ 7°, 18 m of path) is the composed
+  // fallback and its numbers are in this file's history.
+  //
+  // What it does have is the best LIGHT of any pose here: sunDot -0.54 against
+  // an ideal of -0.55, so the block face is raked across rather than flattened.
+  // 61 m back puts the length of the block across the frame, which is the most a
+  // ground camera can say about a block's extent, and the marker sits low
+  // (y 4.5) so the shot stays essentially level.
+  H18: {
+    position: [-1286.5, 0.13, 465.5],
+    rotation: [0.0269, 2.6593, 0],
+    intent: "Across the southern yard block from the service road",
+    range: 61,
+    pitch: 2,
+    sunDot: -0.54,
+    walk: 35,
+    area: 192,
   },
 
   // One lane, one portal, one plate read. Turned to look back DOWN the lane —
