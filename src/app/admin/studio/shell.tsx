@@ -265,6 +265,12 @@ export function StudioShell({ viewport }: { viewport: React.ReactNode }) {
   const [panelOpen, setPanelOpen] = useState(true);
   const hasModel = useViewerStore((s) => s.model.kind !== "none");
   const setLayers = useViewerStore((s) => s.setLayers);
+  const hydrate = useDraftStore((s) => s.hydrate);
+
+  // Last session's draft, swapped in one render after the first. It cannot be
+  // read any earlier: this page is prerendered from the shipped file, and the
+  // client's first render has to produce that same tree or hydration fails.
+  useEffect(hydrate, [hydrate]);
 
   // Draw what this step is about. Depending on `step` alone and not on the
   // layer values is the point: a manual toggle afterwards must survive until

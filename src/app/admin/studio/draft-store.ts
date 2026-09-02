@@ -38,17 +38,30 @@ function clone(value: SiteConfig): SiteConfig {
   return structuredClone(value);
 }
 
-/** The draft as it was left last session, or a fresh clone of the file. Read
- *  lazily inside the store initialiser so SSR never touches `localStorage`. */
-function loadInitial(): SiteConfig {
-  if (typeof window === "undefined") return clone(BASELINE);
+/**
+ * The draft as it was left last session, or null.
+ *
+ * DELIBERATELY NOT READ IN THE STORE INITIALISER, which is where it used to
+ * be. `/admin` is prerendered, so the HTML is built from BASELINE; a store
+ * that restored a saved draft while being created would hand React a
+ * DIFFERENT tree on the client's very first render, and the page died with a
+ * hydration mismatch — the step bar's warning pips are computed from the
+ * draft, so a saved draft with one more unplaced hotspot than the shipped
+ * file is enough to diverge.
+ *
+ * Guarding the read with `typeof window` does not help: the server is not the
+ * problem, the client's FIRST render is, and that has to match the HTML. So
+ * both start from BASELINE and `hydrate()` swaps the saved draft in from an
+ * effect, one render later, when React is past the comparison.
+ */
+function loadStored(): SiteConfig | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as SiteConfig;
+    return raw ? (JSON.parse(raw) as SiteConfig) : null;
   } catch {
     /* a corrupt or oversized entry is not worth failing the page over */
+    return null;
   }
-  return clone(BASELINE);
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -75,6 +88,13 @@ export type DraftState = {
   future: SiteConfig[];
   /** True once anything diverges from `BASELINE`. */
   dirty: boolean;
+  /** True once the saved draft has been looked for. Until then the store holds
+   *  the shipped file, which is what the prerendered HTML shows. */
+  hydrated: boolean;
+
+  /** Restore last session's draft. Called once from an effect — see
+   *  `loadStored` for why it cannot happen any earlier. */
+  hydrate: () => void;
 
   /**
    * Edit the draft.
@@ -95,10 +115,28 @@ export type DraftState = {
 };
 
 export const useDraftStore = create<DraftState>()((set, get) => ({
-  draft: loadInitial(),
+  draft: clone(BASELINE),
   past: [],
   future: [],
   dirty: false,
+  hydrated: false,
+
+  hydrate: () => {
+    if (get().hydrated) return;
+    const stored = loadStored();
+    if (!stored) {
+      set({ hydrated: true });
+      return;
+    }
+    // History starts here rather than carrying the baseline as a first entry:
+    // undoing back past a restore into the shipped file is not an edit anyone
+    // made, and "Discard draft" is the button for that.
+    set({
+      draft: stored,
+      hydrated: true,
+      dirty: JSON.stringify(stored) !== JSON.stringify(BASELINE),
+    });
+  },
 
   update: (recipe, opts) => {
     const { draft, past } = get();
@@ -130,6 +168,8 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
   reset: () => {
     const { draft, past } = get();
     const next = clone(BASELINE);
+    // Overwrite the saved copy too, not just the one in memory — discarding a
+    // draft that comes back on reload has discarded nothing.
     persist(next);
     set({ draft: next, past: [...past, draft].slice(-HISTORY_LIMIT), future: [], dirty: false });
   },
