@@ -161,12 +161,19 @@ export function SceneStep() {
               value={draft.world.fov}
               min={5}
               max={110}
-              step={0.5}
+              // WHOLE DEGREES. A fractional field of view is a distinction
+              // nobody can see and everybody has to read past: the shipped
+              // value is 35, the authoring cameras were 32, and the judgement
+              // between them is "how much of the terminal is in shot", which
+              // half a degree does not move. It also keeps the slider, the
+              // number box and the presets landing on the same values, so a
+              // preset stays lit after a nudge.
+              step={1}
               suffix="°"
               onChange={(next) =>
                 update(
                   (d) => {
-                    d.world.fov = Math.round(next * 100) / 100;
+                    d.world.fov = Math.round(next);
                   },
                   // Dragging is one gesture. Each pixel of travel pushing an
                   // undo entry would bury the value it started from.
@@ -180,7 +187,7 @@ export function SceneStep() {
               <Button
                 key={preset}
                 small
-                tone={Math.abs(draft.world.fov - preset) < 0.01 ? "primary" : "default"}
+                tone={Math.round(draft.world.fov) === preset ? "primary" : "default"}
                 onClick={() =>
                   update((d) => {
                     d.world.fov = preset;
