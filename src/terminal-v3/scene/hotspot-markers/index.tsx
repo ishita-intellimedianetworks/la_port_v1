@@ -29,6 +29,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
   const currentLayoutId = useNavUiStore((s) => s.currentDest?.id ?? null);
   const openHotspotId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
+  const atGroundView = useNavUiStore((s) => s.atGroundView);
 
   // EITHER / OR, never both — the marker set answers "what did you ask for?"
   //   a resource was picked   exactly that one disc, nothing else. Narrowing to
@@ -52,6 +53,12 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   // just opened, and on a close-framed marker it sat under the card's own
   // glass. It comes straight back when the card closes (`setHotspotInfo(null)`).
   const ids = openHotspotId ? picked.filter((id) => id !== openHotspotId) : picked;
+
+  // Standing at the ground standpoint: no beads at all. Not a filtered set — an
+  // empty one. See `atGroundView` in the nav store for why the bottom bar's
+  // First Person circle is the one arrival that shows nothing, and why this is
+  // a flag rather than a test on camera height.
+  if (atGroundView) return null;
 
   return (
     <>

@@ -30,6 +30,7 @@ import { DebugPanel } from "./overlay/debug-panel";
 import { DebugCameraEditor } from "./overlay/debug-panel/camera-editor";
 import { tick } from "@/shared/runtime/diagnostics";
 import { scene as siteScene } from "@/config";
+import { FIRST_PERSON_VIEW } from "./first-person-view";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
 // "Home" / "currently at" are decided purely by XZ proximity to the fixed start
@@ -154,7 +155,10 @@ export default function Overlays() {
 
       // A walk that just STARTED closes the open panel so nothing stale lights
       // up after it (the highlight comes back from position once stopped).
-      if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); }
+      // Walking away from the ground standpoint ends it — "while AT ground" is
+      // literal, so the beads come back the moment the player leaves rather
+      // than staying off until the next explicit travel.
+      if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); store.setAtGroundView(false); }
       wasMovingRef.current = moving;
 
       const hp = homeRef.current;
@@ -342,12 +346,21 @@ export default function Overlays() {
    * tick and the map's marker follows the player there on its own; writing
    * either one here would only fight that poll.
    */
-  const firstPersonPose = siteScene.cameras.firstPerson;
+  // /v3 overrides the shared `cameras.firstPerson` with its own standpoint —
+  // see `first-person-view.ts` for why it is a file here and not an edit to
+  // `site.json`. The fallback is what makes deleting that file enough to put
+  // /v3 back on the config pose.
+  const firstPersonPose = FIRST_PERSON_VIEW ?? siteScene.cameras.firstPerson;
   const handleFirstPerson = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl || !firstPersonPose) return;
     closeOverlays();
     ctrl.clearPreview();
+    // No beads while down there. The teleport says nothing about where it lands
+    // — the poll below latches `currentDest` from live XZ a tick later — so
+    // without this the markers of whichever layout camera is nearest come up
+    // around a standpoint that was never about them.
+    useNavUiStore.getState().enterGroundView();
     const p = firstPersonPose.position as [number, number, number];
     const r = firstPersonPose.rotation as [number, number, number];
     // The authored Y is the CAMERA's height, not the ground — probe the floor

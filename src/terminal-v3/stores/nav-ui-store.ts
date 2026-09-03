@@ -86,6 +86,27 @@ export interface NavUiState {
    * than every disc in the layout at once.
    */
   selectedHotspotId: string | null;
+  /**
+   * True while the player is STANDING AT the bottom bar's ground standpoint —
+   * the "First Person" circle, `FIRST_PERSON_VIEW`.
+   *
+   * It exists to take every bead out of the scene while you are down there. A
+   * ground standpoint is a place to LOOK from, not a place to read data from:
+   * at eye height the discs sit against the geometry rather than above a plan,
+   * and `currentDest` latches to whichever layout camera happens to be nearest
+   * in XZ — so arriving on foot lit up a set of markers nobody asked for.
+   *
+   * Deliberately NOT derived from camera height. Every layout here is
+   * `walkable: false`, so "on the ground" and "in first-person phase" are not
+   * the same thing, and a height test would also blank the per-hotspot ground
+   * views in `ground-views.ts`, whose entire job is to show you one bead from
+   * standing height.
+   *
+   * Cleared by `setSelectedHotspotId` — every travel path calls it, so any
+   * future one leaves this mode without having to remember to — and by the
+   * position poll the moment the player walks away.
+   */
+  atGroundView: boolean;
   crowdFlowZones: CrowdFlowZoneRect[];
 
   /** Toggle a category; switching to a different one drops the selection. */
@@ -108,7 +129,14 @@ export interface NavUiState {
   requestPortal: (transition: FloorTransition) => void;
   clearPortal: () => void;
   setHotspotInfo: (info: HotspotInfo | null) => void;
+  /** Clears `atGroundView`: picking or dropping a bead is always a departure
+   *  from the ground standpoint, whoever asked for it. */
   setSelectedHotspotId: (id: string | null) => void;
+  /** Arrive at the ground standpoint — sets the flag and clears anything the
+   *  teleport would otherwise have left lit. One action rather than three
+   *  setters, because `setSelectedHotspotId` would undo the flag. */
+  enterGroundView: () => void;
+  setAtGroundView: (value: boolean) => void;
   setCrowdFlowZones: (zones: CrowdFlowZoneRect[]) => void;
   reset: () => void;
 }
@@ -130,6 +158,7 @@ const INITIAL = {
   autoOptionCat: null,
   hotspotInfo: null,
   selectedHotspotId: null,
+  atGroundView: false,
   crowdFlowZones: NO_ZONES,
 } satisfies Partial<NavUiState>;
 
@@ -244,7 +273,7 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
     }),
 
   goHome: () =>
-    set({ openLabel: null, selectedId: null, currentDest: null, eventsOpen: false }),
+    set({ openLabel: null, selectedId: null, currentDest: null, eventsOpen: false, atGroundView: false }),
 
   closePanel: () => set({ openLabel: null, lastLabel: null, selectedId: null }),
 
@@ -252,7 +281,9 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
   clearPortal: () => set({ pendingPortal: null }),
 
   setHotspotInfo: (info) => set({ hotspotInfo: info }),
-  setSelectedHotspotId: (id) => set({ selectedHotspotId: id }),
+  setSelectedHotspotId: (id) => set({ selectedHotspotId: id, atGroundView: false }),
+  enterGroundView: () => set({ atGroundView: true, selectedHotspotId: null, hotspotInfo: null }),
+  setAtGroundView: (value) => set({ atGroundView: value }),
   setCrowdFlowZones: (zones) => set({ crowdFlowZones: zones }),
 
   reset: () => set({ ...INITIAL }),
