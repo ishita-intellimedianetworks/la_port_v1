@@ -69,3 +69,64 @@ export function createStore<T extends object>(
   hook.subscribe = useBase.subscribe;
   return hook;
 }
+
+/**
+ * A store whose INITIAL STATE comes from the site config — created on demand
+ * rather than at import.
+ *
+ * Why it cannot be an ordinary `createStore`: the seeded values (the FOV, the
+ * colour grade, the sky) are per MODEL now, and there are three models. A
+ * module-level `create()` runs at import, long before any route has rendered,
+ * so the only thing it could seed from is a hardcoded default or one arbitrary
+ * site — which is exactly the shared-config problem the split removed.
+ *
+ * So creation is deferred to `init(seed)`, which the tree's root calls with its
+ * own site BEFORE any child renders. The hook it hands out is stable either
+ * way, so hook order is never disturbed. Calling `init` again with the SAME
+ * seed is a no-op — a route serves one model for the life of a document, and
+ * re-seeding mid-session would throw away whatever the debug panel had moved.
+ *
+ * A DIFFERENT seed rebuilds. In the browser that never happens; on the SERVER it
+ * is the whole point, because these module singletons outlive one request and a
+ * render of /v2 must not inherit the store /v1 seeded on the request before it.
+ * The rebuild happens at the tree's root, before anything below has subscribed.
+ *
+ * Reading the store before `init` throws, deliberately and loudly — that is a
+ * tree that mounted a consumer above its own root, and the alternative is a
+ * silent fallback to somebody else's numbers.
+ */
+export type SeededStoreHook<T, S> = StoreHook<T> & {
+  /** Build the store from `seed`. A no-op while the seed is the one it already
+   *  holds; a different seed rebuilds. */
+  init: (seed: S) => void;
+};
+
+export function createSeededStore<T extends object, S>(
+  name: string,
+  initializer: (seed: S) => (set: (patch: Patch<T>) => void, get: () => T) => T,
+): SeededStoreHook<T, S> {
+  let inner: StoreHook<T> | null = null;
+  let seeded: S | null = null;
+
+  const require_ = (): StoreHook<T> => {
+    if (!inner) {
+      throw new Error(
+        `[${name}] read before init — the tree's root must call ${name}.init(site) ` +
+          `before anything below it reads the store.`,
+      );
+    }
+    return inner;
+  };
+
+  const hook = (<U>(selector: (state: T) => U) => require_()(selector)) as SeededStoreHook<T, S>;
+  hook.init = (seed: S) => {
+    if (inner && seeded === seed) return;
+    seeded = seed;
+    inner = createStore<T>(initializer(seed));
+  };
+  hook.getState = () => require_().getState();
+  hook.setState = ((patch, replace) =>
+    (require_().setState as (p: unknown, r?: unknown) => void)(patch, replace)) as StoreHook<T>["setState"];
+  hook.subscribe = ((listener) => require_().subscribe(listener)) as StoreHook<T>["subscribe"];
+  return hook;
+}

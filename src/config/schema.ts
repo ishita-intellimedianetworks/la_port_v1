@@ -26,6 +26,9 @@ export type CameraPose = {
  * silently drop any roll a future camera carried.
  */
 export type LayoutCamera = {
+  /** Authoring note — data, not config. Why this shot is where it is, and what
+   *  to re-check if the bake under it changes. */
+  _note?: string | string[];
   position: Vec3;
   /**
    * Authored world rotation in **XYZ** order — exactly what `/extract-pos`
@@ -307,43 +310,6 @@ export type StreamConfig = {
 };
 
 /**
- * A SECOND BAKE, served at its own route beside the first.
- *
- * `stream` is the whole contract for one asset set. This is a PARTIAL OVERRIDE
- * of it: only the keys that differ are authored, and everything unnamed tracks
- * the base block, so a retune there carries across on its own.
- *
- * WHY AN OVERRIDE AND NOT A SECOND FULL BLOCK. Two bakes of the same zone agree
- * about almost everything that matters here — the bands, the cache ceilings,
- * the fog, the aerial strategy are properties of the ZONE and the camera, not
- * of how the geometry was cut. What genuinely differs is the manifest they
- * point at (hence `slug` + `assetBase`) and anything that NAMES something
- * inside it, which in practice is only the dollhouse's `hide` list. Duplicating
- * the rest would mean two copies drifting apart silently.
- *
- * `aerial` and `dollhouse` merge KEY BY KEY over the base's, so an override can
- * replace just `hide` and leave the tiers, the pin and the notes alone.
- * `render` and `streaming` merge the same way. `tiers` merges per band.
- */
-export type StreamVariantConfig = {
-  _note?: string | string[];
-  /** REQUIRED: a variant that streams the same manifest is not a variant. */
-  slug: string;
-  assetBase?: string;
-  _assetBaseNote?: string;
-  tiers?: Partial<Record<"near" | "mid" | "far", StreamTier>>;
-  streaming?: Partial<StreamConfig["streaming"]> & { _note?: string | string[] };
-  cache?: Partial<StreamConfig["cache"]>;
-  fog?: Partial<StreamConfig["fog"]>;
-  render?: Partial<StreamConfig["render"]> & { _note?: string | string[] };
-  forceTier?: StreamConfig["forceTier"];
-  hide?: StreamHideRule[];
-  /** Merged key by key over `stream.aerial` / `stream.dollhouse`. */
-  aerial?: Partial<NonNullable<StreamConfig["aerial"]>>;
-  dollhouse?: Partial<NonNullable<StreamConfig["dollhouse"]>>;
-};
-
-/**
  * The map. TWO layers, each stored WITH the world rect it covers, so both are
  * placed by the same world->pixel transform and can only ever agree: `base` is
  * optional context under `plan`, and `plan` alone still works exactly as it did.
@@ -426,16 +392,13 @@ export type SceneConfig = {
      *  `map.plan`, which stores the image and its bounds together. */
     floorPlan?: string | null;
   };
-  /** The adaptive chunk streamer's parameters. Present = the terminal streams
-   *  instead of loading `assets.modelUrl` as one GLB. */
+  /** The adaptive chunk streamer's parameters for THIS model. Present = the
+   *  terminal streams instead of loading `assets.modelUrl` as one GLB.
+   *
+   *  One per site document, and complete — the other models' blocks live in
+   *  their own files under `config/sites/`, not beside this one. There is no
+   *  override layer left to merge. */
   stream: StreamConfig;
-  /** A SECOND bake of the same zone, served at `/v2`, authored as a partial
-   *  override of `stream`. Absent, that route resolves to the same thing `/`
-   *  does. See `StreamVariantConfig`. */
-  streamV2?: StreamVariantConfig;
-  /** A THIRD bake, served at `/v3`, authored the same way. Absent, that route
-   *  resolves to whatever `/v2` does. See `StreamVariantConfig`. */
-  streamV3?: StreamVariantConfig;
   world: {
     eyeHeight: number;
     /**
@@ -472,7 +435,7 @@ export type SceneConfig = {
      * here applies to both. It does NOT touch the HTML overlays: the glass UI
      * and the hotspot tooltips are siblings of the canvas, not children.
      *
-     * `site.json` is only the seed — the `?debug=true` panel drives the live
+     * the site file is only the seed — the `?debug=true` panel drives the live
      * values, same arrangement as the sky slider.
      */
     grade?: {
@@ -678,7 +641,7 @@ export type LayoutConfig = {
   exactPose?: boolean;
   /**
    * The ids of this layout's hotspots, in table order. DERIVED at load from
-   * `hotspots[].layoutId` — it is not a column in `site.json`.
+   * `hotspots[].layoutId` — it is not a column in the site file.
    *
    * Parentage is stated once, on the child, exactly as a foreign key would
    * state it. It used to be stated twice (here and on the hotspot) and the
@@ -688,7 +651,7 @@ export type LayoutConfig = {
   hotspots: string[];
 };
 
-/** A layout row as `site.json` stores it — no derived `hotspots` list. */
+/** A layout row as the site file stores it — no derived `hotspots` list. */
 export type LayoutRow = Omit<LayoutConfig, "hotspots">;
 
 export type FieldType =
@@ -783,7 +746,13 @@ export type HotspotConfig = {
 };
 
 /**
- * The one config file, shaped as DB tables.
+ * ONE MODEL'S config file, shaped as DB tables.
+ *
+ * There is one such document per bake — `config/sites/v1.json`, `v2.json`,
+ * `v3.json`, read by `config/index.ts` and picked per route — and they share
+ * NOTHING at runtime. Every key below is authored in full in each file; a model
+ * that wants different cameras, a different sky or different bands simply has
+ * them, and cannot reach the other two by accident.
  *
  * `layouts` and `hotspots` are SIBLING arrays joined by `hotspots[].layoutId`,
  * not a tree — that is the shape a database will hand back, and keeping the
@@ -805,7 +774,6 @@ export type SiteConfig = {
   startLayoutId: string;
   assets: SceneConfig["assets"];
   stream: SceneConfig["stream"];
-  streamV2: SceneConfig["streamV2"];
   world: SceneConfig["world"];
   cameras: SceneConfig["cameras"];
   lights: SceneConfig["lights"];

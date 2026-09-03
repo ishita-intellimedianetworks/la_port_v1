@@ -16,7 +16,24 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Two models, one zone
+## Three models, one zone, one config file each
+
+`/`, `/v2` and `/v3` each run a different bake, and each reads a COMPLETE config
+of its own:
+
+| route | config | bake |
+|---|---|---|
+| `/` | `src/config/sites/v1.json` | `portla-c5-v5-obj` — object chunks, instancing off, static ocean |
+| `/v2` | `src/config/sites/v2.json` | `portla-c5-v6wo-inst-mo` — instanced, animated water, resident geometry |
+| `/v3` | `src/config/sites/v3.json` | `NEXT_PUBLIC_STREAM_BASE_V3` (today `v8w-inst-mo`) |
+
+Nothing is inherited or merged between them. Each file carries its own cameras,
+hotspots, layouts, map, sky and `stream` block, so a retune for one route cannot
+move another — and a change meant for every model has to be made three times, on
+purpose. `src/config/index.ts` resolves all three; a route names one with
+`<SiteProvider id="v2">` and everything below reads `useSite()`.
+
+## Two views, one zone
 
 | view | model | why |
 |---|---|---|
@@ -46,7 +63,8 @@ echo 'NEXT_PUBLIC_ASSET_BASE=https://<your-bucket>/assets' > .env.local
 npm run bake <slug>
 ```
 
-The slug and every tuning number are in `site.json › stream`. `tiers.*.distance`,
+The slug and every tuning number are in that model's `<site>.json › stream`.
+`tiers.*.distance`,
 `tiers.*.texture`, `streaming.*`, `cache.*`, `fog` and `aerial` are read live by
 the browser — edit and reload. The geometry LODs, the texture rungs and the
 chunking itself are baked into the files and need a re-bake.

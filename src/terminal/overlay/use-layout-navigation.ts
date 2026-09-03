@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { HOTSPOT_BY_ID, LAYOUT_BY_ID, poseForHotspot } from "@/config";
+import { useSite } from "@/config/context";
 import type { Destination, DestinationCategory } from "@/shared/types";
 import { useScene } from "../context/scene-context";
 import { useNavUiStore } from "../stores/nav-ui-store";
@@ -25,6 +25,10 @@ export interface LayoutEntry {
  * floor); it is just not how you cross the terminal.
  */
 export function useLayoutNavigation() {
+  // The cameras and the two tables are the ACTIVE MODEL's — each route has its
+  // own site file, so travel can only ever aim at poses authored for the bake
+  // it is actually streaming.
+  const site = useSite();
   const { playerControllerRef, triggerFloorTransition, activeFloor } = useScene();
   const currentDest = useNavUiStore((s) => s.currentDest);
 
@@ -102,12 +106,12 @@ export function useLayoutNavigation() {
   const goToHotspot = useCallback(
     (hotspotId: string) => {
       const controller = playerControllerRef.current;
-      const hotspot = HOTSPOT_BY_ID[hotspotId];
-      const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+      const hotspot = site.hotspotById[hotspotId];
+      const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
       if (!controller || !hotspot || !layout) return;
 
       const entry = find(layout.id);
-      const pose = poseForHotspot(hotspotId);
+      const pose = site.poseForHotspot(hotspotId);
 
       useNavUiStore.getState().setHotspotInfo(null);
 
@@ -137,7 +141,7 @@ export function useLayoutNavigation() {
         useNavUiStore.getState().setSelectedHotspotId(hotspotId);
       });
     },
-    [playerControllerRef, triggerFloorTransition, find],
+    [site, playerControllerRef, triggerFloorTransition, find],
   );
 
   return {

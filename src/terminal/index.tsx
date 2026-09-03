@@ -8,45 +8,54 @@
  *   scene-graph.tsx everything inside the WebGL canvas
  *   overlays.tsx    everything on top of it
  *
- * The site is resolved from config, so there is no id to pass in.
+ * WHICH MODEL it runs comes in as `site`, and that one id decides everything:
+ * the document read (`config/sites/<id>.json`), the bake streamed, the stores'
+ * seeds. `/` mounts it as v1 and `/v2` as v2 — two complete configs, one
+ * component tree.
  */
 
 import "./styles.css";
 import CanvasWithWrapper from "@/shared/canvas/canvas-with-wrapper";
-import { defaultSiteId } from "@/shared/scene-data/adapter";
+import { getSite, type SiteId } from "@/config";
+import { SiteProvider } from "@/config/context";
+import { SITE_NODE_ID } from "@/shared/scene-data/adapter";
 import TerminalProvider from "./provider";
-import { StreamVariantProvider } from "@/streaming/variant";
-import type { StreamVariantId } from "@/streaming/config";
+import { initStores } from "./stores/init-stores";
 import SceneGraph from "./scene-graph";
 import Overlays from "./overlays";
 
 interface TerminalExperienceProps {
-  /** Optional — defaults to the single configured site. */
-  siteId?: string;
+  /** The engine's node id. Optional — one site projects to one node. */
+  nodeId?: string;
   onReady?: () => void;
   /**
-   * WHICH BAKE to stream — the only thing that differs between `/` and `/v2`.
+   * WHICH MODEL to run: the site file read AND the bake streamed, which are one
+   * choice.
    *
-   * `v1` is `site.json > stream`, frozen at the behaviour this route had before
-   * the streaming work: the object-chunked v5-obj set, the transmission pass
-   * unconditional, no progressive textures, a fixed pixel ratio. `v2` is
-   * `streamV2` merged over it — the instanced, animated-water bake plus the lag
-   * work. Everything else (cameras, hotspots, map, layouts) is the same zone
-   * and the same data, which is what makes the two comparable.
+   * `v1` is `config/sites/v1.json`, frozen at the behaviour this route had
+   * before the streaming work: the object-chunked v5-obj set, the transmission
+   * pass unconditional, no progressive textures, a fixed pixel ratio. `v2` is
+   * `config/sites/v2.json` — the instanced, animated-water bake plus the lag
+   * work, in a document of its own. The two files still describe the same zone,
+   * which is what makes the routes comparable; they just cannot edit each other
+   * any more.
    *
    * Defaults to `v1` so a caller that says nothing gets the known-good route.
    */
-  streamVariant?: StreamVariantId;
+  site?: SiteId;
 }
 
 export default function TerminalExperience({
-  siteId = defaultSiteId,
+  nodeId = SITE_NODE_ID,
   onReady,
-  streamVariant = "v1",
+  site = "v1",
 }: TerminalExperienceProps) {
+  // Before anything below renders: the stores that seed from the site file get
+  // THIS model's numbers. See `initStores`.
+  initStores(getSite(site));
   return (
-    <StreamVariantProvider id={streamVariant}>
-    <TerminalProvider nodeId={siteId} onReady={onReady} dollhouseFirstVisit>
+    <SiteProvider id={site}>
+    <TerminalProvider nodeId={nodeId} onReady={onReady} dollhouseFirstVisit>
       <main className="absolute h-full w-full overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
           <CanvasWithWrapper>
@@ -56,7 +65,7 @@ export default function TerminalExperience({
         <Overlays />
       </main>
     </TerminalProvider>
-    </StreamVariantProvider>
+    </SiteProvider>
   );
 }
 

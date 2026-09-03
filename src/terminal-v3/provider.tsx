@@ -17,7 +17,8 @@ import { useSearchParams } from "next/navigation";
 import { useGLTF } from "@react-three/drei";
 
 import isLowPower from "@/shared/runtime";
-import { nodes, defaultSiteId } from "@/shared/scene-data/adapter";
+import { useSite } from "@/config/context";
+import { sceneDataFor, SITE_NODE_ID } from "@/shared/scene-data/adapter";
 import {
   findNode,
   type NodeData,
@@ -56,17 +57,19 @@ interface Props {
    *  first person. Interior floors always enter first person directly. */
   dollhouseFirstVisit?: boolean;
   /** Per-venue floor overrides, keyed by floor id and merged field-by-field
-   *  over the shared site config. Lets a route swap a venue's model /
-   *  camera without touching the config every other route reads (the /lighting
-   *  route uses this for the SoFi stadium delivery). Pass a module-level
-   *  constant — identity feeds the floors memo. Default: none (/ unchanged). */
+   *  over the floor the site file projects. For a route that needs to swap a
+   *  venue's model or camera WITHOUT it being a property of the model — the
+   *  /lighting route uses this for the SoFi stadium delivery. A difference that
+   *  belongs to the model belongs in that model's site file instead, which is
+   *  where /v3's spawn moved once it had one. Pass a module-level constant —
+   *  identity feeds the floors memo. Default: none. */
   floorPatches?: Record<string, Partial<FloorConfig>>;
   onReady?: () => void;
   children: ReactNode;
 }
 
 export default function TerminalProvider({
-  nodeId = defaultSiteId,
+  nodeId = SITE_NODE_ID,
   inlineMode,
   active = true,
   dollhouseFirstVisit = false,
@@ -84,7 +87,11 @@ export default function TerminalProvider({
   const instructionsSeen = useAppStore((s) => s.instructionsSeen);
   const playerControllerRef = useRef<PlayerControllerHandle | null>(null);
 
-  const node = useMemo(() => findNode(nodes as NodeData[], nodeId), [nodeId]);
+  // The node tree is projected from the ACTIVE MODEL's file, so the floor's
+  // navmesh, lights, spawn and destinations all come from the same document
+  // this route streams its bake out of.
+  const { nodes } = sceneDataFor(useSite());
+  const node = useMemo(() => findNode(nodes as NodeData[], nodeId), [nodes, nodeId]);
   const floors        = useMemo<FloorConfig[]>(() => {
     const base = node?.floors ?? [];
     if (!floorPatches) return base;

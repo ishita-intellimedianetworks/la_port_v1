@@ -4,7 +4,7 @@
  * The thing this file exists to correct: `manifest.json`'s `lod.bytes` and
  * `tex.json`'s `rung.bytes` are ENCODED sizes — the Draco/meshopt and WebP file
  * sizes on the wire. Nothing in memory is that size. Measured on this bake
- * (see `site.json > stream._note`), 26.5 MB encoded decodes to 358 MB — a
+ * (see `<site>.json > stream._note`), 26.5 MB encoded decodes to 358 MB — a
  * factor of 13.5 — so a ceiling expressed in encoded bytes is off by more than
  * an order of magnitude and never fires.
  *
@@ -27,6 +27,7 @@
  * (GPU process), which is why a "34 MB" budget could show as 1.3 GB.
  */
 import * as THREE from "three";
+import type { DeviceProfile } from "./config";
 
 /** Bytes of JS heap a decoded chunk group holds: every BufferAttribute's typed
  *  array plus the index and any morph targets.
@@ -101,22 +102,68 @@ export interface MemoryBudget {
  * unavailable or unrecognised string falls through to `true`, i.e. the
  * conservative branch. Growing a budget back is cheap — a lost context is not.
  */
+function looksWeak(name: string): boolean {
+  if (!name) return true;
+  const n = name.toLowerCase();
+  const discrete = /\b(nvidia|geforce|rtx|gtx|quadro|radeon (rx|pro)|\brx \d{3,}|arc a\d{3})/;
+  if (/apple m\d/.test(n)) return false;
+  if (discrete.test(n)) return false;
+  return true;
+}
+
+/** The renderer string off a live context, however the browser exposes it. */
+function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string {
+  const ext = gl.getExtension("WEBGL_debug_renderer_info");
+  return ext
+    ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "")
+    : String(gl.getParameter(gl.RENDERER) ?? "");
+}
+
 function isWeakGpu(renderer?: THREE.WebGLRenderer): boolean {
-  if (!renderer) return true;
+  if (!renderer) return weakGpuProbe();
   try {
-    const gl = renderer.getContext();
-    const ext = gl.getExtension("WEBGL_debug_renderer_info");
-    const name = ext
-      ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "")
-      : String(gl.getParameter(gl.RENDERER) ?? "");
-    if (!name) return true;
-    const n = name.toLowerCase();
-    const discrete = /\b(nvidia|geforce|rtx|gtx|quadro|radeon (rx|pro)|\brx \d{3,}|arc a\d{3})/;
-    if (/apple m\d/.test(n)) return false;
-    if (discrete.test(n)) return false;
-    return true;
+    return looksWeak(rendererName(renderer.getContext()));
   } catch {
     return true;
+  }
+}
+
+let _probe: boolean | null = null;
+
+/**
+ * The same question, asked WITHOUT a renderer in hand.
+ *
+ * `detectProfile()` runs in a `useEffect` before the Canvas exists, and it is
+ * what decides whether this machine gets whole-model residency — the strategy
+ * that switches off every memory ceiling in ChunkManager. Made from
+ * `deviceMemory` and pointer type alone that decision is wrong in exactly the
+ * case that matters: a 1366x768 laptop with 8 GB of RAM, eight cores, a fine
+ * pointer and an Intel iGPU reads as a desktop on every cheap signal there is,
+ * and is then handed the whole near tier on shared video memory.
+ *
+ * So probe properly: one throwaway context, one string, cached for the session
+ * and released immediately. `failIfMajorPerformanceCaveat` is deliberately NOT
+ * set — a software rasteriser should answer "weak", not refuse to answer.
+ * Anything unavailable or unrecognised falls through to `true`, the
+ * conservative branch, exactly as `isWeakGpu` does.
+ */
+export function weakGpuProbe(): boolean {
+  if (_probe !== null) return _probe;
+  if (typeof document === "undefined") return true;
+  try {
+    const c = document.createElement("canvas");
+    const gl = (c.getContext("webgl2") ?? c.getContext("webgl")) as
+      | WebGL2RenderingContext
+      | WebGLRenderingContext
+      | null;
+    if (!gl) return (_probe = true);
+    const weak = looksWeak(rendererName(gl));
+    // Hand the context back rather than waiting for GC — a page that has not
+    // built its real renderer yet should not be holding a second one.
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return (_probe = weak);
+  } catch {
+    return (_probe = true);
   }
 }
 
@@ -150,7 +197,7 @@ export function currentGpuScale(): number {
  * budget is not headroom, it is a promise to allocate.
  */
 export function resolveBudget(
-  profile: "mobile" | "desktop",
+  profile: DeviceProfile,
   renderer?: THREE.WebGLRenderer,
 ): MemoryBudget {
   const dm = typeof navigator !== "undefined"
@@ -161,10 +208,29 @@ export function resolveBudget(
   if (profile === "mobile") {
     // Both branches sit under the few-hundred-MB ceiling at which mobile
     // Safari/Chrome kill the context.
+    //
+    // RAISED from 96/80/40 and 160/128/56, because 80 MB was below the cost of
+    // any usable view of this bake and so guaranteed the eviction loop would
+    // run forever. Measured on v8w at the mobile bands: ~171 MB of decoded
+    // geometry at the median position, and even the coarsest possible
+    // configuration — every chunk pinned to the `far` rung — is 85 MB inside
+    // 300 m. A ceiling the scene can never get under is not a safety margin,
+    // it is a permanent churn generator; the radius is what has to come down,
+    // and `MOBILE.farScale` in config.ts is where it comes down.
+    //
+    // `cpuMB` must stay comfortably ABOVE `gpuMB`: mounted chunks are billed to
+    // both pools (three keeps the decoded arrays after upload), and evictCache
+    // never evicts a mounted chunk — so a cpu cap below the mounted set leaves
+    // the cache permanently over its limit, evicting every unmounted entry the
+    // moment it lands and re-downloading it on the next tick.
+    //
+    // Part of the room for this comes back out of the framebuffer: the low and
+    // mobile profiles turn MSAA off, which on a landscape phone at DPR 1.25 is
+    // ~15 MB that `residentBytes()` never sees but the driver certainly does.
     const tight = weak || (typeof dm === "number" && dm <= 4);
     return tight
-      ? { cpuMB: 96, gpuMB: 80, texMB: 40 }
-      : { cpuMB: 160, gpuMB: 128, texMB: 56 };
+      ? { cpuMB: 176, gpuMB: 120, texMB: 40 }
+      : { cpuMB: 224, gpuMB: 160, texMB: 56 };
   }
 
   const cpuMB = typeof dm === "number" && dm <= 4 ? 192 : typeof dm === "number" && dm >= 8 ? 448 : 288;
@@ -172,6 +238,13 @@ export function resolveBudget(
   // frustum cull off, which is what the dollhouse overview needs; it is not
   // enough to also stack first person's near/mid on top, and the eviction loop
   // is what handles that.
+  //
+  // "low" takes this branch deliberately rather than getting a table of its
+  // own. The split that matters to a budget is the GPU, and `isWeakGpu` already
+  // makes it: a low-profile machine picked out by the renderer string lands on
+  // 192/80 here by construction, and one picked out by core count alone (a
+  // slow CPU behind a real GPU) keeps 320/128, which is correct — its problem
+  // is decode throughput, and `LOW.loadsPerTick` is what addresses that.
   const gpu = weak ? { gpuMB: 192, texMB: 80 } : { gpuMB: 320, texMB: 128 };
   return { cpuMB, ...gpu };
 }

@@ -1,5 +1,5 @@
 /**
- * POST /api/debug/camera — write one camera back into `site.json`.
+ * POST /api/debug/camera — write one camera back into ONE MODEL's site file.
  *
  * The last step of the `?debug=true` framing loop. Everything before it is
  * live: arm the editor, drag the camera onto the shot, read the numbers. This
@@ -12,25 +12,37 @@
  * HAS the working tree. `next build` still emits the route, so the guard is the
  * whole security model and it is checked before anything is read.
  *
+ * WHICH FILE. `src/config/sites/<site>.json`, named by the request. The three
+ * models each have a complete document of their own, and the same layout id
+ * exists in all three — so a save that did not name one would be a save into
+ * whichever file the server guessed, moving a shot on a route nobody was
+ * looking at. The id is validated against the known set before it reaches a
+ * path, so it can never address a file outside that directory.
+ *
  * WHAT IT WRITES. `layouts[id].camera` or `hotspots[id].camera`, and nothing
  * else — the request names a row and a pose, never a path or a field. `rotation`
  * is taken as the **XYZ** the file stores (see `poseForCamera`); converting from
  * the runtime's YXZ is the client's job, because the client is the only side
  * holding a camera to convert from.
  *
- * WHY THE WHOLE FILE IS RE-SERIALISED. `site.json` is already 2-space
+ * WHY THE WHOLE FILE IS RE-SERIALISED. Each site file is already 2-space
  * `JSON.stringify` output, so a parse/stringify round trip reproduces it byte
  * for byte apart from the edit — verified, not assumed. A targeted text patch
  * would avoid the round trip but has to find the right row by regex in a
- * 107 KB file where ids repeat across two tables, which is a worse failure mode
- * than a reformat.
+ * ~100 KB file where ids repeat across two tables, which is a worse failure
+ * mode than a reformat.
  */
 
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-/** Where the one data file lives, relative to the dev server's cwd. */
-const SITE_JSON = path.join(process.cwd(), "src", "config", "site.json");
+/** The models that have a file, and the only values that may reach a path. */
+const SITE_IDS = ["v1", "v2", "v3"] as const;
+type SiteId = (typeof SITE_IDS)[number];
+
+/** Where one model's document lives, relative to the dev server's cwd. */
+const siteFileFor = (id: SiteId) =>
+  path.join(process.cwd(), "src", "config", "sites", `${id}.json`);
 
 type Vec3 = [number, number, number];
 
@@ -90,7 +102,16 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Body is not JSON" }, { status: 400 });
   }
 
-  const { kind, id, position, rotation } = (body ?? {}) as Record<string, unknown>;
+  const { site, kind, id, position, rotation } = (body ?? {}) as Record<string, unknown>;
+
+  if (typeof site !== "string" || !(SITE_IDS as readonly string[]).includes(site)) {
+    return Response.json(
+      { ok: false, error: `Unknown site "${String(site)}" — expected one of ${SITE_IDS.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  const siteFile = siteFileFor(site as SiteId);
+  const siteName = `sites/${site}.json`;
 
   if (kind !== "layout" && kind !== "hotspot") {
     return Response.json({ ok: false, error: `Unknown kind "${String(kind)}"` }, { status: 400 });
@@ -109,10 +130,10 @@ export async function POST(request: Request) {
 
   let raw: string;
   try {
-    raw = await readFile(SITE_JSON, "utf8");
+    raw = await readFile(siteFile, "utf8");
   } catch (e) {
     return Response.json(
-      { ok: false, error: `Cannot read site.json — ${(e as Error).message}` },
+      { ok: false, error: `Cannot read ${siteName} — ${(e as Error).message}` },
       { status: 500 },
     );
   }
@@ -122,7 +143,7 @@ export async function POST(request: Request) {
     doc = JSON.parse(raw) as SiteDoc;
   } catch (e) {
     return Response.json(
-      { ok: false, error: `site.json is not valid JSON — ${(e as Error).message}` },
+      { ok: false, error: `${siteName} is not valid JSON — ${(e as Error).message}` },
       { status: 500 },
     );
   }
@@ -130,7 +151,7 @@ export async function POST(request: Request) {
   const table = kind === "layout" ? doc.layouts : doc.hotspots;
   const index = Array.isArray(table) ? table.findIndex((r) => r.id === id) : -1;
   if (index < 0) {
-    return Response.json({ ok: false, error: `No ${kind} "${id}" in site.json` }, { status: 404 });
+    return Response.json({ ok: false, error: `No ${kind} "${id}" in ${siteName}` }, { status: 404 });
   }
   const row = table[index];
 
@@ -147,17 +168,17 @@ export async function POST(request: Request) {
 
   const next = JSON.stringify(doc, null, 2) + "\n";
   try {
-    await writeFile(SITE_JSON, next, "utf8");
+    await writeFile(siteFile, next, "utf8");
   } catch (e) {
     return Response.json(
-      { ok: false, error: `Cannot write site.json — ${(e as Error).message}` },
+      { ok: false, error: `Cannot write ${siteName} — ${(e as Error).message}` },
       { status: 500 },
     );
   }
 
   return Response.json({
     ok: true,
-    path: `${kind === "layout" ? "layouts" : "hotspots"}[${id}].camera`,
+    path: `${siteName} › ${kind === "layout" ? "layouts" : "hotspots"}[${id}].camera`,
     created: previous === null,
     previous,
   });

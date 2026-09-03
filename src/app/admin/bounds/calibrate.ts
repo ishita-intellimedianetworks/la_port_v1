@@ -105,7 +105,7 @@ const r = (n: number, d = 3): number => {
   return Math.round(n * k) / k;
 };
 
-/** The `map.site` block to paste into site.json. */
+/** The `map.site` block to paste into the site file. */
 export function toJson(
   c: CalibrationResult,
   p: Placement,

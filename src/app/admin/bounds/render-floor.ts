@@ -10,7 +10,7 @@
  *   pixel (W, H)   <->   world (bbox.maxX, bbox.maxZ)
  *
  * Screen right is +X and screen up is -Z. Render here, paste the bounds into
- * `site.json > map.plan`, and world->pixel is exact with no calibration — but
+ * `<site>.json > map.plan`, and world->pixel is exact with no calibration — but
  * paste BOTH, since the rotation and the bounds only agree as a pair.
  *
  * The bbox is supplied by the CALLER, so a render is never silently tied to one

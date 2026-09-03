@@ -16,7 +16,7 @@ import { useStreamVariant } from "@/streaming/variant";
  * of the ten the ground bands resolved 2 chunks of 831 — the water plane and
  * the terrain plane, the only two whose boxes contain the camera. Everything
  * built sat outside the unload radius, so those shots framed empty sky. See the
- * `aerial` block in `site.json > stream` for the per-layout measurements and
+ * `aerial` block in `<site>.json > stream` for the per-layout measurements and
  * for why spanning the whole district costs only ~22 MB.
  *
  * WHY HEIGHT, and not "is a layout selected". Height is the property that

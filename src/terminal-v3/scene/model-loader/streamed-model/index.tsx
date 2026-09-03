@@ -4,7 +4,7 @@
  * StreamedModel — the terminal, streamed. BOTH VIEWS.
  *
  * Drop-in replacement for <SingleModel> on a floor that authors
- * `site.json › stream`. Same two callbacks (`onBounds`, `onLoaded`), same place
+ * `<site>.json › stream`. Same two callbacks (`onBounds`, `onLoaded`), same place
  * in the tree, so nothing downstream — navmesh, player, minimap, hotspots,
  * environment — knows the difference.
  *
@@ -70,11 +70,11 @@ export interface StreamedModelProps {
 
 export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedModelProps) {
   const { scene, camera, gl } = useThree();
-  // WHICH BAKE. `/` streams `stream`, `/v2` streams `streamV2` — different
-  // manifests at different prefixes, so this decides every URL below. It is in
-  // the construction effect's dep list on purpose: pointing at another asset
-  // set is not a retune, it is a different model, and the decoded-chunk cache
-  // from the old one is worthless against it.
+  // WHICH BAKE. Each route reads its own site file and streams the `stream`
+  // block in it — different manifests at different prefixes, so this decides
+  // every URL below. It is in the construction effect's dep list on purpose:
+  // pointing at another asset set is not a retune, it is a different model, and
+  // the decoded-chunk cache from the old one is worthless against it.
   const variant = useStreamVariant();
   const assetBase = variant.assetBase;
   const mgr = useRef<ChunkManager | null>(null);
@@ -131,7 +131,7 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
         renderer: gl as THREE.WebGLRenderer,
         ktx2Path: "/basis/",
         // Memory ceilings are a property of the DEVICE, not of the scene, so
-        // they are resolved here rather than read from site.json's bands — and
+        // they are resolved here rather than read from the site file's bands — and
         // they deliberately do NOT move when the aerial/ground config swaps.
         profile: detectProfile(),
       });

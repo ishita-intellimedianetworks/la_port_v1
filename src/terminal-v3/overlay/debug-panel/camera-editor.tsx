@@ -8,9 +8,9 @@
  * It appears only when there IS an authored camera in play (a resource you
  * travelled to, or the layout you are standing in) and names it, so the row
  * about to be edited is stated before anything moves. The numbers on it are the
- * numbers that get saved — position and an XYZ rotation, the form `site.json`
- * stores — rather than a second rendering of them, so what you read is what
- * lands in the file.
+ * numbers that get saved — position and an XYZ rotation, the form the site
+ * file stores — rather than a second rendering of them, so what you read is
+ * what lands in the file.
  *
  * WHY EDITING IS ARMED RATHER THAN ALWAYS ON. The card is up while you walk,
  * because its numbers are also the readout of where you are. Inputs that both
@@ -20,15 +20,22 @@
  * other half of the same trap.
  *
  * WHY SAVE ASKS. It rewrites a source file in the working tree, and because
- * every module imports `site.json`, the dev server reloads the page the moment
- * it lands. Both facts are on the confirm row: an edit that silently discards
- * an unsaved sibling edit, or that appears to crash the app, is worse than one
- * extra click. Saving a HOTSPOT camera is called out separately — every hotspot
- * ships without one and inherits its layout's, so the first save on one is an
- * ADD, and from then on that resource stops following its layout.
+ * every module imports the site config, the dev server reloads the page the
+ * moment it lands. Both facts are on the confirm row: an edit that silently
+ * discards an unsaved sibling edit, or that appears to crash the app, is worse
+ * than one extra click. Saving a HOTSPOT camera is called out separately —
+ * every hotspot ships without one and inherits its layout's, so the first save
+ * on one is an ADD, and from then on that resource stops following its layout.
+ *
+ * IT WRITES THIS MODEL'S FILE AND ONLY THIS MODEL'S. Each route reads a
+ * complete document of its own (`config/sites/<id>.json`), so a framing dialled
+ * against this bake lands in this bake's file and the other routes do not move.
+ * That used to be the opposite: one shared `site.json` meant every save here
+ * re-aimed all three, which the confirm row had to warn about.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSite } from "@/config/context";
 import { useCameraStore } from "@/shared/stores/camera-store";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 import { useDebugStore } from "../../stores/debug-store";
@@ -57,6 +64,7 @@ export function DebugCameraEditor() {
   // These two ids ARE the camera target — `cameraTargetFor` takes them rather
   // than reading the store, so the subscription and the derivation are the same
   // two values and cannot drift apart.
+  const site = useSite();
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const currentDestId = useNavUiStore((s) => s.currentDest?.id ?? null);
   const cameraEdit = useDebugStore((s) => s.cameraEdit);
@@ -69,8 +77,8 @@ export function DebugCameraEditor() {
   const [copied, setCopied] = useState(false);
 
   const target = useMemo(
-    () => cameraTargetFor(selectedHotspotId, currentDestId),
-    [selectedHotspotId, currentDestId],
+    () => cameraTargetFor(site, selectedHotspotId, currentDestId),
+    [site, selectedHotspotId, currentDestId],
   );
   const targetKey = target ? `${target.kind}:${target.id}` : null;
 
@@ -122,7 +130,7 @@ export function DebugCameraEditor() {
   const confirmSave = useCallback(async () => {
     if (!target || !patch) return;
     setStage("saving");
-    const result = await saveCamera(target, patch);
+    const result = await saveCamera(site.id, target, patch);
     if (result.ok) {
       setStage("done");
       setMessage(`${result.created ? "Added" : "Updated"} ${result.path}`);
@@ -131,7 +139,7 @@ export function DebugCameraEditor() {
       setStage("error");
       setMessage(result.error ?? "Save failed");
     }
-  }, [target, patch]);
+  }, [site, target, patch]);
 
   if (!target || !patch) return null;
 
@@ -148,21 +156,20 @@ export function DebugCameraEditor() {
 
       <Row label="pos" v={patch.position} />
       <Row label="rot" v={patch.rotation} />
-      <div className="mb-2 mt-0.5 opacity-50">rotation is XYZ, as site.json stores it</div>
+      <div className="mb-2 mt-0.5 opacity-50">rotation is XYZ, as the site file stores it</div>
 
       {stage === "confirm" ? (
         <div>
           <div className="mb-2" style={{ color: "var(--nav-text)" }}>
             {target.inherited
               ? `Add a camera to ${target.id}? It stops following ${target.kind === "hotspot" ? "its layout" : "the default"}.`
-              : `Overwrite ${target.path} in site.json?`}
+              : `Overwrite ${target.path} in sites/${site.id}.json?`}
           </div>
-          {/* Both facts matter and neither is guessable from the button. The
-              cameras are ONE table: `/`, `/v2` and `/v3` differ by which bake
-              they stream, not by where the cameras are, so a framing dialled
-              against the v3 bake moves the other two routes with it. */}
+          {/* Which file, and that the page will reload — neither is guessable
+              from the button. The file is named because each model has its own
+              and the save reaches only that one; it used to reach all three. */}
           <div className="mb-2 opacity-60">
-            Writes the file — the page will reload. These cameras are shared by /, /v2 and /v3.
+            Writes config/sites/{site.id}.json — the page will reload. No other route is touched.
           </div>
           <div className="flex gap-2">
             <Btn onClick={confirmSave} primary>Confirm save</Btn>

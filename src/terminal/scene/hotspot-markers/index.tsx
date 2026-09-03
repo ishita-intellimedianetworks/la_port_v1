@@ -1,6 +1,6 @@
 "use client";
 
-import { HOTSPOT_BY_ID, LAYOUT_BY_ID } from "@/config";
+import { useSite } from "@/config/context";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 import { Hotspot } from "./hotspot";
 
@@ -25,6 +25,7 @@ interface HotspotMarkersProps {
  * happened to be standing rather than on what they had asked for.
  */
 export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
+  const site = useSite();
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
   const currentLayoutId = useNavUiStore((s) => s.currentDest?.id ?? null);
@@ -43,7 +44,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   //                           belongs to it — the opposite of travelling there.
   // Distance plays no part any more: proximity used to add whatever happened to
   // be close, which meant arriving at one layout surfaced a neighbour's discs.
-  const own = currentLayoutId ? (LAYOUT_BY_ID[currentLayoutId]?.hotspots ?? []) : [];
+  const own = currentLayoutId ? (site.layoutById[currentLayoutId]?.hotspots ?? []) : [];
   const picked = selectedHotspotId ? [selectedHotspotId] : own;
 
   // A marker whose card is OPEN takes itself down. The card is the thing being
@@ -56,8 +57,8 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   return (
     <>
       {ids.map((id) => {
-        const hotspot = HOTSPOT_BY_ID[id];
-        const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+        const hotspot = site.hotspotById[id];
+        const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
         if (!hotspot || !layout) return null;
 
         const isSelected = id === selectedHotspotId;

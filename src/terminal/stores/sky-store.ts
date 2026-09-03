@@ -1,5 +1,5 @@
-import { scene } from "@/config";
-import { createStore } from "@/shared/stores/create-store";
+import type { Site } from "@/config";
+import { createSeededStore } from "@/shared/stores/create-store";
 import {
   T_FOR_MODE,
   sunAnglesForT,
@@ -9,27 +9,27 @@ import {
 /**
  * The live sky, so the debug panel and the dome are looking at ONE value.
  *
- * `site.json › sky` is the seed, not the truth: the whole point of the debug
- * time-of-day slider is to move the sun without an edit-reload cycle, and the
- * study it is ported from worked the same way — one scalar `t`, driven from a
- * slider, with every colour derived from it and nothing ever rebuilt.
+ * The active model's `sky` block is the seed, not the truth: the whole point of
+ * the debug time-of-day slider is to move the sun without an edit-reload cycle,
+ * and the study it is ported from worked the same way — one scalar `t`, driven
+ * from a slider, with every colour derived from it and nothing ever rebuilt.
  *
  * Read `t` and `clouds` from here rather than from config, and the panel drives
  * them for free. Nothing writes to this store unless the panel is open.
+ *
+ * `mode` and the seeds live IN the store rather than beside it as module
+ * constants, because the sky is per model now: `/` and `/v2` share this tree
+ * but not their site files, so a constant read at import could only ever be one
+ * of them. The tree's root seeds it — see `createSeededStore`.
  */
 
-const CONFIG_MODE: SkyMode = scene.sky?.mode ?? "off";
-
-/** The sky the config asked for. `off` disables the dome entirely. */
-export const SKY_MODE: SkyMode = CONFIG_MODE;
-
-/** Where the slider starts: an explicit `sky.t`, else the mode's own stop. */
-export const SKY_T_SEED =
-  CONFIG_MODE === "off" ? 0 : scene.sky?.t ?? T_FOR_MODE[CONFIG_MODE];
-
 export type SkyState = {
+  /** The sky this model asked for. `off` disables the dome entirely. */
+  mode: SkyMode;
   /** Time of day, 0..1 — 0 is the sun on the horizon, 1 is high midday. */
   t: number;
+  /** Where the slider starts: an explicit `sky.t`, else the mode's own stop. */
+  tSeed: number;
   /** The horizon cloud band. Toggling it recompiles the sky shader (it is a
    *  `#define`), which is why it is a debug control and not a per-frame one. */
   clouds: boolean;
@@ -52,7 +52,7 @@ export type SkyState = {
    *
    *  Only a real TRANSITION seeds. Setting it to the value it already holds is
    *  a no-op, because the seed would otherwise discard angles that came from
-   *  `site.json > sky.sun`. */
+   *  the site file's `sky.sun`. */
   setSunUnlinked: (value: boolean) => void;
   setSunAzimuth: (deg: number) => void;
   setSunElevation: (deg: number) => void;
@@ -60,45 +60,52 @@ export type SkyState = {
    *  of a set of angles that has drifted somewhere unreadable, without having
    *  to give up the unlink. */
   matchSunToSky: () => void;
-  /** Back to whatever `site.json` authored. */
+  /** Back to whatever this model's file authored. */
   reset: () => void;
 };
 
-/** What the page LOADS with: `site.json › sky.sun` when it is authored, else
- *  the sun on the arc. The angles still carry a value in the linked case, but
- *  it is never seen — the panel reseeds them from `t` the moment unlink is
- *  switched on. */
-const SUN = scene.sky?.sun;
+export const useSkyStore = createSeededStore<SkyState, Site>("sky-store", (site) => {
+  const sky = site.scene.sky;
+  const mode: SkyMode = sky?.mode ?? "off";
+  const tSeed = mode === "off" ? 0 : sky?.t ?? T_FOR_MODE[mode];
+  const clouds = sky?.clouds !== false;
 
-export const SUN_SEED = {
-  sunUnlinked: !!SUN,
-  sunAzimuth: SUN?.azimuth ?? 0,
-  sunElevation: SUN?.elevation ?? 45,
-};
+  /** What the page LOADS with: `sky.sun` when it is authored, else the sun on
+   *  the arc. The angles still carry a value in the linked case, but it is
+   *  never seen — the panel reseeds them from `t` the moment unlink is switched
+   *  on. */
+  const sun = sky?.sun;
+  const sunSeed = {
+    sunUnlinked: !!sun,
+    sunAzimuth: sun?.azimuth ?? 0,
+    sunElevation: sun?.elevation ?? 45,
+  };
 
-export const useSkyStore = createStore<SkyState>((set, get) => ({
-  t: SKY_T_SEED,
-  clouds: scene.sky?.clouds !== false,
-  ...SUN_SEED,
-  setT: (t) => set({ t: Math.min(Math.max(t, 0), 1) }),
-  setClouds: (clouds) => set({ clouds }),
-  setSunUnlinked: (sunUnlinked) => {
-    // A no-op transition must stay a no-op. Re-seeding on every call looks
-    // harmless until something asks for the state it is already in — a panel
-    // firing `onChange` once on mount with the value it was seeded with is
-    // exactly that — and the re-seed then throws away the authored angles and
-    // replaces them with the arc's. With `sky.sun` in config the checkbox
-    // starts checked, so this fired on every page load and reset the azimuth to
-    // whatever `t` implied before anyone had touched anything.
-    if (get().sunUnlinked === sunUnlinked) return;
-    set(sunUnlinked ? { sunUnlinked, ...anglesFor(get().t) } : { sunUnlinked });
-  },
-  setSunAzimuth: (deg) => set({ sunAzimuth: deg }),
-  setSunElevation: (deg) => set({ sunElevation: deg }),
-  matchSunToSky: () => set(anglesFor(get().t)),
-  reset: () =>
-    set({ t: SKY_T_SEED, clouds: scene.sky?.clouds !== false, ...SUN_SEED }),
-}));
+  return (set, get) => ({
+    mode,
+    t: tSeed,
+    tSeed,
+    clouds,
+    ...sunSeed,
+    setT: (t) => set({ t: Math.min(Math.max(t, 0), 1) }),
+    setClouds: (clouds) => set({ clouds }),
+    setSunUnlinked: (sunUnlinked) => {
+      // A no-op transition must stay a no-op. Re-seeding on every call looks
+      // harmless until something asks for the state it is already in — a panel
+      // firing `onChange` once on mount with the value it was seeded with is
+      // exactly that — and the re-seed then throws away the authored angles and
+      // replaces them with the arc's. With `sky.sun` in config the checkbox
+      // starts checked, so this fired on every page load and reset the azimuth to
+      // whatever `t` implied before anyone had touched anything.
+      if (get().sunUnlinked === sunUnlinked) return;
+      set(sunUnlinked ? { sunUnlinked, ...anglesFor(get().t) } : { sunUnlinked });
+    },
+    setSunAzimuth: (deg) => set({ sunAzimuth: deg }),
+    setSunElevation: (deg) => set({ sunElevation: deg }),
+    matchSunToSky: () => set(anglesFor(get().t)),
+    reset: () => set({ t: tSeed, clouds, ...sunSeed }),
+  });
+});
 
 /** The arc's angles for `t`, named the way the store stores them. */
 function anglesFor(t: number) {

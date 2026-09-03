@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  HOTSPOT_BY_ID,
-  LAYOUT_BY_ID,
-  toneFor,
-  ui as uiCopy,
-} from "@/config";
+import { useSite } from "@/config/context";
 import type { HotspotField, Tone } from "@/config/schema";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 import { PanelHeader } from "../destination-panel/panel-header";
@@ -38,7 +33,7 @@ function formatValue(field: HotspotField): string {
  * closed by a hairline.
  */
 function Field({ field }: { field: HotspotField }) {
-  const tone = toneFor(field.value, field.tone);
+  const tone = useSite().toneFor(field.value, field.tone);
   const meter =
     field.render === "meter" && typeof field.value === "number"
       ? Math.max(0, Math.min(1, field.value / (field.max ?? 100)))
@@ -96,7 +91,7 @@ interface HotspotDataCardProps {
 
 /**
  * The hotspot readout: all 30 hotspots render through this one component,
- * driven purely by their `fields` dictionary in `site.json` › `hotspots[]` — the
+ * driven purely by their `fields` dictionary in `<site>.json` › `hotspots[]` — the
  * handoff's consistency requirement, and the reason a new hotspot needs no new
  * UI code.
  *
@@ -108,9 +103,10 @@ interface HotspotDataCardProps {
  * above a larger value, closed by a line — comes from the admin app.
  */
 export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps) {
-  const layout = LAYOUT_BY_ID[destId];
+  const site = useSite();
+  const layout = site.layoutById[destId];
   const hotspotId = layout?.hotspots[index - 1];
-  const hotspot = hotspotId ? HOTSPOT_BY_ID[hotspotId] : undefined;
+  const hotspot = hotspotId ? site.hotspotById[hotspotId] : undefined;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -163,7 +159,7 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
                 className="nav-body pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.06em]"
                 style={{ color: "var(--nav-text-dim)" }}
               >
-                {uiCopy.popup.journeyTitle}
+                {site.ui.popup.journeyTitle}
               </div>
               <ol className="flex flex-col">
                 {hotspot.journey.map((step, i) => (

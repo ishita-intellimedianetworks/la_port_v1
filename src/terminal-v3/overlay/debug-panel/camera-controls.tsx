@@ -12,7 +12,7 @@
  * `camera` is a live two-way binding to the camera on screen. Drag `x`, `y`, `z`
  * or one of the three angles and the view moves as you drag; walk away from the
  * pose and the numbers follow. That is the loop the framing work needs — the
- * alternative was editing `site.json`, reloading, travelling back to the
+ * alternative was editing the site file, reloading, travelling back to the
  * resource, and judging the change against a memory of the last one.
  *
  * HOW THE TWO-WAY BINDING AVOIDS FIGHTING ITSELF
@@ -33,14 +33,14 @@
  * own `pos` / `rot` refs, so a direct write to the three.js object survives
  * exactly one frame. `teleportTo` sets both, which is why it is also what
  * `goToLayout` uses. It takes a FOOT position and adds the eye height back, so
- * the y here — an EYE height, because that is what a `site.json` camera stores
+ * the y here — an EYE height, because that is what a the site file camera stores
  * — has the controller's own camera height taken off first.
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import { button, folder, useControls } from "leva";
-import { poseForHotspot, poseForLayout } from "@/config";
-import { FOV_DEFAULT, useCameraStore } from "@/shared/stores/camera-store";
+import { useSite } from "@/config/context";
+import { useCameraStore } from "@/shared/stores/camera-store";
 import { useTerminalUi } from "../../context/ui-context";
 import { useDebugStore } from "../../stores/debug-store";
 import {
@@ -72,6 +72,10 @@ const round = (n: number, d = 3) => Number(n.toFixed(d));
 export default function DebugCameraControls() {
   const { playerControllerRef } = useTerminalUi();
   const setFov = useCameraStore((s) => s.setFov);
+  // Both the authored poses and the FOV the "reset" buttons mean belong to the
+  // model this route is running, not to a shared config.
+  const site = useSite();
+  const fovSeed = useCameraStore((s) => s.fovSeed);
   const setShowNavmesh = useDebugStore((s) => s.setShowNavmesh);
   const setNavmeshDepth = useDebugStore((s) => s.setNavmeshDepth);
   const navmeshTriangles = useDebugStore((s) => s.navmeshTriangles);
@@ -131,16 +135,16 @@ export default function DebugCameraControls() {
       applyEdit({ [key]: v });
     };
 
-  /** Send the camera back to the pose `site.json` authored for wherever it is.
+  /** Send the camera back to the pose the site file authored for wherever it is.
    *  The seating rule matches `goToLayout` exactly: an aerial pose keeps its
    *  authored Y, a ground one is probed onto the navmesh at that XZ. */
   const resetToAuthored = useCallback(() => {
     const ctrl = playerControllerRef.current;
-    const target = activeCameraTarget();
+    const target = activeCameraTarget(site);
     if (!ctrl || !target) return;
 
     const pose =
-      target.kind === "hotspot" ? poseForHotspot(target.id) : poseForLayout(target.id);
+      target.kind === "hotspot" ? site.poseForHotspot(target.id) : site.poseForLayout(target.id);
     const [x, authoredY, z] = pose.position;
     const h = eyeHeight();
     const footGuess = authoredY ? authoredY - h : 0;
@@ -151,33 +155,33 @@ export default function DebugCameraControls() {
 
     lastEditRef.current = performance.now();
     ctrl.teleportTo([x, y, z], pose.rotation);
-  }, [playerControllerRef, eyeHeight]);
+  }, [site, playerControllerRef, eyeHeight]);
 
   /** The same block the camera card copies and the save writes — one builder,
    *  so the three cannot disagree about what "this pose" is. */
   const copyPose = useCallback(() => {
     const camera = useCameraStore.getState().camera;
     if (!camera) return;
-    const text = formatCameraPatch(buildCameraPatch(camera), activeCameraTarget());
+    const text = formatCameraPatch(buildCameraPatch(camera), activeCameraTarget(site));
     console.log("[debug] camera\n" + text);
     navigator.clipboard?.writeText(text).catch(() => {});
-  }, []);
+  }, [site]);
 
   const [, setTyped] = useControls(() => ({
     view: folder({
       fov: {
-        value: FOV_DEFAULT,
+        value: fovSeed,
         min: 20,
         max: 110,
         step: 1,
-        hint: "vertical field of view — site.json > world.fov",
+        hint: "vertical field of view — this model's world.fov",
         onChange: (v: number, _p: string, ctx?: { fromPanel?: boolean }) => {
           if (ctx?.fromPanel) setFov(v);
         },
       },
       "reset fov": button(() => {
-        setFov(FOV_DEFAULT);
-        push({ fov: FOV_DEFAULT });
+        setFov(fovSeed);
+        push({ fov: fovSeed });
       }),
       "show navmesh": {
         value: false,
@@ -218,7 +222,7 @@ export default function DebugCameraControls() {
       // slider across that range moves ~4 m per pixel. Drag the LABEL for fine
       // control, or type a value.
       x: { value: 0, step: 0.25, onChange: edit("x") },
-      y: { value: 0, step: 0.25, hint: "EYE height, as site.json stores it", onChange: edit("y") },
+      y: { value: 0, step: 0.25, hint: "EYE height, as the site file stores it", onChange: edit("y") },
       z: { value: 0, step: 0.25, onChange: edit("z") },
       // Angles ARE bounded, so these are sliders. Degrees, because nobody
       // frames a shot in radians; the export converts back.
@@ -263,7 +267,7 @@ export default function DebugCameraControls() {
       const camera = useCameraStore.getState().camera;
       if (!camera) return;
 
-      const target: CameraTarget | null = activeCameraTarget();
+      const target: CameraTarget | null = activeCameraTarget(site);
       const label = target ? `${target.kind} ${target.id} · ${target.name}` : "— free camera —";
       if (label !== lastLabel) {
         lastLabel = label;
@@ -282,7 +286,7 @@ export default function DebugCameraControls() {
       });
     }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [push]);
+  }, [site, push]);
 
   return null;
 }

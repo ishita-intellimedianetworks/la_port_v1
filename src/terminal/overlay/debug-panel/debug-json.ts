@@ -2,7 +2,7 @@
 
 /**
  * The single JSON blob the debug panel exports — everything the three stores
- * are driving, shaped so each top-level key is the `site.json` path it goes
+ * are driving, shaped so each top-level key is the site-file path it goes
  * back into.
  *
  * The point of it being ONE object is that a look is all three at once. Sun
@@ -16,7 +16,7 @@
 
 import { useGradeStore } from "@/shared/stores/grade-store";
 import { useLightsStore } from "@/shared/stores/lights-store";
-import { SKY_MODE, useSkyStore } from "@/terminal/stores/sky-store";
+import { useSkyStore } from "@/terminal/stores/sky-store";
 import type { ResolvedLights } from "@/shared/types";
 
 /** Fields the SKY derives while the dome is on, so a value pasted back into
@@ -42,7 +42,7 @@ export function buildDebugJson(): string {
   const resolved = useLightsStore.getState().resolved;
 
   const sky: Record<string, unknown> = {
-    mode: SKY_MODE,
+    mode: s.mode,
     t: r(s.t, 3),
     clouds: s.clouds,
   };
@@ -66,7 +66,7 @@ export function buildDebugJson(): string {
 
   return JSON.stringify(
     {
-      "// paste each key at its site.json path": {
+      "// paste each key at its path in this model's site file": {
         "scene.sky": "scene.sky",
         "scene.lights": "scene.lights",
         "world.grade": "world.grade",

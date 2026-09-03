@@ -124,7 +124,7 @@ export default function DollhouseCamera({
     if (!interactive) isDragging.current = false;
   }, [interactive]);
 
-  // The live camera pose in `site.json` › `cameras.dollhouse` format (rotation
+  // The live camera pose in `<site>.json` › `cameras.dollhouse` format (rotation
   // as the YXZ euler seatAtHome applies), so a framing found by dragging can be
   // copied straight into the config.
   // TWO cadences, because finding a framing and recording it are different

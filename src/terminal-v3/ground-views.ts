@@ -3,25 +3,27 @@ import type { Vec3 } from "@/config/schema";
 /**
  * GROUND VIEWS — the standpoint a resource can be looked at from ON FOOT.
  *
- * Every layout in `site.json` is `walkable: false`: all ten cameras are aerial
- * framings, so today the only way to see a resource is from 60-460 m up. This
- * table adds a SECOND, optional pose per hotspot — one that stands a person on
- * the navmesh and points them at the marker.
+ * Every layout in `sites/v3.json` is `walkable: false`: all ten cameras are
+ * aerial framings, so today the only way to see a resource is from 60-460 m up.
+ * This table adds a SECOND, optional pose per hotspot — one that stands a
+ * person on the navmesh and points them at the marker.
  *
- * WHY THIS LIVES HERE AND NOT IN `site.json`
- * ------------------------------------------
- * `site.json` is shared by `/`, `/v2` and `/v3`. This is a v3-only feature, so
- * the data is v3-only too: nothing under `@/config` changes, and the other two
- * routes cannot see these poses even by accident. If ground views graduate to
- * the product, the move is to add `groundCamera?: LayoutCamera` to
- * `HotspotConfig` and delete this file — the shape below is deliberately the
- * same one a config block would have.
+ * WHY THIS LIVES HERE AND NOT IN `sites/v3.json`
+ * ----------------------------------------------
+ * Not because the config is shared any more — it is not; each model has its own
+ * file and this route owns `v3.json` outright. It lives here because the SCHEMA
+ * has no field for it: a second pose per hotspot is not something
+ * `HotspotConfig` can express, and inventing a key that only one route reads
+ * would put a v3-only shape in a type all three share. If ground views graduate
+ * to the product, the move is to add `groundCamera?: LayoutCamera` to
+ * `HotspotConfig` and fold this table into `sites/v3.json` — the shape below is
+ * deliberately the same one a config block would have.
  *
  * ROTATION ORDER — READ THIS BEFORE EDITING A NUMBER
  * --------------------------------------------------
  * These are YXZ eulers, the order `camera.rotation.set(x, y, z, "YXZ")` in
  * `player/utils/teleport.ts` applies — the same convention as `cameras.spawn`
- * and `cameras.firstPerson` in `site.json`, and NOT the XYZ order that
+ * and `cameras.firstPerson` in the site file, and NOT the XYZ order that
  * `layouts[].camera` / `hotspots[].camera` use (those get reordered by
  * `xyzToYxz` on the way through `resolveCamera`; these do not go through it).
  * `[pitch, yaw, 0]`, pitch positive = looking up. The YAW is a look-at from the
@@ -155,11 +157,17 @@ export interface GroundView {
 
 export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   // BERTH / QUAY — DELIBERATELY NOT AUTO-COMPOSED. This one is authored to
-  // match what /v2 shows: `rotation` is byte-identical to L02's camera in
-  // `site.json` ([0, -0.4538, 0] — dead level, yaw -26°), so /v3 frames the
-  // berth and the quay exactly as the aerial arrival does, just from standing
-  // height. L02's rotation is authored XYZ with only Y non-zero, and xyzToYxz
-  // is the identity on that, so the triple carries over verbatim.
+  // match what /v2 shows: `rotation` is byte-identical to the L02 camera `/`
+  // and `/v2` carry ([0, -0.4538, 0] — dead level, yaw -26°), so /v3 frames the
+  // berth and the quay exactly as their aerial arrival does, just from standing
+  // height. That rotation is authored XYZ with only Y non-zero, and xyzToYxz is
+  // the identity on that, so the triple carries over verbatim.
+  //
+  // NOT v3's OWN L02 CAMERA, which was raised to y 38 and tilted 12° down to
+  // clear the vessel v8 berthed on top of the authored eye (see that camera's
+  // note in sites/v3.json). Down here there is no hull in the way — this stands
+  // on the apron 30.5 m off — so the framing that shot had to give up is the
+  // one this keeps.
   //
   // THE POSITION COULD NOT BE DIRECTLY BENEATH /v2's CAMERA. That camera sits
   // at [-1483.2, 22.5, 297.0] and looks out across the water — marching its

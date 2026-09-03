@@ -4,7 +4,7 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { InstanceLayer } from "./instance-layer";
 import { MeshoptDecoder } from "meshoptimizer";
-import { TIER_ORDER, type Tier, type TexFormat, type StreamingConfig } from "./config";
+import { TIER_ORDER, type Tier, type TexFormat, type StreamingConfig, type DeviceProfile } from "./config";
 import type { Manifest, ChunkEntry, MaterialDef, TexManifest, TexSlot } from "./types";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
 import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
@@ -245,7 +245,7 @@ export class ChunkManager {
     tex: TexManifest;
     dracoPath?: string;
     mode?: "adaptive" | "full";
-    /** Required: it comes from `site.json > stream` via resolveStreamConfig().
+    /** Required: it comes from `<site>.json > stream` via resolveStreamConfig().
      *  There is deliberately no built-in fallback — a default here would be a
      *  second, silent source of tuning. */
     config: StreamingConfig;
@@ -253,10 +253,10 @@ export class ChunkManager {
     ktx2Path?: string;
     /** Real-byte ceilings. Omitted, they are resolved for this device — see
      *  `memory.ts > resolveBudget`. Deliberately NOT part of StreamingConfig:
-     *  the bands are authored per SCENE in site.json, while these are a property
+     *  the bands are authored per SCENE in the site file, while these are a property
      *  of the DEVICE, and the aerial/ground swap must not move them. */
     budget?: MemoryBudget;
-    profile?: "mobile" | "desktop";
+    profile?: DeviceProfile;
   }) {
     this.scene = opts.scene;
     this.assetBase = opts.assetBase.replace(/\/$/, "") + "/";
@@ -390,7 +390,7 @@ export class ChunkManager {
    *
    * Used to move between the ground view and the aerial view, which are two
    * genuinely different strategies over the SAME manifest (see the `aerial`
-   * `aerial` block in site.json). Rebuilding the manager instead would throw
+   * `aerial` block in the site file). Rebuilding the manager instead would throw
    * away `cpuCache` — every decoded chunk — so returning to the ground would
    * re-download the whole walk-around set. Here the next `update()` simply
    * re-decides every chunk's tier against the new numbers, and anything the
@@ -436,7 +436,7 @@ export class ChunkManager {
    *  Measured over 150 ground cameras on portla-c5-v4, 360 deg, at the old
    *  50/150/300 bands: holes 3057 -> 2242 objects, resident 6.0 -> 5.3 MB.
    *  It is a better metric, but it is NOT the cure on its own — see `_bands`
-   *  in `site.json > stream`, whose numbers are what actually closed the gap. */
+   *  in `<site>.json > stream`, whose numbers are what actually closed the gap. */
   private surfaceDist(cam: THREE.Vector3, c: ChunkEntry): number {
     const mn = c.bbox.min,
       mx = c.bbox.max;
@@ -454,12 +454,36 @@ export class ChunkManager {
       if (scale > 0) d = dist / scale;
     }
     const h = current ? this.cfg.hysteresis : 0;
+    // THE BUDGET-ADJUSTED RADIUS, APPLIED TO THE WHOLE LADDER.
+    //
+    // `effUnload` is the actuator the memory ceiling drives: phase 4 of update()
+    // shrinks it 15% per over-budget tick, to a floor of nearDist * 1.5. It used
+    // to be tested only AFTER the farDist test, which meant the one thing it
+    // could gate was the sliver between farDist and unloadDist — 495-545 m on
+    // the mobile bands, 900-990 m on the desktop ones. Everything inside farDist
+    // was re-requested however far the radius had collapsed, so the loop could
+    // not converge: over budget -> evict the furthest chunks -> next tick the
+    // bands ask for those same chunks -> evict again.
+    //
+    // That is not a hypothetical. Measured on the v8w bake, the mobile bands ask
+    // ~152 MB of decoded geometry at spawn and ~171 MB median across the model,
+    // against an 80 MB ceiling on a tight phone — so it ran every tick from the
+    // moment the scene mounted. The eviction score is `dist + (out-of-view ?
+    // 1e6 : 0)`, which puts the churn exactly at the edge of vision, and since
+    // one building's parts span several chunks it reads as buildings with pieces
+    // missing that change as you turn, rather than as a smaller world.
+    //
+    // Tested FIRST, the same figure does what it was always documented to do:
+    // the world shrinks smoothly under pressure and then holds. The
+    // alwaysLoadDist exemption — on the TRUE distance, not the radius-scaled one
+    // — is what stops a collapsing radius from ever blanking what the player is
+    // standing next to.
+    const lim = Math.min(this.cfg.unloadDist, this.effUnload);
+    if (d >= lim + h && dist > this.cfg.alwaysLoadDist) return null;
     if (d < this.cfg.nearDist) return "near";
     if (d < this.cfg.midDist + h) return "mid";
     if (d < this.cfg.farDist + h) return "far";
-    // effUnload is the budget-adjusted radius (== cfg.unloadDist when the
-    // resident budget is off or comfortably met).
-    if (d < Math.min(this.cfg.unloadDist, this.effUnload) + h) return "far";
+    if (d < lim + h) return "far";
     return null;
   }
 
@@ -807,7 +831,7 @@ export class ChunkManager {
    *  Exact once the chunk has been decoded at that tier. Before that, the only
    *  figure available is the manifest's encoded size, so it is scaled by a
    *  decode ratio LEARNED from the chunks already measured this session rather
-   *  than hardcoded — the 13.5x in `site.json`'s note is true of this bake and
+   *  than hardcoded — the 13.5x in the site file's note is true of this bake and
    *  would silently mislead on the next one. */
   private estGeomBytes(c: ChunkEntry, tier: Tier): number {
     const url = this.lodUrl(c, tier);
@@ -1339,7 +1363,7 @@ export class ChunkManager {
         const rung = px ?? this.cfg.texRung[tier];
         // Format is per tier too, so a distant chunk can take the cheap
         // GPU-compressed rung while what you stand next to stays WebP-crisp
-        // (or vice versa). See site.json > stream.tiers.<t>.texture.format.
+        // (or vice versa). See <site>.json > stream.tiers.<t>.texture.format.
         const fmt = this.cfg.texFormat?.[tier] ?? "auto";
         const T = def.textures;
         // Every slot returns a promise that settles when the image is decoded and
@@ -1372,7 +1396,7 @@ export class ChunkManager {
     const chosen = avail.find((p) => p <= px) ?? avail[avail.length - 1];
     const rung = img.rungs.find((r) => r.px === chosen)!;
     const wS = this.glWrap(slot.wrapS), wT = this.glWrap(slot.wrapT);
-    // Format is per tier (site.json > stream.tiers.<t>.texture.format):
+    // Format is per tier (<site>.json > stream.tiers.<t>.texture.format):
     //   "ktx2" prefer GPU-compressed, "webp" force the WebP rung, "auto" = ktx2
     //   when available. A ktx2 request silently falls back to webp when the rung
     //   was never baked or the GPU cannot transcode — never a hard failure.

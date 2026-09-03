@@ -287,7 +287,7 @@ export type SkyLighting = {
  * above — none of them is authored, because a hand-picked hex next to a
  * generated sky is exactly the pair that drifts apart. Intensities are not
  * derived: the study is a shader with no scene lights, so it has no opinion on
- * them, and they stay authorable in `site.json › sky.lights`.
+ * them, and they stay authorable in `<site>.json › sky.lights`.
  *
  * `aim` is the one exception — see `SunAim`. It replaces the sun's DIRECTION
  * and nothing else, so the sun can be moved without the sky's colours moving

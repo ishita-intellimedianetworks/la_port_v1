@@ -1,5 +1,3 @@
-import { nodes } from "@/shared/scene-data/adapter";
-
 export type NodeCamera = {
   name: string;
   label?: string;
@@ -172,7 +170,7 @@ export type TransportDestination = {
   accessible?: boolean;
 };
 
-/** destinations grouped by category label, projected from `site.json` › `zones`. */
+/** destinations grouped by category label, projected from `<site>.json` › `zones`. */
 export type DestinationsByCategory = Partial<Record<DestinationCategory, Destination[]>>;
 
 /** Event-day update feed item (closures, alerts, schedule changes, info). Not a
@@ -249,7 +247,7 @@ export type FloorTransition = {
  * Per-venue lighting setup. Every field is optional — anything omitted falls
  * back to the shared defaults baked into `SceneLights`. Lets each scene/venue
  * (village, stadium, hotel room, …) dial in its own sun/ambient/shadow look
- * straight from `site.json` without touching component code.
+ * straight from the site file without touching component code.
  */
 export type LightsConfig = {
   /** Ambient fill intensity. Default 0.8. */
@@ -361,7 +359,7 @@ export type FloorConfig = {
   /**
    * This floor's geometry is streamed as distance-tiered chunks rather than
    * loaded as the single GLB at `modelUrl`, which is then unused. The bands,
-   * cache limits and asset slug come from `site.json › stream` — a floor only
+   * cache limits and asset slug come from `<site>.json › stream` — a floor only
    * says WHETHER it streams, never how.
    */
   streamed?: boolean;
@@ -545,16 +543,6 @@ export type NodeData = {
    *  when this is set it takes precedence over any floor-level layouts. */
   layouts?: LayoutsConfig[];
 };
-
-export const NODE_BY_ID: Record<string, NodeData> = {};
-export const PARENT_OF:  Record<string, string>   = {};
-
-function register(node: NodeData, parentId?: string) {
-  NODE_BY_ID[node.id] = node;
-  if (parentId) PARENT_OF[node.id] = parentId;
-  node.children?.forEach(c => register(c, node.id));
-}
-(nodes as NodeData[]).forEach(n => register(n));
 
 export function canExploreInterior(node: NodeData): boolean {
   return !!(node.floors?.some(f => f.modelUrl && f.navmeshUrl));

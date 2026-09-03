@@ -1,48 +1,30 @@
 "use client";
 
 /**
- * Which BAKE this tree streams.
+ * Which BAKE this tree streams — read off the SITE the tree was mounted with.
  *
- * There are three, served side by side so they can be compared in the same
- * browser on the same machine: `/` streams `site.json > stream`, `/v2` streams
- * `streamV2` merged over it, and `/v3` streams `streamV3` — falling back to
- * v2's bake while unauthored. Everything else about the routes — the cameras,
- * the hotspots, the map, the layouts — is the same zone and the same data.
+ * There is no second context here any more. A model is one choice: `/` runs
+ * `config/sites/v1.json` and streams the bake its `stream` block names, `/v2`
+ * runs `v2.json`, `/v3` runs `v3.json`. Keeping a stream-variant id that could
+ * differ from the site id would just be a way for a route to walk one bake's
+ * navmesh while reading another's cameras.
  *
- * WHY A CONTEXT AND NOT A MODULE-LEVEL SWITCH. The resolved configs used to be
- * module-level constants over the single `stream` block, which is precisely
- * what made a second bake impossible: the asset base in particular was a
- * `const` derived from an env var, so the whole app could only ever point at
- * one prefix. Passing the id down means both variants are ordinary values, two
- * routes can be open at once, and nothing has to be mutated at import time.
- *
- * Defaulting to `v1` is deliberate: a tree that forgets to declare itself gets
- * the frozen, known-good route rather than the experimental one.
+ * So `<SiteProvider id>` (config/context.tsx) is the one provider, and these
+ * two hooks are the streaming-side view of it.
  */
 
-import { createContext, useContext, useMemo } from "react";
+import { useMemo } from "react";
+import { useSiteId } from "@/config/context";
 import { STREAM_VARIANTS, type StreamVariant, type StreamVariantId } from "./config";
-
-const Ctx = createContext<StreamVariantId>("v1");
-
-export function StreamVariantProvider({
-  id,
-  children,
-}: {
-  id: StreamVariantId;
-  children: React.ReactNode;
-}) {
-  return <Ctx.Provider value={id}>{children}</Ctx.Provider>;
-}
 
 /** The id alone — for the handful of places that only need to branch. */
 export function useStreamVariantId(): StreamVariantId {
-  return useContext(Ctx);
+  return useSiteId();
 }
 
 /** The resolved variant: asset base, navmesh url, and the three strategies over
  *  its manifest. Referentially stable per id, so it is safe in a dep array. */
 export function useStreamVariant(): StreamVariant {
-  const id = useContext(Ctx);
+  const id = useSiteId();
   return useMemo(() => STREAM_VARIANTS[id], [id]);
 }

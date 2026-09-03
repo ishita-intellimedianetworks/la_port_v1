@@ -6,7 +6,7 @@
  * WHAT DRIVES WHAT
  * Nothing here owns state. Every input writes the store the renderer already
  * reads — `sky-store` for the dome, `lights-store` for SceneLights,
- * `grade-store` for the canvas — so `site.json` still decides what the page
+ * `grade-store` for the canvas — so the site file still decides what the page
  * LOADS with and this only overrides it for the run.
  *
  * Light edits land in `lights-store.debug`, a layer merged LAST. That is not
@@ -31,9 +31,9 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { button, folder, useControls } from "leva";
-import { GRADE_SEED, useGradeStore } from "@/shared/stores/grade-store";
+import { useGradeStore } from "@/shared/stores/grade-store";
 import { useLightsStore } from "@/shared/stores/lights-store";
-import { SKY_MODE, SKY_T_SEED, useSkyStore } from "@/terminal/stores/sky-store";
+import { useSkyStore } from "@/terminal/stores/sky-store";
 import { T_FOR_MODE, sunAnglesForT } from "../../scene/environment/sky/palette";
 import type { ResolvedLights } from "@/shared/types";
 import { buildDebugJson } from "./debug-json";
@@ -58,6 +58,9 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
   const setDebugShadows = useLightsStore((s) => s.setDebugShadows);
   const clearDebug = useLightsStore((s) => s.clearDebug);
   const setGrade = useGradeStore((s) => s.set);
+  // The seeds are the ACTIVE MODEL's — every panel default and every
+  // "reset" below means "back to what this site file authored".
+  const gradeSeed = useGradeStore((s) => s.seed);
   const resolved = useLightsStore((s) => s.resolved);
   const debug = useLightsStore((s) => s.debug);
 
@@ -87,7 +90,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     "time of day": folder(
       {
         t: {
-          value: SKY_T_SEED,
+          value: sky.getState().tSeed,
           min: 0,
           max: 1,
           step: 0.001,
@@ -105,7 +108,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
           },
         },
       },
-      { collapsed: SKY_MODE === "off" },
+      { collapsed: sky.getState().mode === "off" },
     ),
 
     // Unlinked, `t` stops reaching the sun: these two angles place the disk
@@ -322,7 +325,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     // is not emitted at all while all three are 0.
     grade: folder({
       exposure: {
-        value: GRADE_SEED.exposure,
+        value: gradeSeed.exposure,
         min: 0.2,
         max: 2.5,
         step: 0.01,
@@ -331,7 +334,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
         },
       },
       brightness: {
-        value: GRADE_SEED.brightness,
+        value: gradeSeed.brightness,
         min: -0.5,
         max: 0.5,
         step: 0.01,
@@ -340,7 +343,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
         },
       },
       contrast: {
-        value: GRADE_SEED.contrast,
+        value: gradeSeed.contrast,
         min: -0.5,
         max: 0.5,
         step: 0.01,
@@ -349,7 +352,7 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
         },
       },
       saturation: {
-        value: GRADE_SEED.saturation,
+        value: gradeSeed.saturation,
         min: -1,
         max: 1,
         step: 0.01,

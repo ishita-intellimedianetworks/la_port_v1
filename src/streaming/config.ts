@@ -1,14 +1,19 @@
 /**
- * The browser side of `site.json › stream`.
+ * The browser side of `<site>.json › stream`.
  *
  * Ported from LA_PORT_ADAPTIVE's `src/runtime/config.ts`, with one change of
  * ownership: there, the numbers lived in `models.config.json` because the BAKE
  * scripts read them too. This app does not bake — it consumes an already-baked
- * asset set — so the numbers live in `site.json` like every other tunable here,
- * and the bake side of the contract stays in the adaptive repo.
+ * asset set — so the numbers live in the site document like every other tunable
+ * here, and the bake side of the contract stays in the adaptive repo.
+ *
+ * ONE `stream` BLOCK PER MODEL, in that model's own file: `config/sites/v1.json`
+ * for `/`, `v2.json` for `/v2`, `v3.json` for `/v3`. Nothing is merged across
+ * them — this file used to layer a `streamV2` partial over `stream` at import,
+ * which meant a retune of one bake silently retuned the others.
  *
  * This file contains NO tuning values of its own. All it does is translate
- * `site.json`'s vocabulary into the shape `ChunkManager` consumes, and apply
+ * the site file's vocabulary into the shape `ChunkManager` consumes, and apply
  * the mobile profile.
  *
  *     near = good quality · mid = medium · far = low · beyond far = not loaded
@@ -17,10 +22,25 @@
  * minus chunk.radius, clamped at 0. The manager walks them top-down and takes
  * the FIRST match, so nearDist < midDist < farDist < unloadDist must hold.
  */
-import { scene } from "@/config";
-import type { StreamConfig, StreamHideRule, StreamVariantConfig } from "@/config/schema";
+import { SITES, type SiteId } from "@/config";
+import { weakGpuProbe } from "./memory";
+import type { StreamConfig, StreamHideRule } from "@/config/schema";
 
 export type Tier = "near" | "mid" | "far";
+
+/**
+ * How much this machine is asked to hold.
+ *
+ *   "desktop"  the authored numbers, unmodified.
+ *   "low"      a weak GPU or a slow CPU behind a normal-looking browser — the
+ *              case that used to read as "desktop" on every cheap signal and
+ *              was then handed whole-model residency on shared video memory.
+ *   "mobile"   a phone or small tablet.
+ *
+ * Ordered by how much is taken away, and every consumer treats it as an ordered
+ * scale: whatever "low" gives up, "mobile" gives up at least as much.
+ */
+export type DeviceProfile = "mobile" | "low" | "desktop";
 
 /** Fallback order when a chunk lacks a requested tier (small chunks are baked
  *  near-only): take the next available tier in this order. Declared above the
@@ -164,12 +184,18 @@ const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
  *
  * Three sources, most specific first:
  *
- *   NEXT_PUBLIC_STREAM_BASE      the published prefix for `/`, and
- *   NEXT_PUBLIC_STREAM_BASE_V2   the one for `/v2`. THE SOURCE OF TRUTH: one
- *                                variable per bake, so both live in `.env` and
- *                                a deploy can repoint either without a code
- *                                edit. They win over anything authored.
- *   `stream.assetBase`           a per-block URL in site.json. Still supported
+ *   NEXT_PUBLIC_STREAM_BASE      the published prefix for `/`,
+ *   NEXT_PUBLIC_STREAM_BASE_V2   the one for `/v2`, and
+ *   NEXT_PUBLIC_STREAM_BASE_V3   the one for `/v3`. THE SOURCE OF TRUTH: one
+ *                                variable per bake, so all three live in `.env`
+ *                                and a deploy can repoint any of them without a
+ *                                code edit. They win over anything authored,
+ *                                and NONE of them falls back to another
+ *                                model's — an unset one drops to the local
+ *                                staging path below and 404s, which is the loud
+ *                                failure, rather than serving a different bake
+ *                                under this route's name.
+ *   `stream.assetBase`           a per-block URL in the site file. Still supported
  *                                and still typed, but deliberately UNAUTHORED
  *                                on this site — two places holding the same URL
  *                                is two places to drift.
@@ -183,14 +209,13 @@ const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
  * Whichever wins must allow cross-origin GET.
  */
 function assetBaseFor(id: StreamVariantId, block: { slug: string; assetBase?: string }): string {
-  const fromEnv =
-    id === "v3" ? (STREAM_BASE_V3 ?? STREAM_BASE_V2) : id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
+  const fromEnv = id === "v3" ? STREAM_BASE_V3 : id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
   if (fromEnv) return withSlash(fromEnv);
   if (block.assetBase) return withSlash(block.assetBase);
   return `${ASSET_ROOT}/${block.slug}/assets/`;
 }
 
-/** site.json's vocabulary -> the shape ChunkManager consumes. The only place
+/** the site file's vocabulary -> the shape ChunkManager consumes. The only place
  *  the two are translated. */
 function toStreamingConfig(m: StreamConfig): StreamingConfig {
   const s = m.streaming;
@@ -246,47 +271,21 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
 }
 
 /**
- * Merge a `streamV2`-shaped partial over the base `stream` block.
- *
- * Key by key, and deliberately NOT a generic deep merge: the shapes here are
- * small and known, and a generic one would silently accept a key that means
- * nothing. `aerial` and `dollhouse` merge one level down so a variant can
- * replace just their `hide` list — which is the normal case, since that is the
- * only part of them that names things inside a specific manifest.
+ * Which bake a route streams — the SAME id the route picks its site with, and
+ * deliberately so: a bake and the document that describes it are one choice.
+ * `v1` is `sites/v1.json > stream`, `v2` is `sites/v2.json > stream`, `v3` is
+ * `sites/v3.json > stream`. No merging, no fallback between them.
  */
-function mergeVariant(base: StreamConfig, v: StreamVariantConfig): StreamConfig {
-  return {
-    ...base,
-    slug: v.slug,
-    assetBase: v.assetBase ?? base.assetBase,
-    tiers: {
-      near: v.tiers?.near ?? base.tiers.near,
-      mid: v.tiers?.mid ?? base.tiers.mid,
-      far: v.tiers?.far ?? base.tiers.far,
-    },
-    streaming: { ...base.streaming, ...v.streaming },
-    cache: { ...base.cache, ...v.cache },
-    fog: { ...base.fog, ...v.fog },
-    render: { ...base.render, ...v.render },
-    forceTier: v.forceTier ?? base.forceTier,
-    hide: v.hide ?? base.hide,
-    aerial: base.aerial ? { ...base.aerial, ...v.aerial } : undefined,
-    dollhouse: base.dollhouse ? { ...base.dollhouse, ...v.dollhouse } : undefined,
-  };
-}
-
-/** Which bake a route streams. `v1` is `stream`; `v2` is `streamV2` merged
- *  over it, falling back to `v1`; `v3` is `streamV3`, falling back to `v2`. */
-export type StreamVariantId = "v1" | "v2" | "v3";
+export type StreamVariantId = SiteId;
 
 /**
  * One bake, fully resolved: where it is served from, and the three strategies
  * over its manifest.
  *
- * These used to be module-level constants over the single `stream` block, which
+ * These used to be module-level constants over a single `stream` block, which
  * is exactly what stopped two bakes coexisting — the asset base in particular
  * was a `const` derived from an env var, so the whole app could only ever point
- * at one of them. Everything is per-variant now, and the route chooses.
+ * at one of them. Everything is per-model now, and the route chooses.
  */
 export interface StreamVariant {
   id: StreamVariantId;
@@ -318,16 +317,13 @@ function buildVariant(id: StreamVariantId, raw: StreamConfig): StreamVariant {
   };
 }
 
-const V1_RAW = scene.stream;
-const V2_RAW = scene.streamV2 ? mergeVariant(V1_RAW, scene.streamV2) : V1_RAW;
-const V3_RAW = scene.streamV3 ? mergeVariant(V1_RAW, scene.streamV3) : V2_RAW;
-
-/** Every bake, resolved once. `/` reads v1, `/v2` reads v2, `/v3` reads v3;
- *  an unauthored override block makes a variant an alias of the one before. */
+/** Every bake, resolved once, each straight out of its own site file. `/`
+ *  reads v1, `/v2` reads v2, `/v3` reads v3, and there is nothing left that
+ *  could make one of them an alias of another. */
 export const STREAM_VARIANTS: Record<StreamVariantId, StreamVariant> = {
-  v1: buildVariant("v1", V1_RAW),
-  v2: buildVariant("v2", V2_RAW),
-  v3: buildVariant("v3", V3_RAW),
+  v1: buildVariant("v1", SITES.v1.scene.stream),
+  v2: buildVariant("v2", SITES.v2.scene.stream),
+  v3: buildVariant("v3", SITES.v3.scene.stream),
 };
 
 export function streamVariant(id: StreamVariantId): StreamVariant {
@@ -340,15 +336,47 @@ export function streamVariant(id: StreamVariantId): StreamVariant {
 // Deriving it from the authored numbers means it tracks any retune
 // automatically — there is nothing here to keep in sync.
 const MOBILE = {
-  /** Bands shrink toward the camera; near is left alone so what you are standing
-   *  next to still looks right. */
-  midScale: 0.75,
-  farScale: 0.55,
+  /** WHAT A PHONE GIVES UP IS QUALITY, NOT DISTANCE.
+   *
+   *  This block used to shrink `far` — 0.55, then briefly 0.28 — on the theory
+   *  that the loaded radius was what put a phone over its ceiling. Measured
+   *  properly, it is not, and the two assumptions behind that were both wrong:
+   *
+   *  1. THE TIERS COST THE SAME IN MEMORY. Sampled over 45 chunks, decoded
+   *     bytes are near 17.8 MB / mid 17.3 MB / far 14.3 MB for the same set —
+   *     within 20%. The decode RATIO differs wildly (near 2.5x, mid 12.5x, far
+   *     13.1x) because the cheap rungs are quantised harder on the wire, but
+   *     they land in the same place in memory: ~24-42 bytes per triangle, and
+   *     the three tiers are within 32% of each other on triangles. A cheap tier
+   *     buys DOWNLOAD (5.4 MB -> 1.0 MB on a big chunk) and draw cost. It does
+   *     not buy VRAM, so no amount of LOD makes a radius affordable.
+   *  2. THE FRUSTUM CULL DOES THE WORK. The camera is 35 deg vertical, so
+   *     beyond `alwaysLoadRadiusMetres` only a narrow cone loads. At the full
+   *     authored 900 m the resident set measures 77 MB median / 110 MB p90
+   *     including textures — under the 120 MB mobile ceiling. The 360-degree
+   *     figure is 168 MB, which a fast spin can approach and which is exactly
+   *     what `effUnload` is there to trim.
+   *
+   *  So `far` is left ALONE, and the quality comes down instead: `mid` pulls in
+   *  hard so that most of what is on screen resolves to the `far` rung, which
+   *  is the cheapest geometry and the 128 px texture. Distant geometry stays
+   *  coarse and PRESENT, which is the trade a port with 900 m sightlines wants
+   *  — a shrunken radius reads as the world ending, and no fog setting hides
+   *  it, because the fade then has only tens of metres to work in. */
+  midScale: 0.4,
+  farScale: 1,
   /** One rung down on every tier: less download AND less VRAM, and a small
    *  screen hides most of it. */
   rungScale: 0.5,
-  /** One chunk per tick — the smoothest fill on a weak CPU/GPU. */
-  loadsPerTick: 1,
+  /** RAISED FROM 1, because the set this has to fill grew. One per tick at the
+   *  10 Hz streaming rate is 10 chunks a second, which was ample when a phone
+   *  loaded ~80 chunks inside a 252 m bubble and is not when it loads 200-430
+   *  inside the full 900 m one: the same setting that read as "smooth" then
+   *  reads as "the distance never arrives" now, taking 20-43 s to complete.
+   *  Four is ~5 s to a full frame at the median and ~11 s at the p90, and the
+   *  decode is off the render thread — what actually costs a frame is the
+   *  upload, which `flushReveals()` already batches per tick. */
+  loadsPerTick: 4,
   /** A phone cannot pay for a second full scene render, and the stand-in alpha
    *  is indistinguishable on these materials. Forced, not scaled. */
   transmission: "off" as const,
@@ -376,6 +404,11 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
     transmission: MOBILE.transmission,
     texUpgradesPerTick: Math.max(1, Math.round(c.texUpgradesPerTick * MOBILE.texUpgradesScale)),
     maxDpr: Math.min(c.maxDpr, MOBILE.maxDpr),
+    // NO FOG OVERRIDE. The authored start band is honoured because `far` is
+    // where the authored numbers put it — the fade keeps the full depth it was
+    // tuned with. An earlier revision re-aimed it at "mid" to cover a shrunken
+    // radius, which is what made the haze close in on a phone; the fix was to
+    // stop shrinking the radius, not to move the fog.
     // A smaller bubble mounts fewer chunks, so the cache can be smaller too —
     // but it must still exceed the peak mounted count or the LRU does nothing.
     cacheLimit: Math.max(64, Math.round(c.cacheLimit * 0.4)),
@@ -393,9 +426,91 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
   };
 }
 
-/** Coarse client-side check for a phone / memory-constrained device. Runs only
- *  in the browser; returns "desktop" during SSR so hydration is stable. */
-export function detectProfile(): "mobile" | "desktop" {
+// LOW PROFILE — the machine that is neither a phone nor a workstation.
+//
+// It exists because that machine used to get the HEAVIEST configuration in the
+// app. Three probes decide how hard this page pushes — `isLowPower()` in
+// shared/runtime (shadows, canvas DPR), `detectProfile()` here (the bands and
+// the geometry mode) and `isWeakGpu()` in memory.ts (the ceilings) — and a
+// 1366x768 laptop with eight cores, 8 GB of RAM, a fine pointer and an Intel
+// iGPU passes the first two as a desktop. So it kept shadows, DPR 1.5 and MSAA,
+// and `geometry: "resident"` handed it the entire near tier: 9.38 M triangles,
+// charged to the JS heap and to video memory at once. The one probe that got it
+// right was the third, and `updateResident()` consults no budget at all.
+//
+// What "low" takes away is therefore mostly one thing — residency — plus enough
+// band to make the streamed path fit the 192 MB a weak GPU is given. Everything
+// else it leaves alone: the texture rungs stay near desktop, because textures
+// are 14 MB of the problem here and geometry is 200.
+const LOW = {
+  /** Distance is NOT what this profile gives up — see the long note on
+   *  MOBILE.midScale. A weak GPU is given 192 MB, and the full authored 900 m
+   *  measures 82 MB median / 114 MB p90 at mobile rungs with the frustum cull
+   *  in play, so the radius was never the thing over the line. */
+  farScale: 1,
+  /** Quality is. Mid pulls in to 150 m so most of the frame resolves to the
+   *  `far` rung — same memory, ~5x less download, and the coarser geometry is
+   *  the part a weak GPU actually feels. Less aggressive than mobile's 0.4
+   *  because this is a full-size screen, where the drop is visible sooner. */
+  midScale: 0.6,
+  /** One rung down on `near` only (512 -> 384 rounds to 384 on the 128 ladder,
+   *  and the bake has no 384 rung, so it lands on 256). mid and far are already
+   *  at 256/128 and there is nothing there to win: the whole resident texture
+   *  set is 21.7 MB at desktop rungs and 12 MB here. */
+  rungScale: 0.75,
+  /** Half the desktop wave. A weak GPU is usually behind a weak decoder, and
+   *  the chunk decode is what competes with the frame. */
+  loadsScale: 0.5,
+  /** One visible transmissive material re-renders the whole opaque scene every
+   *  frame — the single biggest frame-time item in this config, and the least
+   *  missed. Forced, as on mobile. */
+  transmission: "off" as const,
+  /** DPR 1.0. On a 1366x768 panel this is the difference between a 2049x1152
+   *  framebuffer and a 1366x768 one; with MSAA also off (see CanvasWithWrapper)
+   *  that is ~85 MB of video memory down to ~8 MB. None of it is visible to
+   *  `residentBytes()`, which is exactly why it has to be given up here rather
+   *  than left for the streamer's governor to discover. */
+  maxDpr: 1,
+};
+
+function lowProfile(c: StreamingConfig): StreamingConfig {
+  const midDist = Math.round(c.midDist * LOW.midScale);
+  const farDist = Math.round(c.farDist * LOW.farScale);
+  const unloadDist = Math.round(farDist * (c.unloadDist / c.farDist));
+  const rung = (px: number) => Math.max(128, Math.round((px * LOW.rungScale) / 128) * 128);
+  return {
+    ...c,
+    midDist,
+    farDist,
+    unloadDist,
+    textureDist: unloadDist,
+    texRung: { near: rung(c.texRung.near), mid: rung(c.texRung.mid), far: rung(c.texRung.far) },
+    maxLoadsPerTick: Math.max(1, Math.round(c.maxLoadsPerTick * LOW.loadsScale)),
+    transmission: LOW.transmission,
+    maxDpr: Math.min(c.maxDpr, LOW.maxDpr),
+    // No fog override, for the reason given in mobileProfile: `far` has not
+    // moved, so the authored fade still has its full depth to work in.
+    // THE WHOLE POINT OF THIS PROFILE. Residency is not a setting of the
+    // streaming path, it is a replacement for it: `updateResident()` returns
+    // before the frustum gate, the pre-mount hard cap, the eviction pass and
+    // the resident-byte governor. It is the right trade on a machine that can
+    // hold the near tier, and it is why this one could not.
+    geometryMode: "streamed" as const,
+  };
+}
+
+/**
+ * Which profile this machine gets. Runs only in the browser; returns "desktop"
+ * during SSR so hydration is stable.
+ *
+ * Ordered most-constrained first, and the two tests answer different questions.
+ * "mobile" is about the DEVICE CLASS — a phone is a phone whatever GPU is in
+ * it, and it has a hard VRAM ceiling the browser enforces by killing the
+ * context. "low" is about CAPABILITY on a machine that presents as a desktop,
+ * which is why it reaches for the GPU string rather than for screen size: the
+ * failing case is a full-size laptop whose every cheap signal says desktop.
+ */
+export function detectProfile(): DeviceProfile {
   if (typeof navigator === "undefined" || typeof window === "undefined") return "desktop";
   const uaMobile = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile;
   if (uaMobile === true) return "mobile";
@@ -404,7 +519,15 @@ export function detectProfile(): "mobile" | "desktop" {
   const lowMem = typeof mem === "number" && mem <= 4;
   const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
   const smallish = Math.min(window.screen?.width ?? 9999, window.screen?.height ?? 9999) <= 820;
-  return coarse && (smallish || lowMem) ? "mobile" : "desktop";
+  if (coarse && (smallish || lowMem)) return "mobile";
+  // Three ways to be "low", any one of which is enough. The GPU probe is the
+  // one that matters and the one that was missing; the other two catch a
+  // machine whose renderer string is hidden (Firefox's resistFingerprinting
+  // blanks it, and `weakGpuProbe` then answers "weak" anyway) or whose problem
+  // is the CPU rather than the card.
+  const slowCpu = (navigator.hardwareConcurrency ?? 8) <= 4;
+  if (weakGpuProbe() || slowCpu || lowMem) return "low";
+  return "desktop";
 }
 
 /** The GROUND config on this device — what a person standing in the terminal
@@ -414,10 +537,13 @@ export function detectProfile(): "mobile" | "desktop" {
  *  than by camera height). */
 export function resolveStreamConfig(
   variant: StreamVariantId,
-  profile?: "mobile" | "desktop",
+  profile?: DeviceProfile,
 ): StreamingConfig {
   const ground = STREAM_VARIANTS[variant].ground;
-  return (profile ?? detectProfile()) === "mobile" ? mobileProfile(ground) : ground;
+  const p = profile ?? detectProfile();
+  if (p === "mobile") return mobileProfile(ground);
+  if (p === "low") return lowProfile(ground);
+  return ground;
 }
 
 // AERIAL PROFILE — the second strategy over the SAME manifest.
@@ -467,11 +593,23 @@ function buildAerial(raw: StreamConfig): StreamingConfig | null {
  */
 export function resolveAerialConfig(
   variant: StreamVariantId,
-  profile?: "mobile" | "desktop",
+  profile?: DeviceProfile,
 ): StreamingConfig | null {
   const aerial = STREAM_VARIANTS[variant].aerial;
   if (!aerial) return null;
-  if ((profile ?? detectProfile()) !== "mobile") return aerial;
+  const p = profile ?? detectProfile();
+  if (p === "desktop") return aerial;
+  // "low" gets the throughput and resolution clamps and nothing else. The
+  // reasoning above applies to it verbatim — an aerial band that a weak GPU
+  // pulls in re-creates the empty-sky shot the block exists to fix — and it has
+  // even less to gain than a phone does, since its texture rungs barely move.
+  if (p === "low") {
+    return {
+      ...aerial,
+      maxLoadsPerTick: Math.max(1, Math.round(aerial.maxLoadsPerTick * LOW.loadsScale)),
+      maxDpr: Math.min(aerial.maxDpr, LOW.maxDpr),
+    };
+  }
   const rung = (px: number) => Math.max(128, Math.round((px * MOBILE.rungScale) / 128) * 128);
   return {
     ...aerial,
@@ -531,11 +669,19 @@ function buildDollhouse(raw: StreamConfig): StreamingConfig | null {
  */
 export function resolveDollhouseConfig(
   variant: StreamVariantId,
-  profile?: "mobile" | "desktop",
+  profile?: DeviceProfile,
 ): StreamingConfig | null {
   const dollhouse = STREAM_VARIANTS[variant].dollhouse;
   if (!dollhouse) return null;
-  if ((profile ?? detectProfile()) !== "mobile") return dollhouse;
+  const p = profile ?? detectProfile();
+  if (p === "desktop") return dollhouse;
+  if (p === "low") {
+    return {
+      ...dollhouse,
+      maxLoadsPerTick: Math.max(1, Math.round(dollhouse.maxLoadsPerTick * LOW.loadsScale)),
+      maxDpr: Math.min(dollhouse.maxDpr, LOW.maxDpr),
+    };
+  }
   return { ...dollhouse, maxLoadsPerTick: MOBILE.loadsPerTick };
 }
 

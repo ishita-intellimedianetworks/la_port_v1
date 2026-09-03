@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { HOTSPOT_BY_ID, layouts, ui as uiCopy } from "@/config";
+import { useSite } from "@/config/context";
 import { EdgeFlap } from "../edge-flap";
 import { PanelSearch } from "../panel-search";
 import { TravelRow } from "../travel-row";
@@ -62,6 +62,8 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
   // still the live one. The alternative — clearing it from an effect on every
   // keystroke — is the same behaviour a render later, with a wasted render and
   // a frame where the old choice is still on screen.
+  const site = useSite();
+
   const [expanded, setExpanded] = useState<{ query: string; openId?: string | null }>({
     query: "",
   });
@@ -91,10 +93,10 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
    */
   const rows = useMemo(() => {
     const hit = (...fields: string[]) => fields.some((f) => f.toLowerCase().includes(q));
-    return layouts
+    return site.layouts
       .map((layout) => {
         const children = layout.hotspots
-          .map((id) => HOTSPOT_BY_ID[id])
+          .map((id) => site.hotspotById[id])
           .filter((hp) => !!hp);
         if (!q) return { layout, children, autoOpen: false };
         if (hit(layout.id, layout.name)) return { layout, children, autoOpen: false };
@@ -102,7 +104,7 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
         return matched.length ? { layout, children: matched, autoOpen: true } : null;
       })
       .filter((row) => row !== null);
-  }, [q]);
+  }, [site, q]);
 
   // Travelling is the end of the panel's job, so it closes and forgets the
   // search — reopening onto a half-typed filter reads as a bug.
@@ -118,7 +120,7 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
   return (
     <EdgeFlap
       side="left"
-      label={uiCopy.panels.hotspotsFlapLabel}
+      label={site.ui.panels.hotspotsFlapLabel}
       // No in-panel title — the flap's own edge tab already reads "RESOURCES",
       // and with no detail view there is nothing to go back FROM either.
       title=""

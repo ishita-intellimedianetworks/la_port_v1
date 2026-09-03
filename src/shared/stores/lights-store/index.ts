@@ -30,7 +30,7 @@ export type LightsState = {
    * It has to sit above `override` and above the sky's own `envOverride`, and
    * that ordering is the whole reason it is a separate layer rather than writes
    * into `values`: `values` is merged UNDER the sky, so a hand-set
-   * `sunIntensity` there is silently replaced by `site.json › sky.lights` on
+   * `sunIntensity` there is silently replaced by `<site>.json › sky.lights` on
    * the very next render, and the panel would appear not to work.
    *
    * Sparse on purpose. Only the fields actually touched are present, so

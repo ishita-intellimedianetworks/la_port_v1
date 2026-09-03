@@ -2,14 +2,11 @@ import { FunctionComponent, PropsWithChildren, Suspense, useEffect } from "react
 import { Canvas, useStore } from "@react-three/fiber";
 import * as THREE from "three";
 
-import { entry } from "@/shared/scene-data/adapter";
-import { FOV_DEFAULT } from "@/shared/stores/camera-store";
+import { useSite } from "@/config/context";
+import { sceneDataFor } from "@/shared/scene-data/adapter";
 import isLowPower from "@/shared/runtime";
 import { degradeGpuBudget } from "@/streaming/memory";
 import { filterCss, useGradeStore } from "@/shared/stores/grade-store";
-
-const defaultPos = entry.position;
-const defaultRot = entry.rotation;
 
 // three r183 deprecated THREE.Clock, but @react-three/fiber (≤ 9.x) still
 // constructs one inside its store — a warning the app can't act on until R3F
@@ -58,8 +55,12 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
   initialPosition,
   initialRotation,
 }) => {
-  const [px, py, pz] = initialPosition ?? defaultPos;
-  const [rx, ry, rz] = initialRotation ?? defaultRot;
+  // The opening pose and the FOV are the ACTIVE MODEL's — every route mounts
+  // this same Canvas, and each one has its own site file to answer with.
+  const site = useSite();
+  const { entry } = sceneDataFor(site);
+  const [px, py, pz] = initialPosition ?? entry.position;
+  const [rx, ry, rz] = initialRotation ?? entry.rotation;
   // Shadows are from ONE sun, its shadow camera fitted to the model bounds and
   // the shadow map FROZEN after a single render (see SceneLights) — the scene is
   // static, so the map never re-renders and never shimmers while walking. Off on
@@ -88,7 +89,7 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
           // get 1.25× (they're also the memory-tightest devices).
           dpr={lowPower ? [1, 1.25] : [1, 1.5]}
           camera={{
-            fov: FOV_DEFAULT,
+            fov: site.scene.world.fov,
             near: 0.1,
             // Large olympics models — keep the far plane generous so the model
             // and sky backdrop aren't clipped (matches the reference canvas).

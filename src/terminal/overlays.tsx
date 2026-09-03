@@ -28,7 +28,7 @@ import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
 import { HotspotDataCard } from "./overlay/hotspot-card";
 import { DebugPanel } from "./overlay/debug-panel";
 import { tick } from "@/shared/runtime/diagnostics";
-import { scene as siteScene } from "@/config";
+import { useSite } from "@/config/context";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
 // "Home" / "currently at" are decided purely by XZ proximity to the fixed start
@@ -342,7 +342,7 @@ export default function Overlays() {
    * tick and the map's marker follows the player there on its own; writing
    * either one here would only fight that poll.
    */
-  const firstPersonPose = siteScene.cameras.firstPerson;
+  const firstPersonPose = useSite().scene.cameras.firstPerson;
   const handleFirstPerson = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl || !firstPersonPose) return;
@@ -788,7 +788,7 @@ export default function Overlays() {
 
       {/* ?debug=true only — the whole look in one panel: time of day, where
           the sun is, every light value and the grade, plus the JSON to paste
-          back into site.json. Parked below PerfMeter in the same corner. */}
+          back into the site file. Parked below PerfMeter in the same corner. */}
       {ui.sceneContent.debug && <DebugPanel />}
     </>
   );

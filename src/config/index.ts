@@ -1,21 +1,37 @@
 /**
- * The single entry point to `site.json` — the one config file. Nothing else in
- * the app imports the JSON directly, and nothing hardcodes a URL, a pose or a
- * value.
+ * The single entry point to the site configs. Nothing else in the app imports
+ * a JSON directly, and nothing hardcodes a URL, a pose or a value.
  *
- * `site.json` is shaped as DB TABLES so it can be lifted into a database
+ * ONE FILE PER MODEL. `sites/v1.json`, `sites/v2.json` and `sites/v3.json` are
+ * three COMPLETE, standalone documents — one per bake, one per route — with no
+ * inheritance and no merge between them. There used to be a single `site.json`
+ * with `stream` plus a `streamV2` partial layered over it at import, which
+ * meant every route read the same cameras, hotspots, sky and world numbers and
+ * a change for one bake was a change for all three. Now an edit can only ever
+ * reach the route whose file it is in; the price is that a change meant for
+ * every model has to be made three times, on purpose.
+ *
+ * Each document is shaped as DB TABLES so it can be lifted into a database
  * without a rewrite: `layouts` and `hotspots` are sibling arrays joined by
- * `hotspots[].layoutId`. This module is the ORM: it slices the document into
- * the views the app already reads (`scene`, `ui`), rebuilds the nesting the
+ * `hotspots[].layoutId`. This module is the ORM: it slices a document into the
+ * views the app already reads (`scene`, `ui`), rebuilds the nesting the
  * Resources panel renders, and derives the id lookups.
  *
- *   site.json › meta/assets/world/cameras/lights/globals/sky → `scene` (the site record)
- *   site.json › theme/zones/tones/copy                   → `ui`     (presentation)
- *   site.json › layouts[]                                → `layouts`  (table)
- *   site.json › hotspots[]                               → `hotspots` (table)
+ *   <site>.json › meta/assets/stream/world/cameras/lights/globals/sky → `scene`
+ *   <site>.json › zones/tones/copy                                    → `ui`
+ *   <site>.json › layouts[]                                           → `layouts`
+ *   <site>.json › hotspots[]                                          → `hotspots`
+ *
+ * A route names its site once, at the top of the tree, with `<SiteProvider id>`
+ * (see `./context`); everything below reads `useSite()`. Resolution is per id
+ * and happens once at import, so the three are ordinary values that can all be
+ * held at the same time — the same reason `STREAM_VARIANTS` is a record rather
+ * than a set of module constants derived from an env var.
  */
 
-import siteJson from "./site.json";
+import v1Json from "./sites/v1.json";
+import v2Json from "./sites/v2.json";
+import v3Json from "./sites/v3.json";
 
 import type {
   CameraPose,
@@ -29,7 +45,9 @@ import type {
   Vec3,
 } from "./schema";
 
-export const site = siteJson as unknown as SiteConfig;
+/** Every model the app can serve, in route order: `/`, `/v2`, `/v3`. */
+export const SITE_IDS = ["v1", "v2", "v3"] as const;
+export type SiteId = (typeof SITE_IDS)[number];
 
 /**
  * Where the map's images are served from.
@@ -48,78 +66,193 @@ function floorplanUrl(imageUrl: string): string {
   return /^(https?:)?\/\//.test(imageUrl) ? imageUrl : `${FLOORPLAN_BASE}/${imageUrl.replace(/^\/+/, "")}`;
 }
 
-/** `map` with its image URLs resolved, so no reader has to know about the base. */
-const resolvedMap: SiteConfig["map"] = site.map && {
-  ...site.map,
-  ...(site.map.plan && { plan: { ...site.map.plan, imageUrl: floorplanUrl(site.map.plan.imageUrl) } }),
-  ...(site.map.base && { base: { ...site.map.base, imageUrl: floorplanUrl(site.map.base.imageUrl) } }),
-};
-
 /**
- * `scene` and `ui` are VIEWS over one document, kept because every reader in
- * the app already speaks them. Merging the files did not need to become a
- * rename touching a hundred call sites.
- */
-export const scene: SceneConfig = {
-  meta: site.meta,
-  assets: site.assets,
-  stream: site.stream,
-  streamV2: site.streamV2,
-  world: site.world,
-  cameras: site.cameras,
-  lights: site.lights,
-  globals: site.globals,
-  map: resolvedMap,
-  sky: site.sky,
-};
-
-export const ui: UiConfig = {
-  zones: site.zones,
-  tones: site.tones,
-  ...site.copy,
-};
-
-export const hotspots: HotspotConfig[] = site.hotspots;
-
-/**
- * The layouts table, each row given back the child-id list the UI reads.
+ * One model's config, fully resolved — the value `useSite()` hands out.
  *
- * The list is REBUILT from `hotspots[].layoutId` in table order rather than
- * stored on the layout: parentage is one fact, and a file that states it twice
- * eventually states it two different ways. (The old config carried both and
- * needed a validator to keep them honest.)
+ * `scene` and `ui` are VIEWS over the one document, kept because every reader
+ * in the app already speaks them. Splitting the file per model did not need to
+ * become a rename touching a hundred call sites.
  */
-export const layouts: LayoutConfig[] = site.layouts.map((row) => ({
-  ...row,
-  hotspots: site.hotspots.filter((h) => h.layoutId === row.id).map((h) => h.id),
-}));
-
-export const LAYOUT_BY_ID: Record<string, LayoutConfig> = Object.fromEntries(
-  layouts.map((l) => [l.id, l]),
-);
-
-export const HOTSPOT_BY_ID: Record<string, HotspotConfig> = Object.fromEntries(
-  hotspots.map((h) => [h.id, h]),
-);
-
-/**
- * True when a layout's camera is authored in the AIR rather than on the ground.
- *
- * `walkable: false` is that flag — L01 sits 60 units up over the main channel
- * and L10 sits 180 up over the whole terminal. There is deliberately no second
- * field for this: "the camera is off the navmesh" and "you cannot walk from
- * here" are the same fact, and two fields saying it would eventually disagree.
- *
- * Travel involving a fly camera is always a teleport, in BOTH directions:
- * there is no navmesh under an aerial camera to path from or to.
- */
-export function isFlyLayout(layoutId: string | null | undefined): boolean {
-  return !!layoutId && LAYOUT_BY_ID[layoutId]?.walkable === false;
+export interface Site {
+  id: SiteId;
+  /** The document this was resolved from, for the rare reader that wants a key
+   *  no view exposes. */
+  doc: SiteConfig;
+  scene: SceneConfig;
+  ui: UiConfig;
+  hotspots: HotspotConfig[];
+  /** The layouts table, each row given back its child-id list. */
+  layouts: LayoutConfig[];
+  layoutById: Record<string, LayoutConfig>;
+  hotspotById: Record<string, HotspotConfig>;
+  startLayoutId: string;
+  /** Where the experience begins. Every "default pose" — the Canvas camera, the
+   *  first-person start, the fallback for an unauthored layout — reads THIS. */
+  startPose: CameraPose;
+  poseForLayout: (layoutId: string) => CameraPose;
+  poseForHotspot: (hotspotId: string) => CameraPose;
+  /** True when a layout's camera is authored in the AIR rather than on the
+   *  ground — see `resolveSite`. */
+  isFlyLayout: (layoutId: string | null | undefined) => boolean;
+  /** A resource has no camera of its own — it is viewed from its layout's. */
+  isFlyHotspot: (hotspotId: string) => boolean;
+  /** Explicit `tone` wins; otherwise the enum value is matched against
+   *  `<site>.json › tones`. */
+  toneFor: (value: string | number | boolean, explicit?: Tone) => Tone | undefined;
 }
 
-/** A resource has no camera of its own — it is viewed from its layout's. */
-export function isFlyHotspot(hotspotId: string): boolean {
-  return isFlyLayout(HOTSPOT_BY_ID[hotspotId]?.layoutId);
+const ORIGIN_POSE: CameraPose = { position: [0, 0, 0], rotation: [0, 0, 0] };
+
+function resolveSite(id: SiteId, doc: SiteConfig): Site {
+  /** `map` with its image URLs resolved, so no reader has to know about the base. */
+  const map: SceneConfig["map"] = doc.map && {
+    ...doc.map,
+    ...(doc.map.plan && { plan: { ...doc.map.plan, imageUrl: floorplanUrl(doc.map.plan.imageUrl) } }),
+    ...(doc.map.base && { base: { ...doc.map.base, imageUrl: floorplanUrl(doc.map.base.imageUrl) } }),
+  };
+
+  const scene: SceneConfig = {
+    meta: doc.meta,
+    assets: doc.assets,
+    stream: doc.stream,
+    world: doc.world,
+    cameras: doc.cameras,
+    lights: doc.lights,
+    globals: doc.globals,
+    map,
+    sky: doc.sky,
+  };
+
+  const ui: UiConfig = {
+    zones: doc.zones,
+    tones: doc.tones,
+    ...doc.copy,
+  };
+
+  const hotspots: HotspotConfig[] = doc.hotspots;
+
+  /**
+   * The layouts table, each row given back the child-id list the UI reads.
+   *
+   * The list is REBUILT from `hotspots[].layoutId` in table order rather than
+   * stored on the layout: parentage is one fact, and a file that states it
+   * twice eventually states it two different ways. (The old config carried both
+   * and needed a validator to keep them honest.)
+   */
+  const layouts: LayoutConfig[] = doc.layouts.map((row) => ({
+    ...row,
+    hotspots: hotspots.filter((h) => h.layoutId === row.id).map((h) => h.id),
+  }));
+
+  const layoutById: Record<string, LayoutConfig> = Object.fromEntries(layouts.map((l) => [l.id, l]));
+  const hotspotById: Record<string, HotspotConfig> = Object.fromEntries(hotspots.map((h) => [h.id, h]));
+
+  /**
+   * True when a layout's camera is authored in the AIR rather than on the ground.
+   *
+   * `walkable: false` is that flag — L01 sits 60 units up over the main channel
+   * and L10 sits 180 up over the whole terminal. There is deliberately no second
+   * field for this: "the camera is off the navmesh" and "you cannot walk from
+   * here" are the same fact, and two fields saying it would eventually disagree.
+   *
+   * Travel involving a fly camera is always a teleport, in BOTH directions:
+   * there is no navmesh under an aerial camera to path from or to.
+   */
+  const isFlyLayout = (layoutId: string | null | undefined): boolean =>
+    !!layoutId && layoutById[layoutId]?.walkable === false;
+
+  const isFlyHotspot = (hotspotId: string): boolean => isFlyLayout(hotspotById[hotspotId]?.layoutId);
+
+  /**
+   * A layout's authored camera, resolved to a pose. No fallback — this is the
+   * arithmetic on its own, so `startPose` below can use it without depending on
+   * itself.
+   */
+  const authoredPose = (layout: LayoutConfig): CameraPose =>
+    poseForCamera(layout.camera, layout.walkable === false ? 0 : doc.world.eyeHeight);
+
+  /**
+   * The layout the experience opens on — `<site>.json › startLayoutId`, a
+   * foreign key into the layouts table.
+   *
+   * There is no separate `cameras.start` / `cameras.entry` block any more. A
+   * start pose is not a fourth camera someone authors by hand; it is one of the
+   * checkpoints already authored as a layout, named. The old `cameras.entry`
+   * was literally L01's camera position copied into a second place, which is
+   * exactly the drift this removes.
+   */
+  const startLayoutId = doc.startLayoutId;
+
+  const startLayout = layoutById[startLayoutId];
+  const startPose: CameraPose =
+    !startLayout || isPlaceholder(startLayout.camera.position) ? ORIGIN_POSE : authoredPose(startLayout);
+
+  const poseForLayout = (layoutId: string): CameraPose => {
+    const layout = layoutById[layoutId];
+    if (!layout || isPlaceholder(layout.camera.position)) return startPose;
+    return authoredPose(layout);
+  };
+
+  /**
+   * The viewpoint a hotspot is seen from — its OWN camera, framing just this
+   * marker. Falls back to the parent layout's camera while a hotspot is still
+   * unauthored, which is also what it did for every hotspot before they had
+   * cameras of their own.
+   *
+   * The eye offset follows the PARENT layout: whether the runtime adds eye
+   * height on arrival is a property of the ground under the pose, and a
+   * hotspot's camera stands on the same ground its layout does.
+   */
+  const poseForHotspot = (hotspotId: string): CameraPose => {
+    const hotspot = hotspotById[hotspotId];
+    if (!hotspot) return startPose;
+    const camera = hotspot.camera;
+    if (!camera || isPlaceholder(camera.position)) return poseForLayout(hotspot.layoutId);
+    const eyeOffset = layoutById[hotspot.layoutId]?.walkable === false ? 0 : doc.world.eyeHeight;
+    return poseForCamera(camera, eyeOffset);
+  };
+
+  const toneLookup: Record<string, Tone> = {};
+  (Object.keys(ui.tones) as Tone[]).forEach((tone) => {
+    ui.tones[tone].forEach((word) => {
+      toneLookup[word.toUpperCase()] = tone;
+    });
+  });
+
+  const toneFor = (value: string | number | boolean, explicit?: Tone): Tone | undefined => {
+    if (explicit) return explicit;
+    if (typeof value !== "string") return undefined;
+    return toneLookup[value.toUpperCase()];
+  };
+
+  return {
+    id,
+    doc,
+    scene,
+    ui,
+    hotspots,
+    layouts,
+    layoutById,
+    hotspotById,
+    startLayoutId,
+    startPose,
+    poseForLayout,
+    poseForHotspot,
+    isFlyLayout,
+    isFlyHotspot,
+    toneFor,
+  };
+}
+
+/** Every model, resolved once. The route picks one — see `./context`. */
+export const SITES: Record<SiteId, Site> = {
+  v1: resolveSite("v1", v1Json as unknown as SiteConfig),
+  v2: resolveSite("v2", v2Json as unknown as SiteConfig),
+  v3: resolveSite("v3", v3Json as unknown as SiteConfig),
+};
+
+export function getSite(id: SiteId): Site {
+  return SITES[id];
 }
 
 /**
@@ -200,124 +333,55 @@ export function poseForCamera(camera: LayoutCamera, eyeOffset = 0): CameraPose {
   return { position: camera.position, rotation: [0, 0, 0] };
 }
 
-/**
- * A layout's authored camera, resolved to a pose. No fallback — this is the
- * arithmetic on its own, so `startPose` below can use it without depending on
- * itself.
- */
-function authoredPose(layout: LayoutConfig): CameraPose {
-  return poseForCamera(layout.camera, layout.walkable === false ? 0 : site.world.eyeHeight);
-}
-
-const ORIGIN_POSE: CameraPose = { position: [0, 0, 0], rotation: [0, 0, 0] };
-
-/**
- * The layout the experience opens on — `site.json` › `startLayoutId`, a foreign
- * key into the layouts table.
- *
- * There is no separate `cameras.start` / `cameras.entry` block any more. A
- * start pose is not a fourth camera someone authors by hand; it is one of the
- * checkpoints already authored as a layout, named. The old `cameras.entry` was
- * literally L01's camera position copied into a second place, which is exactly
- * the drift this removes.
- */
-export const startLayoutId: string = site.startLayoutId;
-
-/** Where the experience begins. Every "default pose" — the Canvas camera, the
- *  first-person start, the fallback for an unauthored layout — reads THIS. */
-export const startPose: CameraPose = (() => {
-  const layout = LAYOUT_BY_ID[startLayoutId];
-  if (!layout || isPlaceholder(layout.camera.position)) return ORIGIN_POSE;
-  return authoredPose(layout);
-})();
-
-export function poseForLayout(layoutId: string): CameraPose {
-  const layout = LAYOUT_BY_ID[layoutId];
-  if (!layout || isPlaceholder(layout.camera.position)) return startPose;
-  return authoredPose(layout);
-}
-
-/**
- * The viewpoint a hotspot is seen from — its OWN camera, framing just this
- * marker. Falls back to the parent layout's camera while a hotspot is still
- * unauthored, which is also what it did for every hotspot before they had
- * cameras of their own.
- *
- * The eye offset follows the PARENT layout: whether the runtime adds eye height
- * on arrival is a property of the ground under the pose, and a hotspot's camera
- * stands on the same ground its layout does.
- */
-export function poseForHotspot(hotspotId: string): CameraPose {
-  const hotspot = HOTSPOT_BY_ID[hotspotId];
-  if (!hotspot) return startPose;
-  const camera = hotspot.camera;
-  if (!camera || isPlaceholder(camera.position)) return poseForLayout(hotspot.layoutId);
-  const eyeOffset = LAYOUT_BY_ID[hotspot.layoutId]?.walkable === false ? 0 : site.world.eyeHeight;
-  return poseForCamera(camera, eyeOffset);
-}
-
-const TONE_LOOKUP: Record<string, Tone> = (() => {
-  const map: Record<string, Tone> = {};
-  (Object.keys(ui.tones) as Tone[]).forEach((tone) => {
-    ui.tones[tone].forEach((word) => {
-      map[word.toUpperCase()] = tone;
-    });
-  });
-  return map;
-})();
-
-/** Explicit `tone` wins; otherwise the enum value is matched against `site.tones`. */
-export function toneFor(value: string | number | boolean, explicit?: Tone): Tone | undefined {
-  if (explicit) return explicit;
-  if (typeof value !== "string") return undefined;
-  return TONE_LOOKUP[value.toUpperCase()];
-}
-
 // Load-time validation (dev only)
 // The checks a database would enforce with constraints, run here for as long as
-// the tables live in a file: primary-key format, primary-key uniqueness,
-// foreign-key integrity, and the demo's one cross-row invariant.
+// the tables live in files: primary-key format, primary-key uniqueness,
+// foreign-key integrity, and the demo's one cross-row invariant. Run per site,
+// because the three no longer share a row.
 
 if (process.env.NODE_ENV !== "production") {
-  const problems: string[] = [];
-
   const layoutIdRe = /^L(0[1-9]|10)$/;
   const hotspotIdRe = /^H(0[1-9]|[12]\d|30)$/;
 
-  if (!LAYOUT_BY_ID[startLayoutId]) {
-    problems.push(`startLayoutId "${startLayoutId}" is not a layout`);
-  }
+  for (const id of SITE_IDS) {
+    const s = SITES[id];
+    const problems: string[] = [];
 
-  const seenLayout = new Set<string>();
-  site.layouts.forEach((l) => {
-    if (!layoutIdRe.test(l.id)) problems.push(`layout id "${l.id}" is not L01-L10`);
-    if (seenLayout.has(l.id)) problems.push(`duplicate layout id "${l.id}"`);
-    seenLayout.add(l.id);
-  });
-
-  const seenHotspot = new Set<string>();
-  hotspots.forEach((h) => {
-    if (!hotspotIdRe.test(h.id)) problems.push(`hotspot id "${h.id}" is not H01-H30`);
-    if (seenHotspot.has(h.id)) problems.push(`duplicate hotspot id "${h.id}"`);
-    seenHotspot.add(h.id);
-
-    if (!LAYOUT_BY_ID[h.layoutId]) {
-      problems.push(`hotspot ${h.id} references unknown layout "${h.layoutId}"`);
+    if (!s.layoutById[s.startLayoutId]) {
+      problems.push(`startLayoutId "${s.startLayoutId}" is not a layout`);
     }
 
-    // The demo's one cross-row invariant: every mention of the hero container
-    // is the same container, so the H09 → H14 → H24 → H30 story cannot fork.
-    h.fields.forEach((f) => {
-      if (f.ref === "hero" && f.value !== scene.globals.heroContainerId) {
-        problems.push(
-          `hotspot ${h.id} field ${f.name} is marked hero but reads "${f.value}" ` +
-            `(expected "${scene.globals.heroContainerId}")`,
-        );
-      }
+    const seenLayout = new Set<string>();
+    s.layouts.forEach((l) => {
+      if (!layoutIdRe.test(l.id)) problems.push(`layout id "${l.id}" is not L01-L10`);
+      if (seenLayout.has(l.id)) problems.push(`duplicate layout id "${l.id}"`);
+      seenLayout.add(l.id);
     });
-  });
 
-  if (problems.length) {
-    console.error("[port-config] validation failed:\n  " + problems.join("\n  "));
+    const seenHotspot = new Set<string>();
+    s.hotspots.forEach((h) => {
+      if (!hotspotIdRe.test(h.id)) problems.push(`hotspot id "${h.id}" is not H01-H30`);
+      if (seenHotspot.has(h.id)) problems.push(`duplicate hotspot id "${h.id}"`);
+      seenHotspot.add(h.id);
+
+      if (!s.layoutById[h.layoutId]) {
+        problems.push(`hotspot ${h.id} references unknown layout "${h.layoutId}"`);
+      }
+
+      // The demo's one cross-row invariant: every mention of the hero container
+      // is the same container, so the H09 → H14 → H24 → H30 story cannot fork.
+      h.fields.forEach((f) => {
+        if (f.ref === "hero" && f.value !== s.scene.globals.heroContainerId) {
+          problems.push(
+            `hotspot ${h.id} field ${f.name} is marked hero but reads "${f.value}" ` +
+              `(expected "${s.scene.globals.heroContainerId}")`,
+          );
+        }
+      });
+    });
+
+    if (problems.length) {
+      console.error(`[port-config] ${id} validation failed:\n  ` + problems.join("\n  "));
+    }
   }
 }

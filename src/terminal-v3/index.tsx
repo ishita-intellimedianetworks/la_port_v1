@@ -12,59 +12,41 @@
  *   scene-graph.tsx everything inside the WebGL canvas
  *   overlays.tsx    everything on top of it
  *
- * The site is resolved from config, so there is no id to pass in.
+ * It runs the `v3` model: `config/sites/v3.json` — its own document, its own
+ * cameras, its own bake. Nothing it holds is read by `/` or `/v2`.
  */
 
 import "./styles.css";
 import CanvasWithWrapper from "@/shared/canvas/canvas-with-wrapper";
-import { defaultSiteId } from "@/shared/scene-data/adapter";
+import { getSite, type SiteId } from "@/config";
+import { SiteProvider } from "@/config/context";
+import { SITE_NODE_ID } from "@/shared/scene-data/adapter";
 import TerminalProvider from "./provider";
-import { StreamVariantProvider } from "@/streaming/variant";
-import type { StreamVariantId } from "@/streaming/config";
+import { initStores } from "./stores/init-stores";
 import SceneGraph from "./scene-graph";
 import Overlays from "./overlays";
 
-/**
- * V3's OWN SPAWN — where first person begins and where Home returns to, for
- * this route only.
- *
- * `cameras.spawn` in site.json is shared with `/` and `/v2`, so editing it
- * there would move all three. This patches the single floor ("terminal")
- * instead: every reader of the start pose — Home, the dollhouse fly-in, the
- * first-person entry — prefers the active floor's over the site node's.
- *
- * TAKEN FROM cp_012 in la-port-zone-c5-cp-v4.glb via /extract-pos. That tool
- * prints an XYZ euler, [3.0914, 0.2333, -3.13]; the rotation below is the YXZ
- * reorder the camera is actually set with, so re-derive it rather than pasting
- * the printed triple. Roll comes out at 0, i.e. the authored camera is level.
- */
-const V3_SPAWN = {
-  startPosition: [-1326.861, 27.735, -224.4829] as [number, number, number],
-  startRotation: [0.0489, 2.9081, 0] as [number, number, number],
-};
-
 interface TerminalExperienceProps {
-  /** Optional — defaults to the single configured site. */
-  siteId?: string;
+  /** The engine's node id. Optional — one site projects to one node. */
+  nodeId?: string;
   onReady?: () => void;
-  /** WHICH BAKE to stream. `v3` resolves to `site.json > streamV3` if that
-   *  block is authored, and to whatever `/v2` resolved to if it is not. */
-  streamVariant?: StreamVariantId;
+  /** WHICH MODEL to run — the site file read and the bake streamed. `v3` is
+   *  this route's own document; the prop exists so the tree cannot silently
+   *  read someone else's. */
+  site?: SiteId;
 }
 
 export default function TerminalExperienceV3({
-  siteId = defaultSiteId,
+  nodeId = SITE_NODE_ID,
   onReady,
-  streamVariant = "v3",
+  site = "v3",
 }: TerminalExperienceProps) {
+  // Before anything below renders: the stores that seed from the site file get
+  // THIS model's numbers. See `initStores`.
+  initStores(getSite(site));
   return (
-    <StreamVariantProvider id={streamVariant}>
-    <TerminalProvider
-      nodeId={siteId}
-      onReady={onReady}
-      dollhouseFirstVisit
-      floorPatches={{ terminal: V3_SPAWN }}
-    >
+    <SiteProvider id={site}>
+    <TerminalProvider nodeId={nodeId} onReady={onReady} dollhouseFirstVisit>
       <main className="absolute h-full w-full overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
           <CanvasWithWrapper>
@@ -74,7 +56,7 @@ export default function TerminalExperienceV3({
         <Overlays />
       </main>
     </TerminalProvider>
-    </StreamVariantProvider>
+    </SiteProvider>
   );
 }
 

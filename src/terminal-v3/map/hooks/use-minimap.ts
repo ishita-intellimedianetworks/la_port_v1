@@ -15,7 +15,7 @@ import {
   drawStickers,
   type ImageRect, type MapHotspot,
 } from "../utils/draw";
-import { scene as siteScene } from "@/config";
+import { useSite } from "@/config/context";
 import { createStaticLayers } from "../utils/static-layers";
 import isLowPower from "@/shared/runtime";
 import { etaSeconds, fmtEta, fmtMeters } from "../../overlay/nav-hud/format";
@@ -409,6 +409,10 @@ export function useMinimap() {
     });
   }, [playerControllerRef, destLabel, activeFloor, selectedDestId, closePanel, triggerFloorTransition, setMapExpanded]);
 
+  // The map layers come from the ACTIVE MODEL's file: a bake with its own
+  // floorplan render or its own zone framing carries them in its own document.
+  const siteMap = useSite().scene.map;
+
   const mapWidth  = mapDims.w;
   const mapHeight = mapDims.h;
   useLayoutEffect(() => {
@@ -419,10 +423,10 @@ export function useMinimap() {
    *  framed to, so pixel<->world is exact and needs no calibration; the render
    *  can come from any GLB. minimapData is the legacy fallback. */
   const planLayer = useMemo(() => {
-    const p = siteScene.map?.plan;
+    const p = siteMap?.plan;
     if (p) return { url: p.imageUrl, bounds: p.bounds };
     return minimapData ? { url: minimapData.imageUrl, bounds: minimapData.bounds } : null;
-  }, [minimapData]);
+  }, [siteMap, minimapData]);
   const planUrl = planLayer?.url;
 
   /** The context layer under it, if the site has one. Purely decorative: it
@@ -430,9 +434,9 @@ export function useMinimap() {
    *  call below, which places it THROUGH the plan's transform so the two are
    *  registered by construction rather than by both being fitted separately. */
   const baseLayer = useMemo(() => {
-    const b = siteScene.map?.base;
+    const b = siteMap?.base;
     return b ? { url: b.imageUrl, bounds: b.bounds } : null;
-  }, []);
+  }, [siteMap]);
   const baseUrl = baseLayer?.url;
 
   /** The bounds swap both axes, so this is what the marker clamp needs. */
@@ -463,7 +467,7 @@ export function useMinimap() {
 
   /** What the map opens on. Plain world rect; the plan's own extent when a site
    *  does not author one, which is the old whole-plan framing. */
-  const zoneRect = useMemo(() => siteScene.map?.zone ?? planRect, [planRect]);
+  const zoneRect = useMemo(() => siteMap?.zone ?? planRect, [siteMap, planRect]);
   const zoneRectRef = useRef<typeof zoneRect>(null);
   useEffect(() => { zoneRectRef.current = zoneRect; }, [zoneRect]);
 

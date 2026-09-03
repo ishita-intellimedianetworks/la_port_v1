@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
-import { scene as siteScene } from "@/config";
+import { getSite, SITE_IDS, type SiteId } from "@/config";
 import {
   derive, loadGlb, maxTextureSize, measureBbox, pixelDimsFor, renderTopDown,
   type Bbox, type RenderMode, type WorldBbox,
@@ -22,9 +22,20 @@ import {
   calibrate, initialPlacement, planJson, scalePlacement, toJson, type Placement,
 } from "./calibrate";
 
-const MODEL_URL = siteScene.assets.modelUrl;
-const SLUG = (siteScene as { stream?: { slug?: string } }).stream?.slug ?? "";
-const MANIFEST_URL = SLUG ? `/assets/${SLUG}/assets/manifest.json` : "";
+/**
+ * WHICH MODEL is being calibrated. Each one has its own site file, its own GLB
+ * and its own baked manifest, so the tool asks rather than assuming: this page
+ * sits outside the routes, so there is no `SiteProvider` above it to inherit an
+ * answer from.
+ */
+function modelUrlsFor(id: SiteId) {
+  const scene = getSite(id).scene;
+  const slug = scene.stream?.slug ?? "";
+  return {
+    modelUrl: scene.assets.modelUrl,
+    manifestUrl: slug ? `/assets/${slug}/assets/manifest.json` : "",
+  };
+}
 
 /** The navmesh AABB — where map clicks will resolve. Drawn over the aerial. */
 const ZONE = { minX: -1502.324, maxX: -661.783, minZ: -438.324, maxZ: 550.924 };
@@ -47,6 +58,11 @@ const r = (n: number, d = 2) => {
 };
 
 export default function BoundsPage() {
+  const [siteId, setSiteId] = useState<SiteId>("v1");
+  const { modelUrl: MODEL_URL, manifestUrl: MANIFEST_URL } = useMemo(
+    () => modelUrlsFor(siteId),
+    [siteId],
+  );
   const sceneRef = useRef<THREE.Object3D | null>(null);
   const [glbBbox, setGlbBbox] = useState<WorldBbox | null>(null);
   const [manifestBbox, setManifestBbox] = useState<WorldBbox | null>(null);
@@ -300,6 +316,18 @@ export default function BoundsPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
               <span className={label}>Model</span>
+              <div className="mb-2 flex gap-2">
+                {SITE_IDS.map((id) => (
+                  <button
+                    key={id}
+                    className={siteId === id ? btnP : btnG}
+                    disabled={busy}
+                    onClick={() => setSiteId(id)}
+                  >
+                    {id}
+                  </button>
+                ))}
+              </div>
               <button className={btnP} disabled={busy} onClick={() => loadModel(MODEL_URL)}>
                 Load project model
               </button>

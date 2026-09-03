@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback } from "react";
-import { HOTSPOT_BY_ID, LAYOUT_BY_ID, poseForHotspot } from "@/config";
+import { useSite } from "@/config/context";
 import type { Destination, DestinationCategory } from "@/shared/types";
 import { useScene } from "../context/scene-context";
 import { GROUND_VIEW_BY_HOTSPOT } from "../ground-views";
-import { cameraForLayoutV3 } from "../layout-cameras";
 import { useNavUiStore } from "../stores/nav-ui-store";
 
 /** A layout as the engine holds it: the destination plus the zone it sits in. */
@@ -27,6 +26,10 @@ export interface LayoutEntry {
  * floor); it is just not how you cross the terminal.
  */
 export function useLayoutNavigation() {
+  // The cameras and the two tables are the ACTIVE MODEL's — each route has its
+  // own site file, so travel can only ever aim at poses authored for the bake
+  // it is actually streaming.
+  const site = useSite();
   const { playerControllerRef, triggerFloorTransition, activeFloor } = useScene();
   const currentDest = useNavUiStore((s) => s.currentDest);
 
@@ -47,11 +50,10 @@ export function useLayoutNavigation() {
     (layoutId: string, onArrive?: () => void) => {
       const controller = playerControllerRef.current;
       const entry = find(layoutId);
-      // /v3 streams a different bake, so a shot composed against the old one can
-      // land inside geometry v8 added. `layout-cameras.ts` re-aims the few that
-      // do; everything else falls straight through to `site.json`.
-      const authored = entry?.destination.camera;
-      const camera = authored ? cameraForLayoutV3(layoutId, authored) : undefined;
+      // Straight off the destination the engine built from `sites/v3.json`.
+      // A shot that has to be re-aimed for the v8 bake is re-aimed IN that file
+      // — see L02's camera note — so there is no override layer here any more.
+      const camera = entry?.destination.camera;
       if (!controller || !entry || !camera) return;
 
       // Travelling to a LAYOUT drops any resource selection: the request was
@@ -108,17 +110,15 @@ export function useLayoutNavigation() {
   const goToHotspot = useCallback(
     (hotspotId: string) => {
       const controller = playerControllerRef.current;
-      const hotspot = HOTSPOT_BY_ID[hotspotId];
-      const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+      const hotspot = site.hotspotById[hotspotId];
+      const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
       if (!controller || !hotspot || !layout) return;
 
       const entry = find(layout.id);
-      // A hotspot with no camera of its own inherits its layout's — so it has
-      // to inherit the /v3 override too, or travelling to the Berth would land
-      // inside the hull the layout row just avoided.
-      const pose = hotspot.camera
-        ? poseForHotspot(hotspotId)
-        : cameraForLayoutV3(layout.id, poseForHotspot(hotspotId));
+      // A hotspot with no camera of its own inherits its layout's, and that
+      // layout's camera is this model's own — so the Berth's raised eye carries
+      // to its resources without anything extra here.
+      const pose = site.poseForHotspot(hotspotId);
 
       useNavUiStore.getState().setHotspotInfo(null);
 
@@ -148,7 +148,7 @@ export function useLayoutNavigation() {
         useNavUiStore.getState().setSelectedHotspotId(hotspotId);
       });
     },
-    [playerControllerRef, triggerFloorTransition, find],
+    [site, playerControllerRef, triggerFloorTransition, find],
   );
 
   /**
@@ -177,8 +177,8 @@ export function useLayoutNavigation() {
   const goToHotspotGround = useCallback(
     (hotspotId: string) => {
       const controller = playerControllerRef.current;
-      const hotspot = HOTSPOT_BY_ID[hotspotId];
-      const layout = hotspot ? LAYOUT_BY_ID[hotspot.layoutId] : null;
+      const hotspot = site.hotspotById[hotspotId];
+      const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
       const view = GROUND_VIEW_BY_HOTSPOT[hotspotId];
       if (!controller || !hotspot || !layout || !view) return;
 
@@ -206,7 +206,7 @@ export function useLayoutNavigation() {
         useNavUiStore.getState().setSelectedHotspotId(hotspotId);
       });
     },
-    [playerControllerRef, triggerFloorTransition, find],
+    [site, playerControllerRef, triggerFloorTransition, find],
   );
 
   return {

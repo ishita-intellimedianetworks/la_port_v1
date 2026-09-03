@@ -38,6 +38,7 @@ import { AdaptiveQuality } from "./adaptive-quality";
 import { useStreamVariant, useStreamVariantId } from "@/streaming/variant";
 import {
   detectProfile,
+  type DeviceProfile,
   fogRange,
   resolveAerialConfig,
   resolveDollhouseConfig,
@@ -564,7 +565,7 @@ export function SceneContent({
   const walking = streaming && viewMode === "firstPerson";
   // Desktop on the first render — which is also what SSR produces, so hydration
   // is stable — then the real device profile once mounted.
-  const [deviceProfile, setDeviceProfile] = useState<"mobile" | "desktop">("desktop");
+  const [deviceProfile, setDeviceProfile] = useState<DeviceProfile>("desktop");
   useEffect(() => setDeviceProfile(detectProfile()), []);
   // WHICH BAKE this route streams — `v1` at /, `v2` at /v2. Every stream config
   // below is resolved against it, and so is the navmesh: the bake emits that
@@ -589,7 +590,7 @@ export function SceneContent({
   );
   const cameraStreamConfig = useStreamConfigForCamera(groundStreamConfig, aerialStreamConfig);
   // The overview is not "an elevated camera" — it is its own strategy (see the
-  // `dollhouse` block in site.json), so it is selected by VIEW rather than by
+  // `dollhouse` block in the site file), so it is selected by VIEW rather than by
   // the height hook. Absent that block, the hook's answer stands and the
   // dollhouse simply streams like any other camera up at framing height.
   const dollhouseStreamConfig = useMemo(
@@ -600,11 +601,11 @@ export function SceneContent({
     viewMode === "dollhouse" && dollhouseStreamConfig ? dollhouseStreamConfig : cameraStreamConfig;
 
   // THE NAVMESH FOLLOWS THE BAKE. It is emitted next to the chunks, so each
-  // variant ships its own — and the node tree in `scene-data/adapter.ts` is
-  // built once at import, before any route exists, so it can only carry v1's.
-  // Substituting it here is what stops /v2 routing over v1's walkable surface
-  // while rendering v2's geometry: a mismatch that would not look like a bug,
-  // it would look like the floor being subtly in the wrong place.
+  // model ships its own. `scene-data/adapter.ts` now builds the node tree per
+  // site and already puts the right one on the floor; this reads it off the
+  // resolved variant, which is the same URL by construction. Routing over the
+  // wrong bake's walkable surface would not look like a bug — it would look
+  // like the floor being subtly in the wrong place.
   const navmeshUrl = streaming ? streamVariant.navmeshUrl : activeFloor?.navmeshUrl;
 
   // Preview point-cloud is dollhouse-only — first-person floors no longer
@@ -1205,7 +1206,7 @@ export function SceneContent({
           interior={!!activeFloor?.interior}
           // Where the streamed world stops being visible, so the sun's follow
           // square is sized from the bands actually in force rather than from a
-          // number in site.json that a retune would quietly invalidate. Fog
+          // number in the site file that a retune would quietly invalidate. Fog
           // closes fully at its far plane; with fog off, nothing exists past
           // the unload radius.
           followRadius={

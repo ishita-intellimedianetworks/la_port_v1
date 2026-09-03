@@ -1,14 +1,17 @@
-import { scene } from "@/config";
-import { createStore } from "@/shared/stores/create-store";
+import type { Site } from "@/config";
+import { createSeededStore } from "@/shared/stores/create-store";
 
 /**
  * The live colour grade, so the debug panel and the renderer look at ONE set of
- * values. Same arrangement as `sky-store`: `site.json › world.grade` is the
- * seed, not the truth — the `?debug=true` panel moves these without an
- * edit-reload cycle, and whatever is settled on gets pasted back into config.
+ * values. Same arrangement as `sky-store`: the active model's `world.grade` is
+ * the seed, not the truth — the `?debug=true` panel moves these without an
+ * edit-reload cycle, and whatever is settled on gets pasted back into THAT
+ * model's file.
  *
  * It lives in `shared/` rather than `terminal/` because the thing that applies
- * it is `shared/canvas/canvas-with-wrapper`, which every view mounts.
+ * it is `shared/canvas/canvas-with-wrapper`, which every view mounts. Its seed
+ * is per model, so it is created by the tree's root rather than at import —
+ * see `createSeededStore`.
  *
  * TWO MECHANISMS, and the split is the whole design (see the schema note):
  * `exposure` is a renderer uniform applied in HDR before tone mapping, while
@@ -18,33 +21,42 @@ import { createStore } from "@/shared/stores/create-store";
  * `undefined` when they are all neutral — the default config must cost nothing.
  */
 
-const SEED = scene.world.grade;
-
-/** What the page LOADS with. Exported so the panel's reset button can name it. */
-export const GRADE_SEED = {
-  exposure: SEED?.exposure ?? 1,
-  brightness: SEED?.brightness ?? 0,
-  contrast: SEED?.contrast ?? 0,
-  saturation: SEED?.saturation ?? 0,
-};
-
-export type GradeState = {
+export type GradeValues = {
   /** Multiplier, 1 = untouched. Read by the renderer, before tone mapping. */
   exposure: number;
   /** Offsets, 0 = untouched. The CSS filter takes `1 + n`. */
   brightness: number;
   contrast: number;
   saturation: number;
-  set: (patch: Partial<Omit<GradeState, "set" | "reset">>) => void;
-  /** Back to whatever `site.json` authored. */
+};
+
+export type GradeState = GradeValues & {
+  /** What the page LOADED with, so the panel's reset button can name it. */
+  seed: GradeValues;
+  set: (patch: Partial<GradeValues>) => void;
+  /** Back to whatever this model's file authored. */
   reset: () => void;
 };
 
-export const useGradeStore = createStore<GradeState>((set) => ({
-  ...GRADE_SEED,
-  set: (patch) => set(patch),
-  reset: () => set({ ...GRADE_SEED }),
-}));
+function seedFor(site: Site): GradeValues {
+  const g = site.scene.world.grade;
+  return {
+    exposure: g?.exposure ?? 1,
+    brightness: g?.brightness ?? 0,
+    contrast: g?.contrast ?? 0,
+    saturation: g?.saturation ?? 0,
+  };
+}
+
+export const useGradeStore = createSeededStore<GradeState, Site>("grade-store", (site) => {
+  const seed = seedFor(site);
+  return (set) => ({
+    ...seed,
+    seed,
+    set: (patch) => set(patch),
+    reset: () => set({ ...seed }),
+  });
+});
 
 /**
  * The `filter` value for the canvas, or `undefined` when there is nothing to do.

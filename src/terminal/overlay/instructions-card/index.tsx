@@ -18,7 +18,7 @@ import {
   Home,
   type LucideIcon,
 } from "lucide-react";
-import { ui as uiCopy } from "@/config";
+import { useSite } from "@/config/context";
 import type { InstructionItemCopy } from "@/config/schema";
 import { InstructionsOverlay } from "@/shared/ui/screens/instructions-overlay";
 
@@ -43,7 +43,7 @@ interface InstructionsCardProps {
 const ICON_CLASS = "text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]";
 
 /**
- * Icon name (as written in `site.json` › `copy.instructions`) → glyph.
+ * Icon name (as written in `<site>.json` › `copy.instructions`) → glyph.
  *
  * The copy lives in JSON so it can be reworded without a code change, but an
  * icon cannot be serialised — so JSON names one and this table resolves it.
@@ -53,7 +53,7 @@ const ICON_CLASS = "text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]";
  * `map` are the four bottom-dock circles (BottomBar) and `resources` is the
  * left edge tab. The rest (`stop`, `speed`, `turn`, `marker`, `walk`, …) are no
  * longer used by the shipped copy but stay mapped, so a tile can be added back
- * in `site.json` alone. Keep them in step with those components, so the card
+ * in the site file alone. Keep them in step with those components, so the card
  * teaches the glyph the viewer is actually looking at.
  */
 const ICONS: Record<string, LucideIcon> = {
@@ -98,9 +98,9 @@ function toItem(item: InstructionItemCopy) {
  * (`use-double-click-nav`).
  */
 export function InstructionsCard({ mode, visible, onDismiss, showFirstPerson }: InstructionsCardProps) {
-  const copy = uiCopy.instructions[mode];
-  // By icon name, not by position, so reordering the tiles in site.json cannot
-  // silently drop the wrong one.
+  const copy = useSite().ui.instructions[mode];
+  // By icon name, not by position, so reordering the tiles in the site file
+  // cannot silently drop the wrong one.
   const items = showFirstPerson
     ? copy.items
     : copy.items?.filter((i) => i.icon !== "firstPerson");

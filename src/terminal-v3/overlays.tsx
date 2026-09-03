@@ -29,7 +29,7 @@ import { HotspotDataCard } from "./overlay/hotspot-card";
 import { DebugPanel } from "./overlay/debug-panel";
 import { DebugCameraEditor } from "./overlay/debug-panel/camera-editor";
 import { tick } from "@/shared/runtime/diagnostics";
-import { scene as siteScene } from "@/config";
+import { useSite } from "@/config/context";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
 // "Home" / "currently at" are decided purely by XZ proximity to the fixed start
@@ -342,7 +342,7 @@ export default function Overlays() {
    * tick and the map's marker follows the player there on its own; writing
    * either one here would only fight that poll.
    */
-  const firstPersonPose = siteScene.cameras.firstPerson;
+  const firstPersonPose = useSite().scene.cameras.firstPerson;
   const handleFirstPerson = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl || !firstPersonPose) return;
@@ -789,10 +789,10 @@ export default function Overlays() {
       {/* ?debug=true only — the whole look AND the whole framing in one panel:
           time of day, where the sun is, every light value, the grade, the field
           of view, the navmesh overlay and a live binding to the camera, plus
-          the JSON to paste back into site.json. Parked below PerfMeter in the
+          the JSON to paste back into the site file. Parked below PerfMeter in the
           same corner. The card is the framing loop — it names the row the
           camera landed on, arms the inputs, and copies or SAVES the pose back
-          into site.json behind a confirmation. */}
+          into the site file behind a confirmation. */}
       {ui.sceneContent.debug && (
         <>
           <DebugPanel />

@@ -6,8 +6,8 @@ import Clouds from "./clouds";
 import BackgroundFade from "./background-fade";
 import SkyDome from "./sky/sky-dome";
 import { lightingForT } from "./sky/palette";
-import { scene as siteScene } from "@/config";
-import { SKY_MODE, useSkyStore } from "@/terminal/stores/sky-store";
+import { useSite } from "@/config/context";
+import { useSkyStore } from "@/terminal/stores/sky-store";
 import { useCameraAloft } from "../hooks/use-stream-config-for-camera";
 import { useLightsStore } from "@/shared/stores/lights-store";
 import type { LightsConfig, ResolvedLights } from "@/shared/types";
@@ -15,7 +15,7 @@ import type { LightsConfig, ResolvedLights } from "@/shared/types";
 /**
  * SceneEnvironment — sun + ambient + HDR image-based lighting are always on (so
  * the model is lit in every view). The BACKDROP has two forms, picked by
- * `site.json › sky`:
+ * `<site>.json › sky`:
  *
  *   sky.mode "off" (or absent) — the original: the sky is the canvas BACKGROUND
  *     COLOUR (BackgroundFade), black in the dollhouse so the model reads as an
@@ -30,15 +30,13 @@ import type { LightsConfig, ResolvedLights } from "@/shared/types";
  *     dropped: the dome carries its own band, those sprites are lit for noon,
  *     and dropping them takes `/cloud.png` out of memory as well.
  *
- * With the dome on, time of day is LIVE — `site.json › sky` only seeds
+ * With the dome on, time of day is LIVE — `<site>.json › sky` only seeds
  * `sky-store`, and the `?debug=true` panel drives it from there.
  *
  * Inside an apartment-interior scene (`interior`) the whole exterior backdrop
  * is dropped: you are inside a room, and SceneLights renders the HDR itself as
  * the background there, which nothing else may fight.
  */
-
-const SKY = siteScene.sky;
 
 export default function SceneEnvironment({
   showEnvMap = true,
@@ -63,8 +61,14 @@ export default function SceneEnvironment({
   // on /). It hides the daytime clouds AND keeps the first-person backdrop
   // black — the v2 dusk/night sky dome fades in over black instead of the
   // day blue bleeding through underneath it.
+  // This model's authored sky. Only the intensities come from here; every
+  // colour and the sun's direction come from the palette via `t`.
+  const skyLights = useSite().scene.sky?.lights;
   const cloudsHidden = useLightsStore((s) => s.cloudsHidden);
   const skyVisible = showEnvMap && !cloudsHidden;
+  // Which sky THIS model asked for — the seed is per site file now, so it is
+  // read off the store rather than off a module constant.
+  const skyMode = useSkyStore((s) => s.mode);
   const t = useSkyStore((s) => s.t);
   // Where the sun is, when the debug panel has taken it off the arc. Off
   // everywhere else, and the sun then rides the arc `t` puts it on. SkyDome is
@@ -84,8 +88,8 @@ export default function SceneEnvironment({
   // because the study is a shader with no scene lights and has no opinion on
   // them. It re-derives when the debug slider moves, so the sun on the model
   // tracks the sun in the sky.
-  const skyLights = useMemo<Partial<ResolvedLights> | undefined>(() => {
-    if (SKY_MODE === "off") return undefined;
+  const envOverride = useMemo<Partial<ResolvedLights> | undefined>(() => {
+    if (skyMode === "off") return undefined;
     // Degrees at the panel (the unit anyone reads a sun angle in), radians here
     // (the unit the arc is authored in). Null keeps the sun on the arc, which is
     // every path but the debug one.
@@ -95,8 +99,8 @@ export default function SceneEnvironment({
           elevation: (sunElevation * Math.PI) / 180,
         }
       : null;
-    return { ...lightingForT(t, aim), ...SKY?.lights };
-  }, [t, sunUnlinked, sunAzimuth, sunElevation]);
+    return { ...lightingForT(t, aim), ...skyLights };
+  }, [skyMode, skyLights, t, sunUnlinked, sunAzimuth, sunElevation]);
 
   return (
     <>
@@ -117,19 +121,19 @@ export default function SceneEnvironment({
         // to it exactly as the dollhouse does.
         follow={showEnvMap && !aloft}
         followRadius={followRadius}
-        envOverride={skyLights}
+        envOverride={envOverride}
       />
       {/* Exterior backdrop. Inside a room we drop it entirely and let the HDR
           environment show through as the background (SceneLights renders it
           with `background` for interiors) — neither backdrop may mount there or
           it would fight that texture. */}
       {!interior &&
-        (SKY_MODE === "off" ? (
+        (skyMode === "off" ? (
           <BackgroundFade sky={skyVisible} />
         ) : (
           <SkyDome sky={skyVisible} />
         ))}
-      {SKY_MODE === "off" && showEnvMap && !interior && !cloudsHidden && <Clouds />}
+      {skyMode === "off" && showEnvMap && !interior && !cloudsHidden && <Clouds />}
     </>
   );
 }

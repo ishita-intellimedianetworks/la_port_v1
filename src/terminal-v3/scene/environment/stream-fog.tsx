@@ -30,7 +30,7 @@ import { fogRange, type StreamingConfig } from "@/streaming/config";
  * first-person blue over 1.6 s. So the colour is read from the LIVE
  * `scene.background` every frame — the same rule, applied to the backdrop this
  * app actually has, and correct even mid-crossfade. Author
- * `site.json › stream.fog.color` to pin it to a fixed hex instead.
+ * `<site>.json › stream.fog.color` to pin it to a fixed hex instead.
  */
 export default function StreamFog({ config }: { config: StreamingConfig }) {
   const scene = useThree((s) => s.scene);

@@ -32,7 +32,7 @@ import { sampleSky } from "./palette";
  * COST: one full-screen fragment pass of ~30 ALU ops. The cloud band is the
  * only expensive part (3-octave gradient noise) and is branch-guarded to the
  * thin strip of sky it actually occupies; on low-power devices it drops to
- * 2 octaves. It can be turned off entirely — `site.json › sky.clouds`, or the
+ * 2 octaves. It can be turned off entirely — `<site>.json › sky.clouds`, or the
  * `?debug=true` panel's checkbox.
  *
  * It also owns `scene.background`, easing it black → horizon colour on the same
@@ -152,7 +152,7 @@ export default function SkyDome({
   const mix = useRef(0);
 
   // Time of day and the cloud band are LIVE (see `sky-store`) so the debug
-  // panel can drive them; `site.json` only seeds them.
+  // panel can drive them; the site file only seeds them.
   const t = useSkyStore((s) => s.t);
   const clouds = useSkyStore((s) => s.clouds);
   // The unlinked sun, when the debug panel is driving it. It replaces where the

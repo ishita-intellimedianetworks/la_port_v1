@@ -1,0 +1,3351 @@
+{
+  "_note": "SINGLE SOURCE OF TRUTH FOR ONE MODEL — this file is the whole site for the route that loads it, and NOTHING here is shared with the other two. src/config/sites/ holds one such file per bake (v1 = /, v2 = /v2, v3 = /v3); they are read by src/config/index.ts, which resolves each into its own `scene` / `ui` / `layouts` / `hotspots` view, and the route picks one with <SiteProvider id>. There is deliberately no inheritance and no merge: an edit here can only ever change this route. The cost is that a change meant for every model has to be made in all three files — that is the trade this layout makes on purpose. THIS FILE IS /, the frozen control: the v5-obj bake with the transmission pass unconditional, no progressive textures and a fixed pixel ratio. Shaped as DB TABLES, not as a tree: `layouts` and `hotspots` are sibling arrays and a hotspot names its parent with `layoutId` (the foreign key). The nesting the Resources panel shows is rebuilt at load by src/config/index.ts, and the engine's scene/destination structure is projected from it by src/shared/scene-data/adapter.ts — nothing is generated to disk, so no value exists here twice. Each top-level key maps to one table or one settings row: meta/assets/stream/world/cameras/lights/globals are the site record, zones/tones/copy are its presentation, layouts and hotspots are the two content tables.",
+  "meta": {
+    "id": "everport-la",
+    "label": "Everport Terminal Services"
+  },
+  "startLayoutId": "L01",
+  "assets": {
+    "_note": "TWO MODELS, ONE ZONE. `modelUrl` is the DOLLHOUSE model — a decimated whole-zone GLB drawn in one go, which is the right answer for a fixed vantage that frames everything at once. The walking view does not use it: it streams the chunk set in `stream` instead. `previewUrl` is the point-cloud silhouette shown behind the loading HUD and must be baked FROM `modelUrl` — it is that model dissolving in, so a preview of any other mesh draws a cloud at the wrong scale and in the wrong place. 60,000 points, bounds x -2156..-64 / z -875..969, which is the 25-compressed GLB's own extent. There is no `navmeshUrl` here: the bake emits the navmesh alongside the chunks, so it travels with them (and follows NEXT_PUBLIC_ASSET_BASE to a CDN) rather than being a second copy someone has to keep in step. Set it only for a site with no `stream` block.",
+    "modelUrl": "/models/la-port-zone-c5-25-compressed.glb",
+    "previewUrl": "/models/la-port-zone-c5-25-compressed.preview.bin",
+    "envFile": "/env.hdr"
+  },
+  "stream": {
+    "_note": [
+      "ADAPTIVE CHUNK STREAMING — THE WALKING VIEW ONLY. The model is cut into",
+      "816 object chunks, each baked at three quality tiers, and the distance",
+      "from the camera decides which tier a chunk is loaded at — or whether it",
+      "is loaded at all.",
+      "",
+      "  near = good · mid = medium · far = low · beyond far = not loaded",
+      "",
+      "The DOLLHOUSE does not stream: it draws `assets.modelUrl`, one decimated",
+      "whole-zone GLB. Streaming is a bad trade from a fixed vantage that frames",
+      "the entire zone — the view cone covers everything, so the frustum cull",
+      "buys nothing and the bands only fight the byte ceiling, whose eviction",
+      "drops the FURTHEST chunk first, i.e. exactly the half of the frame the",
+      "shot is composed around. The streamer mounts on the way in to first",
+      "person, under the entry blackout, and fills in around `cameras.spawn`",
+      "before the fade lifts.",
+      "",
+      "The asset set is baked in the LA_PORT_ADAPTIVE repo (`npm run bake",
+      "portla-c5-v5-obj`) and staged under public/assets/<slug>/assets/, which",
+      "is gitignored — set NEXT_PUBLIC_ASSET_BASE to serve it from a CDN.",
+      "",
+      "NO PALETTE, BUT THE CRANES MOVE. v5-obj is the object-chunked bake of",
+      "la-port-zone-c5-model-v5.glb with `chunking.instancing` OFF and",
+      "`animation` ON. So there is no palette.glb and no instances.bin — every",
+      "byte of geometry is a chunk under the LRU, nothing pinned — but there IS",
+      "an animated.glb: 2 clips (CraneCycle, CraneCycle.001), 1,752 mesh nodes,",
+      "192,150 triangles, 1.4 MB, lifted out of the chunks and permanently",
+      "resident. It has to be: a chunk bakes the node matrix into its vertices,",
+      "and an animation is exactly a moving node matrix. StreamedModel steps its",
+      "mixer EVERY frame rather than on the 10 Hz streaming tick, or the cranes",
+      "visibly stutter. The instancing path stays inert (initInstancing bails on",
+      "the manifest before it makes a request), which is what it was written for.",
+      "",
+      "NAVMESH-V2 ships with this bake and is NOT the v1 that came with v4-obj:",
+      "3,988 -> 3,950 triangles, and it fragments into 55 islands where v1 was",
+      "one. `cameras.spawn` moved 26.8 m because v4's point landed in one of the",
+      "new holes — see the note on that block. The island count is the thing to",
+      "watch: a route between two points that used to connect may not any more.",
+      "",
+      "Only `tiers.*.distance`, `tiers.*.texture`, `streaming.*`, `cache.*` and",
+      "`fog` are read live by the browser — edit and reload. The geometry LODs,",
+      "the texture rungs and the chunking itself are baked into files and need a",
+      "re-bake over in that repo.",
+      "",
+      "MEASURED on this asset set: 12,848,173 source triangles / 26,124 mesh",
+      "nodes -> 816 chunks, all 816 carrying geometry, + the animated rig. 86 MB",
+      "of chunk GLBs + 26.5 MB of texture rungs, 69 images, 186 materials. It",
+      "reconciles exactly: 12,656,023 chunk near-tris + 192,150 lifted into",
+      "animated.glb = 12,848,173 = source, zero instanced. Worst case at these",
+      "bands (360°, no frustum cull): peak 11.33 M tris, 26.5 MB encoded,",
+      "358 MB decoded, 32.2 MB of WebP texture VRAM — ~391 MB total. With the",
+      "frustum cull on, the real resident set is roughly a third of that.",
+      "",
+      "7 oversized objects were bisected (>50 m radius AND >250k tris), which",
+      "caps the largest chunk at 187,655 tris. That is what makes limitChunks a",
+      "real lever: the adaptive repo's v5-inst twin, splitting at 800 m instead,",
+      "tops out at 782,512 tris in one chunk and the LRU can barely move."
+    ],
+    "slug": "portla-c5-v5-obj",
+    "_bands": [
+      "WHY far IS 900 AND NOT 300, i.e. why geometry looked missing.",
+      "",
+      "The 50/150/300 bands came from the original 2.1 x 1.9 km portla-c5. This",
+      "is a 15 x 10 km district cut into OBJECT chunks, whose sizes vary",
+      "enormously: radius p10 3.6 m, p50 19 m, p90 112 m, p99 692 m. A chunk",
+      "loads by the distance to its SURFACE, so a big object is credited with",
+      "its own size and outlives a small object standing on it — by a mean of",
+      "1355 m over the 4055 co-located pairs in this manifest. That is the whole",
+      "bug: the canopy renders and its poles do not, the stack renders and its",
+      "containers do not. Nothing is missing from the bake.",
+      "",
+      "MEASURED, 150 ground cameras, 360° (worst case). A HOLE is an object",
+      "whose own chunk is absent while a building-scale chunk covering the same",
+      "spot is present:",
+      "  near/mid/far   resident   encoded   chunk tris   HOLES",
+      "    50/150/300      272      6.0 MB     3.97 M      3057   <- was",
+      "    50/250/300      262      5.3 MB     3.68 M      2242",
+      "    50/250/600      525     10.3 MB     7.29 M       363",
+      "    50/250/900      575     11.3 MB     8.29 M        53   <- is",
+      "Holes fall 98%, and 11.3 MB still sits well under residentBudgetMB.",
+      "",
+      "mid 250 (was 150) costs +0.3 MB and keeps the 150-250 m ring off the far",
+      "tier, which is simplifyRatio 0.15 — raising far without raising mid would",
+      "have put most of the visible world at the coarsest LOD.",
+      "",
+      "The other half of the fix is in the runtime, not here: ChunkManager",
+      "measures surface distance to the bounding BOX rather than the bounding",
+      "SPHERE (the sphere is the half-diagonal, so it wildly over-credits",
+      "anything elongated). Worth ~a quarter of the total; the BANDS are what",
+      "actually closed the gap."
+    ],
+    "tiers": {
+      "near": {
+        "distance": 50,
+        "texture": {
+          "px": 512,
+          "format": "webp"
+        }
+      },
+      "mid": {
+        "distance": 250,
+        "texture": {
+          "px": 256,
+          "format": "webp"
+        }
+      },
+      "far": {
+        "distance": 900,
+        "texture": {
+          "px": 128,
+          "format": "webp"
+        }
+      }
+    },
+    "streaming": {
+      "unloadBuffer": 1.1,
+      "updateHz": 10,
+      "frustumCull": true,
+      "cullGraceTicks": 15,
+      "alwaysLoadRadiusMetres": 60,
+      "frustumMarginMetres": 40,
+      "hysteresisMetres": 20,
+      "loadsPerTick": 16,
+      "radiusScale": 0,
+      "refRadius": 120
+    },
+    "cache": {
+      "limitChunks": 500,
+      "residentBudgetMB": 256,
+      "_note": "REAL DECODED megabytes of GPU-resident geometry + textures, clamped further by the per-device ceiling in streaming/memory.ts (whichever is lower wins). It was 34, but that counted the manifest ENCODED sizes: at the 13.5x decode ratio measured on this bake it meant ~460 MB and the loop never fired. limitChunks is now only a secondary cap on the CPU cache, which is bounded by bytes (memory.ts > cpuMB) — a count cannot bound a set whose chunk radii span 3.6 m to 692 m, and 500 was reasoned against 816 chunks when the cache is keyed by url, of which there are 816 x 3 tiers = 2,448."
+    },
+    "fog": {
+      "enabled": true,
+      "start": "far"
+    },
+    "aerial": {
+      "_note": [
+        "THE SECOND STRATEGY over the same manifest — for the layout cameras.",
+        "",
+        "Every layout here is a framing shot with `walkable: false`, authored",
+        "54-412 m up and as much as 2.8 km from the terminal. The bands above",
+        "are tuned for a person STANDING in it, so from those cameras almost",
+        "nothing resolved. Measured, box metric, per layout, chunks inside the",
+        "990 m unload radius out of 831:",
+        "",
+        "  L01   2    L02   2    L03   2    L04   4    L05  16",
+        "  L06 150    L07   2    L08 432    L09 263    L10 186",
+        "",
+        "L01/L02/L03/L07 got 2 chunks each — the water plane and the terrain",
+        "plane, the only two whose boxes contain the camera. Everything built",
+        "was 1.5-2.8 km away, i.e. outside the radius, so the shot framed sky.",
+        "",
+        "WHY THIS IS CHEAP. The whole model at the far tier is 831 chunks /",
+        "22.0 MB encoded / 11.02 M tris, and all 70 images at the 128 px rung",
+        "total 0.1 MB. So a radius spanning the entire 15 x 10 km district costs",
+        "about 22 MB resident — under the ground config's own 33 MB ceiling.",
+        "Measured chunks resolved at far 6000: 831 of 831 from every one of the",
+        "ten cameras. Nothing about this needed a second asset set.",
+        "",
+        "far 6000 rather than 4000: 4000 already reaches all ten (826-831), but",
+        "6000 spans the district corner-to-corner for the same 22.0 MB, so the",
+        "radius stops being a number anyone has to re-check when a camera moves.",
+        "",
+        "near/mid are raised because at this altitude nothing is within 150 m of",
+        "the camera anyway — leaving them at 50/250 would have put the whole",
+        "frame on the far tier. 150/800 keeps what the shot is composed around",
+        "on the mid tier and only the district backdrop on far.",
+        "",
+        "limitChunks 900 (> the 831 total) because all 831 are mounted at once",
+        "here: the LRU never evicts a mounted chunk, so a lower ceiling would",
+        "simply sit unenforced. The ground config's 500 takes back over on the",
+        "way down and evicts to it then.",
+        "",
+        "Only the keys that DIFFER are listed. `streaming` and everything else",
+        "not named is inherited from the block above, so a retune there carries",
+        "here on its own."
+      ],
+      "enterAboveMetres": 40,
+      "exitBelowMetres": 30,
+      "tiers": {
+        "near": {
+          "distance": 150,
+          "texture": {
+            "px": 256,
+            "format": "webp"
+          }
+        },
+        "mid": {
+          "distance": 800,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        },
+        "far": {
+          "distance": 6000,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        }
+      },
+      "streaming": {
+        "unloadBuffer": 1.05,
+        "loadsPerTick": 24,
+        "alwaysLoadRadiusMetres": 250,
+        "frustumMarginMetres": 150
+      },
+      "cache": {
+        "limitChunks": 900,
+        "residentBudgetMB": 256
+      }
+    },
+    "dollhouse": {
+      "_note": [
+        "THE OVERVIEW — one fixed camera, the whole model, the coarsest tier.",
+        "",
+        "The dollhouse used to draw `assets.modelUrl`, a separate 11 MB decimated",
+        "GLB of the same zone. It now streams the SAME manifest the walking view",
+        "does, with `forceTier: far` pinning every chunk to the lowest geometry",
+        "LOD and the 128 px rung. Measured on this bake, minus the two hidden",
+        "planes: 814 chunks / 22.1 MB encoded / 10.92 M tris for the whole",
+        "district — and they are the same bytes first person wants first, so",
+        "entering it re-mounts from the decoded-chunk cache rather than parsing a",
+        "second model. One asset set now feeds both views.",
+        "",
+        "WHY A PIN AND NOT near/mid AT 0. Both flatten the tiers, but the zeros",
+        "also floor the resident-budget loop at `near x 1.5` = 0: a device short",
+        "of VRAM would shrink the unload radius to nothing and empty the overview",
+        "instead of thinning it. The distances here are the aerial ones, so under",
+        "pressure the view degrades from the outside in, from a 225 m floor.",
+        "",
+        "THE BYTES ARE REAL. 22.1 MB encoded decodes to 308 MB of geometry, held",
+        "twice (JS heap + GPU) — see streaming/memory.ts. It fits a desktop that",
+        "reports >= 8 GB (gpuMB 448); a mid desktop (288) drops the furthest ~7%,",
+        "and a phone (96-160) holds a third of it. There is no coarser tier to",
+        "fall back to: `far` IS the bottom of this asset set. If the overview has",
+        "to be complete on weak hardware, that wants a purpose-baked low-poly",
+        "mesh in `assets.modelUrl` and this block deleted.",
+        "",
+        "frustumCull is OFF and alwaysLoadRadiusMetres is 0: the shot is composed",
+        "around everything in frame, the orbit turns the camera through 360, and",
+        "a cull here would only trade the budget's furthest-first eviction for a",
+        "behind-you one. hysteresisMetres is 0 — with one tier there are no band",
+        "crossings left to damp.",
+        "",
+        "fog is off. The fade exists so a small download radius does not read as a",
+        "wall; here the radius spans the district and there is nothing beyond it",
+        "to hide.",
+        "",
+        "HIDE — the two backdrop planes, `water` and `Land_Mesh` in the source",
+        "scene. They are 15 x 10 km and 14.5 x 8.6 km against a terminal 1.6 x",
+        "1.5 km, so from up here they ARE the frame, and the orbit pivot (the",
+        "bbox centre of what is drawn) sits out at sea rather than on the",
+        "terminal. They are named by MATERIAL because the bake keeps no mesh",
+        "names — see StreamHideRule. On this manifest the rules resolve to c1",
+        "(M_Ocean_Water.001, the only chunk carrying it) and c343 (radius",
+        "8,427 m); the terminal's own pavement shares c343's material name at",
+        "radius 969 m, which is what the minRadiusMetres guard spares."
+      ],
+      "tiers": {
+        "near": {
+          "distance": 150,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        },
+        "mid": {
+          "distance": 800,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        },
+        "far": {
+          "distance": 12000,
+          "texture": {
+            "px": 128,
+            "format": "webp"
+          }
+        }
+      },
+      "forceTier": "far",
+      "streaming": {
+        "unloadBuffer": 1.05,
+        "frustumCull": false,
+        "alwaysLoadRadiusMetres": 0,
+        "hysteresisMetres": 0,
+        "loadsPerTick": 24
+      },
+      "cache": {
+        "limitChunks": 900,
+        "residentBudgetMB": 220
+      },
+      "fog": {
+        "enabled": false,
+        "start": "far"
+      },
+      "hide": [
+        {
+          "_mesh": "water",
+          "material": "M_Ocean_Water.001"
+        },
+        {
+          "_mesh": "Land_Mesh",
+          "material": "M_Ground_Pavement.001",
+          "minRadiusMetres": 2000
+        }
+      ]
+    },
+    "render": {
+      "_note": [
+        "FROZEN TO WHAT / DID BEFORE THE v2 WORK. Every value here reproduces the",
+        "behaviour the engine had when these knobs did not exist, so adding them",
+        "changed nothing on this route:",
+        "",
+        "  transmission \"all\"        - the pass was unconditional; there was no gate",
+        "  progressiveTextures false - mount() awaited the tier's own rung",
+        "  adaptiveDpr false         - no governor; the Canvas dpr range was the",
+        "                              whole story, and maxDpr 1.5 is its old ceiling",
+        "",
+        "THIS IS THE CONTROL. If you want to know what the v2 lag work actually",
+        "bought, this is the thing to compare against - see `streamV2.render`.",
+        "Change these only if you mean to move the baseline."
+      ],
+      "transmission": "all",
+      "progressiveTextures": false,
+      "texUpgradesPerTick": 16,
+      "adaptiveDpr": false,
+      "maxDpr": 1.5
+    }
+  },
+  "world": {
+    "eyeHeight": 1.8288,
+    "fov": 35,
+    "shadows": true,
+    "grade": {
+      "_note": "COLOUR GRADE, dialled on the ?debug=true panel. NOTE THE COST: `contrast` and `saturation` are non-zero here, so the CSS filter IS emitted (it takes ALL THREE at zero to skip it — `brightness` alone being 0 does not) — that puts the canvas on its own composited layer and runs a full-screen shader over every pixel each frame. Zero all three and that pass disappears entirely (which is not the same as setting them to 1.0). `exposure` stays at 1 and is the free knob; reach for it first and keep these three as a finishing nudge only. Ported from the facet_4 study, which drives the same four knobs. `exposure` is the one to reach for first: it multiplies the scene in HDR BEFORE tone mapping (renderer.toneMappingExposure), so highlights roll off through NeutralToneMapping instead of clipping, and it is free — a uniform in a step three.js already runs. The other three are a CSS `filter` on the canvas, which acts on the 8-bit sRGB image AFTER tone mapping: fine for a finishing nudge, prone to banding if pushed hard, and it costs a full-screen composite pass every frame. NOTE the study renders through ACESFilmicToneMapping while this app uses NeutralToneMapping, so its slider values do NOT transfer numerically — re-dial them here rather than copying. Drive them live with ?debug=true (the GRADE panel under the sky slider) and paste what you settle on; this block is only the seed. One canvas serves both the dollhouse and the walking view, so a grade applies to both, and it never touches the glass UI or the hotspot tooltips — those are siblings of the canvas, not children.",
+      "exposure": 0.94,
+      "brightness": 0,
+      "contrast": 0.04,
+      "saturation": 0.17
+    }
+  },
+  "cameras": {
+    "dollhouse": {
+      "_note": "FRAMED BY HAND in the running app and pasted from the pose log — drag the overview with ?debug=true and DollhouseCamera prints this exact line, the `settled` one being the pose you stopped at (rotation as the YXZ euler seatAtHome applies, NOT the XYZ order a GLB tool prints). It started from cp_dolllhouse in la-port-zone-c5-cp-dollhouse.glb and was worked from there. 1,411 m from the zone centre and aimed straight at it, which is what the orbit keeps doing anyway: once the model's world bounds are published the camera re-aims at that centre every frame, so the rotation here only holds until then while the position sets the orbit's radius and angle for good. At `world.fov` 15 that range frames about 370 m of the terminal vertically; the authoring camera carried a 32 degree yfov, so widening the site fov rather than pulling further back is the other way to open the shot.",
+      "position": [
+        -2143.7272,
+        272.5268,
+        -81.0028
+      ],
+      "rotation": [
+        -0.1673,
+        -1.7747,
+        0
+      ]
+    },
+    "spawn": {
+      "_note": "WHERE FIRST PERSON BEGINS, and where the Home button returns to. Authored rather than derived from startLayoutId because every layout here is an aerial framing (walkable: false — schema-wise, not a valid first-person entry point), so there is no walkable checkpoint to derive it from. It is also the point the streamer fills in around while the entry blackout is up, so moving it changes what you land looking at AND what has finished loading when the fade lifts. TAKEN FROM cp_012 in la-port-zone-c5-cp-v3.glb, via /extract-pos. That file ships twelve cameras; cp_001..cp_010 are the layout framings and cp_012 is this one. The tool prints an XYZ euler and this block stores the YXZ one the runtime applies, so the rotation here is the reorder of [3.0925, -0.0976, 3.1368], not those numbers — re-derive it rather than pasting from the tool. NOT ON THE NAVMESH: its XZ is inside the navmesh-v2 AABB but misses every one of the 3,950 triangles, the nearest vertex being 95.3 m away at [-1227.3, 0.16, -149.4] — which is where the previous spawn sat. Home probes the floor at this XZ and teleports there regardless, so walking OUT of it depends on the snap finding an island. cp_011 in the same file IS on the mesh (surface Y 0.160) if this needs to become walkable.",
+      "position": [
+        -1314.8853,
+        25.5548,
+        -187.0586
+      ],
+      "rotation": [
+        0.0489,
+        -3.5439,
+        0
+      ]
+    },
+    "firstPerson": {
+      "_note": "WHERE THE \"First Person\" CIRCLE DROPS YOU — the bottom bar's fifth button. TAKEN FROM cp_011 in la-port-zone-c5-cp-v3.glb. Same file and same /extract-pos convention as `spawn`: the tool prints an XYZ euler and this block stores the YXZ one the runtime applies (camera.rotation.set(..., \"YXZ\") in player/utils/teleport.ts), so this is the reorder of [-3.1024, 0.4744, 3.1237], not those numbers. Re-derive rather than paste. ON THE NAVMESH, and that is the entire point of it: checked against the streamed v5 navmesh (3,950 triangles, node translation baked in), this XZ lands INSIDE a triangle at surface Y 0.153 with the nearest vertex 0.9 m away. `spawn` (cp_012) misses every triangle by 95.3 m, so the player lands there unable to walk; this is the one checkpoint in that GLB that is walkable — the other ten are aerial layout framings, all off-mesh by 14 m to 300 m. The stored Y is the camera's authored height, NOT the ground: the handler probes the floor at this XZ and teleports to the surface, so this number only serves as probeFloorY's expectedY tie-breaker. If this moves, re-run the on-mesh check first — a pose that misses the mesh makes the button land somewhere the player cannot walk out of, which is the exact problem it was added to solve.",
+      "position": [
+        -1207.8126,
+        3.7531,
+        -186.9518
+      ],
+      "rotation": [
+        -0.0349,
+        2.6669,
+        0
+      ]
+    }
+  },
+  "lights": {
+    "ambientIntensity": 0.8,
+    "ambientColor": "#ffffff",
+    "envIntensity": 0.65,
+    "sunIntensity": 7.9,
+    "sunColor": "#ffffff",
+    "sunDirection": [
+      -1.5,
+      5.9,
+      -2.6
+    ],
+    "shadowMapSize": 1024,
+    "shadowRadius": 0.5,
+    "shadowBias": -0.0005,
+    "shadowNormalBias": 2.5,
+    "shadowFollowExtent": 420
+  },
+  "globals": {
+    "heroContainerId": "EGHU4829136"
+  },
+  "sky": {
+    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"afternoon\" is the default, \"dusk\" the open-sea study's sunset palette, \"day\" a flat midday one, \"off\" restores the plain blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: sun direction, sun tint, ambient tint and the sky-fill pair are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on. `hemiIntensity` is the sky fill that keeps the away-from-sun side off black; raising `ambientIntensity` instead would flatten the lit side. `sun` (absent by default) takes the sun OFF the arc and parks it at an absolute azimuth/elevation in degrees. The disk in the dome and the shadow-casting light read that one answer, so they are always the same ray. It moves NO colour: every stop is still a function of the elevation `t` gives. That is the only way to turn the shadows without repainting the sky, and the ?debug=true panel prints the block to paste here.",
+    "mode": "afternoon",
+    "clouds": true,
+    "sun": {
+      "_note": "Dialled on the ?debug=true panel. The sun is OFF the day arc and parked here: these two angles place the disk in the dome AND aim the shadow-casting light, which read one answer and so cannot disagree. Colours are untouched by it — every stop, the sun tint and the ambient/fill pair are still functions of the elevation `t` gives (0.55, the afternoon stop), which is why none of them is authored below.",
+      "azimuth": -158,
+      "elevation": 18
+    },
+    "lights": {
+      "sunIntensity": 3.4,
+      "ambientIntensity": 0.3,
+      "hemiIntensity": 1.6,
+      "envIntensity": 1.33,
+      "envRotation": 39
+    }
+  },
+  "map": {
+    "_note": "TWO LAYERS, both 1:1 with the model and both placed by the SAME world->pixel transform, so they cannot drift apart. `plan` is the terminal render and is still the only layer that defines anything: the letterbox, the click mapping and every overlay resolve against it. `base` is context drawn underneath — an aerial of the surrounding port and city. BASE PROVENANCE: registered against `plan`'s own silhouette, not eyeballed. The source aerial is greyscale everywhere EXCEPT this terminal, so \"any saturation at all\" segments it exactly; that mask was fitted to the plan's alpha by truncated symmetric chamfer (truncated so the parts the two genuinely do not share — the plan's rail spurs and bridge, the aerial's extra wharf — saturate instead of dragging the fit). Six runs across two grid resolutions and three truncation radii agree to +-0.24 deg of rotation, +-0.42% of scale and +-4 m of offset, i.e. ~5 m on a 1550 m terminal. Plain IoU was tried first and REJECTED: it swung 1.5 deg between resolutions because those unshared appendages bias it. Mirrored fit scored 0.74 against 0.88 unmirrored, so the handedness is not in doubt. The aerial sat 3.64 deg off the model's axes and THAT ROTATION IS BAKED INTO THE EXPORTED WEBP — `bounds` is an axis-aligned rect and cannot carry an angle, so a raw north-up aerial dropped in here would skew by ~27 m at the terminal's ends. It was edge-reflected before rotating so the corners the rotation opens up hold plausible imagery rather than grey wedges. Re-deriving it: see the plan note below for the plan's own bounds, then re-run the registration — do not nudge these numbers by hand.",
+    "base": {
+      "imageUrl": "port-context.webp",
+      "bounds": {
+        "minX": -2904.948,
+        "maxX": 532.131,
+        "minZ": -642.801,
+        "maxZ": 1321.115
+      }
+    },
+    "plan": {
+      "_note": "ONE LAYER, 1:1 with the model. `plan` is a light top-down render of la-port-zone-c5-model-v4_dollhouse-optimized-optimized.glb, already keyed and already in the same orientation the /admin/bounds export uses (screen right = +X, up = -Z). BOUNDS ARE FITTED, NOT DERIVED — unlike a render straight out of /admin/bounds, this image did not arrive with its camera rect, so it was registered against the dark render whose rect IS exact: IoU 0.9455 unmirrored against 0.4799 mirrored, converging to within 1.5 m when re-fitted on a finer grid, and the fitted spans reproduce the image's own 0.8613 aspect, which is what says the fit is a uniform scale rather than a stretch. Cross-checked against ground truth: 96.9% of the 831 streamed chunk centres land on plan geometry. IT IS A TIGHTER CROP than the dark render — it stops at X -236 and Z -581, so the bridge, the rail fans and a 236 m strip of model east of the yard are outside it. The whole navmesh is inside, so nothing walkable is lost. Re-render from /admin/bounds if that framing ever needs to grow, and paste the bounds it prints rather than keeping these. The renderer letterboxes the image into the canvas (CONTAIN) and clicks resolve against that rect, so the image frame IS the clickable area.",
+      "imageUrl": "terminal-plan.webp",
+      "bounds": {
+        "minX": -1572.871,
+        "maxX": -236.334,
+        "minZ": -581.321,
+        "maxZ": 970.493
+      }
+    },
+    "zone": {
+      "_note": "THE OPENING FRAME, and where the recenter button goes back to — exactly the navmesh AABB from the streamed bundle's navmesh.glb, because the walkable area is the part worth opening on. Framing only: clicks are gated by `plan`'s letterbox, not by this, so an approximate rect costs a little framing and nothing else. The map fits this rect to the canvas, which is about 1.6x closer than fitting the whole of `plan`; zooming out from there reveals `base`.",
+      "minX": -1502.324,
+      "maxX": -661.783,
+      "minZ": -438.324,
+      "maxZ": 550.924
+    }
+  },
+  "zones": {
+    "waterside": {
+      "label": "Waterside",
+      "color": "#2ea8ff"
+    },
+    "yard": {
+      "label": "Container Yard",
+      "color": "#ffb020"
+    },
+    "landside": {
+      "label": "Landside",
+      "color": "#7c6cff"
+    },
+    "rail": {
+      "label": "Rail",
+      "color": "#31c48d"
+    },
+    "executive": {
+      "label": "Executive",
+      "color": "#ff6b6b"
+    }
+  },
+  "tones": {
+    "ok": [
+      "NORMAL",
+      "OPERATIONAL",
+      "PASSED",
+      "APPROVED",
+      "CLEARED",
+      "CONNECTED",
+      "ACTIVE",
+      "AVAILABLE",
+      "LOW",
+      "WITHIN TARGET",
+      "CLEAR"
+    ],
+    "warn": [
+      "MODERATE",
+      "SCHEDULED",
+      "PENDING",
+      "MEDIUM",
+      "DEGRADED"
+    ],
+    "alert": [
+      "RESTRICTED",
+      "HIGH",
+      "ALARM",
+      "CRITICAL",
+      "BLOCKED",
+      "FAULT"
+    ]
+  },
+  "copy": {
+    "instructions": {
+      "dollhouse": {
+        "title": "Doll House View Instructions",
+        "actionLabel": "Enter Doll House View",
+        "items": [
+          {
+            "icon": "rotate",
+            "text": "Rotate Around to look at the model from different angles"
+          },
+          {
+            "icon": "pointer",
+            "text": "Double Click on the Model to go to First Person View"
+          }
+        ]
+      },
+      "firstPerson": {
+        "title": "First Person View Instructions",
+        "subtitle": "The few controls you need",
+        "actionLabel": "Start Exploring",
+        "columns": 3,
+        "items": [
+          {
+            "icon": "moveHorizontal",
+            "text": "Drag anywhere to look around"
+          },
+          {
+            "icon": "resources",
+            "text": "RESOURCES on the left edge lists every zone and its hotspots"
+          },
+          {
+            "icon": "home",
+            "text": "Home returns you to the start point"
+          },
+          {
+            "icon": "firstPerson",
+            "text": "First Person drops you on foot at the terminal's walking start"
+          },
+          {
+            "icon": "dollhouse",
+            "text": "Dollhouse zooms back out to the overview"
+          },
+          {
+            "icon": "info",
+            "text": "Instructions reopens this guide"
+          },
+          {
+            "icon": "map",
+            "text": "Map opens the terminal map — travel anywhere from it"
+          }
+        ]
+      }
+    },
+    "panels": {
+      "hotspotsFlapLabel": "RESOURCES"
+    },
+    "popup": {
+      "journeyTitle": "Cargo Journey"
+    }
+  },
+  "layouts": [
+    {
+      "id": "L01",
+      "name": "Main Channel / Terminal Arrival",
+      "zone": "waterside",
+      "description": "Opening overview and vessel approach context",
+      "position": [
+        -1370.1807,
+        27.407,
+        93.0528
+      ],
+      "camera": {
+        "position": [
+          -1732.8771,
+          65.1325,
+          289.376
+        ],
+        "rotation": [
+          -0.1864,
+          -1.0621,
+          -0.1633
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L02",
+      "name": "Berth / Quay",
+      "zone": "waterside",
+      "description": "Waterside operating face",
+      "position": [
+        -1382.8192,
+        6.7614,
+        129.8674
+      ],
+      "camera": {
+        "position": [
+          -1483.1617,
+          22.461,
+          297.0468
+        ],
+        "rotation": [
+          0,
+          -0.4538,
+          0
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L03",
+      "name": "Ship-to-Shore Crane Zone",
+      "zone": "waterside",
+      "description": "Crane operation and telemetry",
+      "position": [
+        -1253.1738,
+        32.3059,
+        -104.8007
+      ],
+      "camera": {
+        "position": [
+          -1546.8152,
+          162.1672,
+          40.4495
+        ],
+        "rotation": [
+          -0.9516,
+          -1.0478,
+          -0.8824
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L04",
+      "name": "Vessel / Berth Working Face",
+      "zone": "waterside",
+      "description": "Immersive vessel-side and hero-container experience",
+      "position": [
+        -1275.4124,
+        15.8509,
+        -96.8164
+      ],
+      "camera": {
+        "position": [
+          -1210.1609,
+          27.686,
+          -235.302
+        ],
+        "rotation": [
+          -3.1416,
+          0.4974,
+          -3.1416
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L05",
+      "name": "Northern Container Yard",
+      "zone": "yard",
+      "description": "Container storage and yard-block intelligence",
+      "position": [
+        -958.3843,
+        14.8636,
+        -155.0531
+      ],
+      "camera": {
+        "position": [
+          -858.0518,
+          61.1966,
+          -355.1704
+        ],
+        "rotation": [
+          -2.8651,
+          0.4814,
+          3.011
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L06",
+      "name": "Central Container Yard",
+      "zone": "yard",
+      "description": "Primary Digital Twin and operational-data zone",
+      "position": [
+        -1041.4925,
+        7.3521,
+        109.9318
+      ],
+      "camera": {
+        "position": [
+          -885.8087,
+          92.3122,
+          177.2246
+        ],
+        "rotation": [
+          -0.7614,
+          0.9574,
+          0.6621
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L07",
+      "name": "Southern Container Yard",
+      "zone": "yard",
+      "description": "Reefer and southern-yard operations",
+      "position": [
+        -1305.035,
+        6.5224,
+        502.0819
+      ],
+      "camera": {
+        "position": [
+          -1391.0281,
+          61.1966,
+          673.1866
+        ],
+        "rotation": [
+          -0.2764,
+          -0.4814,
+          -0.1306
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L08",
+      "name": "Landside / Truck Gate",
+      "zone": "landside",
+      "description": "Terminal-to-road logistics interface",
+      "position": [
+        -781.2808,
+        4.7067,
+        256.0781
+      ],
+      "camera": {
+        "position": [
+          -697.4729,
+          21.2816,
+          288.6944
+        ],
+        "rotation": [
+          -0.3525,
+          1.1006,
+          0.3169
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L09",
+      "name": "TICTF / Everport Rail Interface",
+      "zone": "rail",
+      "description": "Shared intermodal rail interface; do not label as Everport-only rail yard",
+      "position": [
+        -699.9797,
+        5.9761,
+        -323.4659
+      ],
+      "camera": {
+        "position": [
+          -637.1832,
+          23.2206,
+          -365.264
+        ],
+        "rotation": [
+          -2.7891,
+          1.1006,
+          2.8247
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    },
+    {
+      "id": "L10",
+      "name": "Executive Digital Twin Overview",
+      "zone": "executive",
+      "description": "Final elevated command/executive view",
+      "position": [
+        -785.0801,
+        7.5096,
+        -249.869
+      ],
+      "camera": {
+        "position": [
+          -387.927,
+          158.1495,
+          -426.9453
+        ],
+        "rotation": [
+          -2.5126,
+          1.1785,
+          2.5497
+        ]
+      },
+      "walkable": false,
+      "exactPose": true
+    }
+  ],
+  "hotspots": [
+    {
+      "id": "H01",
+      "layoutId": "L01",
+      "name": "Main Channel",
+      "popupTitle": "Main Channel / Vessel Traffic",
+      "icon": "vessel",
+      "position": [
+        -1377.3218,
+        23.398,
+        66.6676
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        2.036
+      ],
+      "fields": [
+        {
+          "name": "vessel_name",
+          "label": "Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "imo_number",
+          "label": "IMO",
+          "type": "string",
+          "value": "9876543"
+        },
+        {
+          "name": "vessel_status",
+          "label": "Status",
+          "type": "enum",
+          "value": "APPROACHING"
+        },
+        {
+          "name": "direction",
+          "label": "Direction",
+          "type": "enum",
+          "value": "INBOUND"
+        },
+        {
+          "name": "speed_knots",
+          "label": "Speed",
+          "type": "decimal",
+          "value": 8.4,
+          "unit": "kn"
+        },
+        {
+          "name": "eta",
+          "label": "ETA",
+          "type": "datetime",
+          "value": "2026-08-21 11:40 PDT"
+        },
+        {
+          "name": "destination_berth",
+          "label": "Destination Berth",
+          "type": "string",
+          "value": "Berth 226"
+        },
+        {
+          "name": "distance_to_berth_nm",
+          "label": "Distance to Berth",
+          "type": "decimal",
+          "value": 1.8,
+          "unit": "nm"
+        },
+        {
+          "name": "traffic_condition",
+          "label": "Traffic",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H02",
+      "layoutId": "L01",
+      "name": "Terminal Overview",
+      "popupTitle": "Everport Terminal Overview",
+      "icon": "kpi",
+      "position": [
+        -1363.0396,
+        31.416,
+        119.4379
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        2.036
+      ],
+      "fields": [
+        {
+          "name": "terminal_name",
+          "label": "Terminal",
+          "type": "string",
+          "value": "Everport Terminal Services"
+        },
+        {
+          "name": "operator",
+          "label": "Operator",
+          "type": "string",
+          "value": "Everport Terminal Services"
+        },
+        {
+          "name": "berths",
+          "label": "Berths",
+          "type": "string",
+          "value": "226-236"
+        },
+        {
+          "name": "terminal_area_acres",
+          "label": "Area",
+          "type": "integer",
+          "value": 205,
+          "unit": "acres"
+        },
+        {
+          "name": "total_berth_length_ft",
+          "label": "Berth Length",
+          "type": "integer",
+          "value": 5800,
+          "unit": "ft"
+        },
+        {
+          "name": "number_of_berths",
+          "label": "Berth Count",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "water_depth_ft",
+          "label": "Water Depth",
+          "type": "integer",
+          "value": 47,
+          "unit": "ft"
+        },
+        {
+          "name": "post_panamax_cranes",
+          "label": "Post-Panamax Cranes",
+          "type": "integer",
+          "value": 8
+        },
+        {
+          "name": "reefer_plugs",
+          "label": "Reefer Plugs",
+          "type": "integer",
+          "value": 560
+        },
+        {
+          "name": "on_dock_rail",
+          "label": "On-Dock Rail",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "amp_available",
+          "label": "Shore Power (AMP)",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "operating_mode",
+          "label": "Operating Mode",
+          "type": "string",
+          "value": "Containerized cargo"
+        }
+      ]
+    },
+    {
+      "id": "H03",
+      "layoutId": "L02",
+      "name": "Berth",
+      "popupTitle": "Berth 226 - Live Status",
+      "icon": "vessel",
+      "position": [
+        -1368.451,
+        10.7389,
+        101.2396
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "berth_id",
+          "label": "Berth ID",
+          "type": "string",
+          "value": "B226"
+        },
+        {
+          "name": "berth_number",
+          "label": "Berth Number",
+          "type": "string",
+          "value": "226"
+        },
+        {
+          "name": "assigned_vessel",
+          "label": "Assigned Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "berth_status",
+          "label": "Berth Status",
+          "type": "enum",
+          "value": "OCCUPIED"
+        },
+        {
+          "name": "berth_occupancy",
+          "label": "Occupancy",
+          "type": "percentage",
+          "value": 100,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "arrival_time",
+          "label": "Arrival",
+          "type": "datetime",
+          "value": "2026-08-21 11:40"
+        },
+        {
+          "name": "departure_time",
+          "label": "Departure",
+          "type": "datetime",
+          "value": "2026-08-21 23:30"
+        },
+        {
+          "name": "water_depth_ft",
+          "label": "Water Depth",
+          "type": "integer",
+          "value": 47,
+          "unit": "ft"
+        },
+        {
+          "name": "assigned_cranes",
+          "label": "Assigned Cranes",
+          "type": "string",
+          "value": "QC-01, QC-02, QC-03"
+        },
+        {
+          "name": "operation",
+          "label": "Operation",
+          "type": "enum",
+          "value": "DISCHARGE"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        }
+      ]
+    },
+    {
+      "id": "H04",
+      "layoutId": "L02",
+      "name": "Quay / Wharf",
+      "popupTitle": "Quay Operations",
+      "icon": "crane",
+      "position": [
+        -1397.1875,
+        2.7838,
+        158.4952
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "quay_section",
+          "label": "Quay Section",
+          "type": "string",
+          "value": "B226-W"
+        },
+        {
+          "name": "current_operation",
+          "label": "Current Operation",
+          "type": "string",
+          "value": "Vessel discharge"
+        },
+        {
+          "name": "assigned_vessel",
+          "label": "Assigned Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "active_cranes",
+          "label": "Active Cranes",
+          "type": "string",
+          "value": "QC-01, QC-02, QC-03"
+        },
+        {
+          "name": "containers_in_operation",
+          "label": "Containers in Operation",
+          "type": "integer",
+          "value": 184
+        },
+        {
+          "name": "moves_per_hour",
+          "label": "Moves / Hour",
+          "type": "decimal",
+          "value": 31
+        },
+        {
+          "name": "safety_status",
+          "label": "Safety",
+          "type": "enum",
+          "value": "NORMAL"
+        },
+        {
+          "name": "quay_status",
+          "label": "Quay Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        }
+      ]
+    },
+    {
+      "id": "H05",
+      "layoutId": "L03",
+      "name": "Ship-to-Shore Crane",
+      "popupTitle": "Crane QC-02 - Operational Status",
+      "icon": "crane",
+      "position": [
+        -1279.4226,
+        29.6435,
+        -68.7205
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "crane_id",
+          "label": "Crane ID",
+          "type": "string",
+          "value": "QC-02"
+        },
+        {
+          "name": "crane_type",
+          "label": "Type",
+          "type": "string",
+          "value": "Post-Panamax STS"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        },
+        {
+          "name": "assigned_vessel",
+          "label": "Assigned Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "current_container",
+          "label": "Current Container",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "current_operation",
+          "label": "Operation",
+          "type": "enum",
+          "value": "DISCHARGE"
+        },
+        {
+          "name": "lift_count_today",
+          "label": "Lifts Today",
+          "type": "integer",
+          "value": 428
+        },
+        {
+          "name": "moves_per_hour",
+          "label": "Moves / Hour",
+          "type": "decimal",
+          "value": 31
+        },
+        {
+          "name": "runtime_hours",
+          "label": "Runtime",
+          "type": "decimal",
+          "value": 18426,
+          "unit": "h"
+        },
+        {
+          "name": "maintenance_status",
+          "label": "Maintenance",
+          "type": "enum",
+          "value": "NORMAL"
+        },
+        {
+          "name": "health_score",
+          "label": "Health Score",
+          "type": "integer",
+          "value": 96,
+          "render": "meter",
+          "max": 100
+        }
+      ]
+    },
+    {
+      "id": "H06",
+      "layoutId": "L03",
+      "name": "Crane Operating System",
+      "popupTitle": "QC-02 - Live Crane Telemetry",
+      "icon": "crane",
+      "position": [
+        -1269.7416,
+        63.7154,
+        -63.6811
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "crane_id",
+          "label": "Crane ID",
+          "type": "string",
+          "value": "QC-02"
+        },
+        {
+          "name": "hoist_height_m",
+          "label": "Hoist Height",
+          "type": "decimal",
+          "value": 28.4,
+          "unit": "m"
+        },
+        {
+          "name": "trolley_position_m",
+          "label": "Trolley Position",
+          "type": "decimal",
+          "value": 42.7,
+          "unit": "m"
+        },
+        {
+          "name": "load_weight_tonnes",
+          "label": "Load Weight",
+          "type": "decimal",
+          "value": 18.4,
+          "unit": "t"
+        },
+        {
+          "name": "cycle_time_seconds",
+          "label": "Cycle Time",
+          "type": "integer",
+          "value": 112,
+          "unit": "s"
+        },
+        {
+          "name": "current_move",
+          "label": "Current Move",
+          "type": "string",
+          "value": "Vessel → Quay"
+        },
+        {
+          "name": "spread_size",
+          "label": "Spreader",
+          "type": "string",
+          "value": "40 ft"
+        },
+        {
+          "name": "power_status",
+          "label": "Power",
+          "type": "enum",
+          "value": "ACTIVE"
+        },
+        {
+          "name": "operator_mode",
+          "label": "Operator Mode",
+          "type": "enum",
+          "value": "REMOTE"
+        },
+        {
+          "name": "telemetry_status",
+          "label": "Telemetry",
+          "type": "enum",
+          "value": "LIVE DEMO"
+        }
+      ]
+    },
+    {
+      "id": "H07",
+      "layoutId": "L03",
+      "name": "Crane Safety Zone",
+      "popupTitle": "Crane Safety Zone",
+      "icon": "safety",
+      "position": [
+        -1210.3573,
+        3.5587,
+        -182.0005
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "zone_id",
+          "label": "Zone ID",
+          "type": "string",
+          "value": "SZ-QC02"
+        },
+        {
+          "name": "zone_type",
+          "label": "Zone Type",
+          "type": "string",
+          "value": "Crane operating exclusion zone"
+        },
+        {
+          "name": "access_status",
+          "label": "Access",
+          "type": "enum",
+          "value": "RESTRICTED"
+        },
+        {
+          "name": "personnel_allowed",
+          "label": "Personnel Allowed",
+          "type": "boolean",
+          "value": false
+        },
+        {
+          "name": "vehicle_allowed",
+          "label": "Vehicles Allowed",
+          "type": "boolean",
+          "value": false
+        },
+        {
+          "name": "crane_status",
+          "label": "Crane Status",
+          "type": "enum",
+          "value": "ACTIVE"
+        },
+        {
+          "name": "warning_level",
+          "label": "Warning Level",
+          "type": "enum",
+          "value": "HIGH"
+        },
+        {
+          "name": "safety_message",
+          "label": "Safety Notice",
+          "type": "string",
+          "value": "Do not enter while crane is operating"
+        }
+      ]
+    },
+    {
+      "id": "H08",
+      "layoutId": "L04",
+      "name": "Container Vessel",
+      "popupTitle": "EVER LEGACY - Vessel Profile",
+      "icon": "vessel",
+      "position": [
+        -1284.3613,
+        9.6225,
+        -111.8897
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "vessel_name",
+          "label": "Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "imo_number",
+          "label": "IMO",
+          "type": "string",
+          "value": "9876543"
+        },
+        {
+          "name": "vessel_type",
+          "label": "Type",
+          "type": "string",
+          "value": "Container Ship"
+        },
+        {
+          "name": "length_m",
+          "label": "Length",
+          "type": "integer",
+          "value": 366,
+          "unit": "m"
+        },
+        {
+          "name": "beam_m",
+          "label": "Beam",
+          "type": "integer",
+          "value": 51,
+          "unit": "m"
+        },
+        {
+          "name": "draft_m",
+          "label": "Draft",
+          "type": "decimal",
+          "value": 14.5,
+          "unit": "m"
+        },
+        {
+          "name": "nominal_capacity_teu",
+          "label": "Nominal Capacity",
+          "type": "integer",
+          "value": 14000,
+          "unit": "TEU"
+        },
+        {
+          "name": "containers_onboard",
+          "label": "Containers Onboard",
+          "type": "integer",
+          "value": 8742
+        },
+        {
+          "name": "eta",
+          "label": "ETA",
+          "type": "datetime",
+          "value": "2026-08-21 11:40"
+        },
+        {
+          "name": "etd",
+          "label": "ETD",
+          "type": "datetime",
+          "value": "2026-08-21 23:30"
+        },
+        {
+          "name": "assigned_berth",
+          "label": "Assigned Berth",
+          "type": "string",
+          "value": "226"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "BERTHED"
+        }
+      ]
+    },
+    {
+      "id": "H09",
+      "layoutId": "L04",
+      "name": "Current Container",
+      "popupTitle": "Container EGHU4829136",
+      "icon": "container",
+      "position": [
+        -1257.5145,
+        16.774,
+        -66.6699
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "iso_type",
+          "label": "ISO Type",
+          "type": "string",
+          "value": "45G1"
+        },
+        {
+          "name": "size",
+          "label": "Size",
+          "type": "string",
+          "value": "40 FT HC"
+        },
+        {
+          "name": "gross_weight_kg",
+          "label": "Gross Weight",
+          "type": "integer",
+          "value": 18420,
+          "unit": "kg"
+        },
+        {
+          "name": "cargo_type",
+          "label": "Cargo",
+          "type": "string",
+          "value": "Consumer Electronics"
+        },
+        {
+          "name": "cargo_status",
+          "label": "Cargo Status",
+          "type": "enum",
+          "value": "IMPORT"
+        },
+        {
+          "name": "origin_port",
+          "label": "Origin Port",
+          "type": "string",
+          "value": "Yantian"
+        },
+        {
+          "name": "destination",
+          "label": "Destination",
+          "type": "string",
+          "value": "Los Angeles"
+        },
+        {
+          "name": "vessel",
+          "label": "Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "berth",
+          "label": "Berth",
+          "type": "string",
+          "value": "226"
+        },
+        {
+          "name": "current_status",
+          "label": "Current Status",
+          "type": "enum",
+          "value": "ON VESSEL"
+        },
+        {
+          "name": "next_operation",
+          "label": "Next Operation",
+          "type": "enum",
+          "value": "DISCHARGE"
+        }
+      ]
+    },
+    {
+      "id": "H10",
+      "layoutId": "L04",
+      "name": "Vessel Container Stack",
+      "popupTitle": "Vessel Bay 42 - Container Stack",
+      "icon": "container",
+      "position": [
+        -1284.3613,
+        21.1563,
+        -111.8897
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "bay_number",
+          "label": "Bay",
+          "type": "integer",
+          "value": 42
+        },
+        {
+          "name": "row",
+          "label": "Row",
+          "type": "integer",
+          "value": 6
+        },
+        {
+          "name": "tier",
+          "label": "Tier",
+          "type": "integer",
+          "value": 4
+        },
+        {
+          "name": "containers_in_stack",
+          "label": "Containers in Stack",
+          "type": "integer",
+          "value": 18
+        },
+        {
+          "name": "import_containers",
+          "label": "Import",
+          "type": "integer",
+          "value": 12
+        },
+        {
+          "name": "export_containers",
+          "label": "Export",
+          "type": "integer",
+          "value": 6
+        },
+        {
+          "name": "reefer_containers",
+          "label": "Reefer",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "hazmat_containers",
+          "label": "Hazmat",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "hero_container",
+          "label": "Current Container",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "handling_status",
+          "label": "Handling Status",
+          "type": "enum",
+          "value": "READY FOR DISCHARGE"
+        }
+      ]
+    },
+    {
+      "id": "H11",
+      "layoutId": "L05",
+      "name": "Container Stack",
+      "popupTitle": "Yard Stack A12-04",
+      "icon": "container",
+      "position": [
+        -963.4323,
+        11.6806,
+        -219.119
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "stack_id",
+          "label": "Stack ID",
+          "type": "string",
+          "value": "A12-04"
+        },
+        {
+          "name": "yard_block",
+          "label": "Yard Block",
+          "type": "string",
+          "value": "A12"
+        },
+        {
+          "name": "capacity_teu",
+          "label": "Capacity",
+          "type": "integer",
+          "value": 1240,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupied_teu",
+          "label": "Occupied",
+          "type": "integer",
+          "value": 1012,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupancy",
+          "label": "Occupancy",
+          "type": "percentage",
+          "value": 81.6,
+          "render": "meter",
+          "max": 100,
+          "decimals": 1
+        },
+        {
+          "name": "available_slots",
+          "label": "Available Slots",
+          "type": "integer",
+          "value": 228
+        },
+        {
+          "name": "containers",
+          "label": "Containers",
+          "type": "integer",
+          "value": 734
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "NORMAL"
+        },
+        {
+          "name": "congestion",
+          "label": "Congestion",
+          "type": "enum",
+          "value": "LOW"
+        }
+      ]
+    },
+    {
+      "id": "H12",
+      "layoutId": "L05",
+      "name": "Yard Block",
+      "popupTitle": "Yard Block A12 - KPI",
+      "icon": "yard",
+      "position": [
+        -932.1389,
+        11.6806,
+        -203.4129
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "block_id",
+          "label": "Block ID",
+          "type": "string",
+          "value": "A12"
+        },
+        {
+          "name": "capacity_teu",
+          "label": "Capacity",
+          "type": "integer",
+          "value": 4960,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupied_teu",
+          "label": "Occupied",
+          "type": "integer",
+          "value": 3842,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupancy",
+          "label": "Occupancy",
+          "type": "percentage",
+          "value": 77.5,
+          "render": "meter",
+          "max": 100,
+          "decimals": 1
+        },
+        {
+          "name": "import_percentage",
+          "label": "Import",
+          "type": "percentage",
+          "value": 61
+        },
+        {
+          "name": "export_percentage",
+          "label": "Export",
+          "type": "percentage",
+          "value": 32
+        },
+        {
+          "name": "empty_percentage",
+          "label": "Empty",
+          "type": "percentage",
+          "value": 7
+        },
+        {
+          "name": "average_dwell_days",
+          "label": "Average Dwell",
+          "type": "decimal",
+          "value": 3.2,
+          "unit": "days",
+          "decimals": 1
+        },
+        {
+          "name": "active_moves",
+          "label": "Active Moves",
+          "type": "integer",
+          "value": 46
+        },
+        {
+          "name": "congestion_status",
+          "label": "Congestion",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H13",
+      "layoutId": "L05",
+      "name": "Terminal Equipment",
+      "popupTitle": "Top Handler TH-024",
+      "icon": "equipment",
+      "position": [
+        -979.5818,
+        21.2295,
+        -42.6273
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -2.6764
+      ],
+      "fields": [
+        {
+          "name": "asset_id",
+          "label": "Asset ID",
+          "type": "string",
+          "value": "TH-024"
+        },
+        {
+          "name": "equipment_type",
+          "label": "Type",
+          "type": "string",
+          "value": "Electric Top Handler"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        },
+        {
+          "name": "location",
+          "label": "Location",
+          "type": "string",
+          "value": "Yard A12"
+        },
+        {
+          "name": "utilization",
+          "label": "Utilization",
+          "type": "percentage",
+          "value": 72,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "runtime_hours",
+          "label": "Runtime",
+          "type": "decimal",
+          "value": 6482,
+          "unit": "h"
+        },
+        {
+          "name": "battery_level",
+          "label": "Battery",
+          "type": "percentage",
+          "value": 78,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "health_score",
+          "label": "Health Score",
+          "type": "integer",
+          "value": 94,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "maintenance_due",
+          "label": "Maintenance Due",
+          "type": "string",
+          "value": "126 operating hours"
+        },
+        {
+          "name": "current_task",
+          "label": "Current Task",
+          "type": "string",
+          "value": "Container relocation"
+        }
+      ]
+    },
+    {
+      "id": "H14",
+      "layoutId": "L06",
+      "name": "Current Container",
+      "popupTitle": "EGHU4829136 - Movement History",
+      "icon": "container",
+      "position": [
+        -1046.04,
+        11.6805,
+        89.7862
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "previous_location",
+          "label": "Previous Location",
+          "type": "string",
+          "value": "EVER LEGACY / Bay 42"
+        },
+        {
+          "name": "current_location",
+          "label": "Current Location",
+          "type": "string",
+          "value": "Yard A12 / Stack 04"
+        },
+        {
+          "name": "next_destination",
+          "label": "Next Destination",
+          "type": "string",
+          "value": "Truck Gate"
+        },
+        {
+          "name": "last_movement",
+          "label": "Last Movement",
+          "type": "string",
+          "value": "Vessel → Yard"
+        },
+        {
+          "name": "last_movement_time",
+          "label": "Last Movement Time",
+          "type": "datetime",
+          "value": "2026-08-21 14:12"
+        },
+        {
+          "name": "dwell_time",
+          "label": "Dwell Time",
+          "type": "duration",
+          "value": "00:47"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "YARD STORAGE"
+        },
+        {
+          "name": "planned_departure",
+          "label": "Planned Departure",
+          "type": "datetime",
+          "value": "2026-08-22 09:30"
+        }
+      ]
+    },
+    {
+      "id": "H15",
+      "layoutId": "L06",
+      "name": "Yard Operations",
+      "popupTitle": "Central Yard - Live Operations",
+      "icon": "yard",
+      "position": [
+        -1063.3163,
+        5.1879,
+        124.2079
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "yard_occupancy",
+          "label": "Yard Occupancy",
+          "type": "percentage",
+          "value": 78,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "active_container_moves",
+          "label": "Active Moves",
+          "type": "integer",
+          "value": 64
+        },
+        {
+          "name": "moves_per_hour",
+          "label": "Moves / Hour",
+          "type": "integer",
+          "value": 118
+        },
+        {
+          "name": "average_handling_time",
+          "label": "Average Handling Time",
+          "type": "decimal",
+          "value": 4.8,
+          "unit": "min",
+          "decimals": 1
+        },
+        {
+          "name": "active_equipment",
+          "label": "Active Equipment",
+          "type": "integer",
+          "value": 37
+        },
+        {
+          "name": "truck_queue",
+          "label": "Truck Queue",
+          "type": "integer",
+          "value": 12
+        },
+        {
+          "name": "exceptions",
+          "label": "Exceptions",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "congestion_level",
+          "label": "Congestion",
+          "type": "enum",
+          "value": "MODERATE"
+        },
+        {
+          "name": "operational_status",
+          "label": "Operational Status",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H16",
+      "layoutId": "L06",
+      "name": "Equipment Activity",
+      "popupTitle": "Equipment TH-031 - Live Activity",
+      "icon": "equipment",
+      "position": [
+        -1015.1212,
+        5.1879,
+        115.8012
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "asset_id",
+          "label": "Asset ID",
+          "type": "string",
+          "value": "TH-031"
+        },
+        {
+          "name": "equipment_type",
+          "label": "Type",
+          "type": "string",
+          "value": "Top Handler"
+        },
+        {
+          "name": "current_operation",
+          "label": "Current Operation",
+          "type": "string",
+          "value": "Container Pickup"
+        },
+        {
+          "name": "current_container",
+          "label": "Current Container",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "load_weight_tonnes",
+          "label": "Load Weight",
+          "type": "decimal",
+          "value": 18.4,
+          "unit": "t"
+        },
+        {
+          "name": "productivity_moves_hour",
+          "label": "Productivity",
+          "type": "integer",
+          "value": 27,
+          "unit": "moves/h"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "ACTIVE"
+        },
+        {
+          "name": "health_score",
+          "label": "Health Score",
+          "type": "integer",
+          "value": 91,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "operator_mode",
+          "label": "Operator Mode",
+          "type": "enum",
+          "value": "MANUAL"
+        },
+        {
+          "name": "next_task",
+          "label": "Next Task",
+          "type": "string",
+          "value": "Move to Stack A12-04"
+        }
+      ]
+    },
+    {
+      "id": "H17",
+      "layoutId": "L07",
+      "name": "Reefer Container",
+      "popupTitle": "Reefer EGHU7392014 - Condition",
+      "icon": "reefer",
+      "position": [
+        -1328.6654,
+        10.5698,
+        513.0643
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU7392014"
+        },
+        {
+          "name": "container_type",
+          "label": "Type",
+          "type": "string",
+          "value": "40 FT Reefer"
+        },
+        {
+          "name": "cargo_type",
+          "label": "Cargo",
+          "type": "string",
+          "value": "Frozen Food"
+        },
+        {
+          "name": "set_temperature_c",
+          "label": "Set Temperature",
+          "type": "decimal",
+          "value": -18,
+          "unit": "°C",
+          "decimals": 1
+        },
+        {
+          "name": "actual_temperature_c",
+          "label": "Actual Temperature",
+          "type": "decimal",
+          "value": -17.8,
+          "unit": "°C",
+          "decimals": 1
+        },
+        {
+          "name": "power_status",
+          "label": "Power",
+          "type": "enum",
+          "value": "CONNECTED"
+        },
+        {
+          "name": "alarm_status",
+          "label": "Alarm",
+          "type": "enum",
+          "value": "NORMAL"
+        },
+        {
+          "name": "last_inspection",
+          "label": "Last Inspection",
+          "type": "datetime",
+          "value": "2026-08-21 08:42"
+        },
+        {
+          "name": "next_inspection",
+          "label": "Next Inspection",
+          "type": "datetime",
+          "value": "2026-08-21 16:42"
+        },
+        {
+          "name": "condition",
+          "label": "Condition",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H18",
+      "layoutId": "L07",
+      "name": "Southern Yard Block",
+      "popupTitle": "Yard Block C08",
+      "icon": "yard",
+      "position": [
+        -1314.996,
+        4.4986,
+        519.925
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "block_id",
+          "label": "Block ID",
+          "type": "string",
+          "value": "C08"
+        },
+        {
+          "name": "capacity_teu",
+          "label": "Capacity",
+          "type": "integer",
+          "value": 3840,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupied_teu",
+          "label": "Occupied",
+          "type": "integer",
+          "value": 2957,
+          "unit": "TEU"
+        },
+        {
+          "name": "occupancy",
+          "label": "Occupancy",
+          "type": "percentage",
+          "value": 77,
+          "render": "meter",
+          "max": 100,
+          "decimals": 1
+        },
+        {
+          "name": "average_dwell_days",
+          "label": "Average Dwell",
+          "type": "decimal",
+          "value": 2.8,
+          "unit": "days",
+          "decimals": 1
+        },
+        {
+          "name": "active_moves",
+          "label": "Active Moves",
+          "type": "integer",
+          "value": 39
+        },
+        {
+          "name": "congestion",
+          "label": "Congestion",
+          "type": "enum",
+          "value": "LOW"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        }
+      ]
+    },
+    {
+      "id": "H19",
+      "layoutId": "L07",
+      "name": "Yard Operations",
+      "popupTitle": "Southern Yard Activity",
+      "icon": "yard",
+      "position": [
+        -1271.4435,
+        4.4987,
+        473.2564
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        0.4652
+      ],
+      "fields": [
+        {
+          "name": "active_equipment",
+          "label": "Active Equipment",
+          "type": "integer",
+          "value": 24
+        },
+        {
+          "name": "containers_moved_hour",
+          "label": "Containers Moved / Hour",
+          "type": "integer",
+          "value": 86
+        },
+        {
+          "name": "truck_queue",
+          "label": "Truck Queue",
+          "type": "integer",
+          "value": 9
+        },
+        {
+          "name": "rail_queue",
+          "label": "Rail Queue",
+          "type": "integer",
+          "value": 18
+        },
+        {
+          "name": "exceptions",
+          "label": "Exceptions",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "average_move_time",
+          "label": "Average Move Time",
+          "type": "decimal",
+          "value": 5.1,
+          "unit": "min",
+          "decimals": 1
+        },
+        {
+          "name": "congestion",
+          "label": "Congestion",
+          "type": "enum",
+          "value": "LOW"
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H20",
+      "layoutId": "L08",
+      "name": "Truck Gate",
+      "popupTitle": "Truck Gate Transaction",
+      "icon": "gate",
+      "position": [
+        -795.545,
+        6.2122,
+        257.768
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "truck_id",
+          "label": "Truck ID",
+          "type": "string",
+          "value": "LA-48291"
+        },
+        {
+          "name": "license_plate",
+          "label": "License Plate",
+          "type": "string",
+          "value": "8ABC291"
+        },
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "appointment_id",
+          "label": "Appointment ID",
+          "type": "string",
+          "value": "AP-20260821-0930"
+        },
+        {
+          "name": "appointment_time",
+          "label": "Appointment",
+          "type": "datetime",
+          "value": "2026-08-22 09:30"
+        },
+        {
+          "name": "gate_in",
+          "label": "Gate In",
+          "type": "datetime",
+          "value": "2026-08-22 09:17"
+        },
+        {
+          "name": "gate_out",
+          "label": "Gate Out",
+          "type": "datetime",
+          "value": "—"
+        },
+        {
+          "name": "transaction_status",
+          "label": "Transaction",
+          "type": "enum",
+          "value": "APPOINTMENT CONFIRMED"
+        },
+        {
+          "name": "assigned_destination",
+          "label": "Assigned Destination",
+          "type": "string",
+          "value": "Yard A12"
+        },
+        {
+          "name": "driver_status",
+          "label": "Driver",
+          "type": "enum",
+          "value": "CLEARED"
+        }
+      ]
+    },
+    {
+      "id": "H21",
+      "layoutId": "L08",
+      "name": "OCR / Gate Processing",
+      "popupTitle": "Automated Gate Verification",
+      "icon": "gate",
+      "position": [
+        -773.4136,
+        4.5066,
+        247.7367
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "truck_plate",
+          "label": "Truck Plate",
+          "type": "string",
+          "value": "8ABC291"
+        },
+        {
+          "name": "plate_confidence",
+          "label": "Plate Confidence",
+          "type": "percentage",
+          "value": 99.2,
+          "render": "meter",
+          "max": 100,
+          "decimals": 1
+        },
+        {
+          "name": "container_ocr",
+          "label": "Container OCR",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "ocr_confidence",
+          "label": "OCR Confidence",
+          "type": "percentage",
+          "value": 99.8,
+          "render": "meter",
+          "max": 100,
+          "decimals": 1
+        },
+        {
+          "name": "appointment_valid",
+          "label": "Appointment Valid",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "container_valid",
+          "label": "Container Valid",
+          "type": "boolean",
+          "value": true
+        },
+        {
+          "name": "security_check",
+          "label": "Security Check",
+          "type": "enum",
+          "value": "PASSED"
+        },
+        {
+          "name": "gate_decision",
+          "label": "Gate Decision",
+          "type": "enum",
+          "value": "APPROVED"
+        },
+        {
+          "name": "processing_time_seconds",
+          "label": "Processing Time",
+          "type": "integer",
+          "value": 18,
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "id": "H22",
+      "layoutId": "L08",
+      "name": "Truck Queue",
+      "popupTitle": "Landside Truck Queue",
+      "icon": "gate",
+      "position": [
+        -774.8837,
+        3.4012,
+        262.7296
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "trucks_waiting",
+          "label": "Trucks Waiting",
+          "type": "integer",
+          "value": 12
+        },
+        {
+          "name": "average_wait_minutes",
+          "label": "Average Wait",
+          "type": "integer",
+          "value": 14,
+          "unit": "min"
+        },
+        {
+          "name": "longest_wait_minutes",
+          "label": "Longest Wait",
+          "type": "integer",
+          "value": 27,
+          "unit": "min"
+        },
+        {
+          "name": "next_appointment_window",
+          "label": "Next Appointment Window",
+          "type": "string",
+          "value": "09:30-10:00"
+        },
+        {
+          "name": "queue_status",
+          "label": "Queue Status",
+          "type": "enum",
+          "value": "NORMAL"
+        },
+        {
+          "name": "exceptions",
+          "label": "Exceptions",
+          "type": "integer",
+          "value": 1
+        },
+        {
+          "name": "estimated_clear_time",
+          "label": "Estimated Clear Time",
+          "type": "datetime",
+          "value": "2026-08-21 10:12"
+        }
+      ]
+    },
+    {
+      "id": "H23",
+      "layoutId": "L09",
+      "name": "Rail Loading Track",
+      "popupTitle": "TICTF Track 04",
+      "icon": "rail",
+      "position": [
+        -698.2645,
+        5.609,
+        -329.7347
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "facility",
+          "label": "Facility",
+          "type": "string",
+          "value": "TICTF"
+        },
+        {
+          "name": "track_id",
+          "label": "Track ID",
+          "type": "string",
+          "value": "TICTF-L04"
+        },
+        {
+          "name": "train_id",
+          "label": "Train ID",
+          "type": "string",
+          "value": "BNSF-LA-742"
+        },
+        {
+          "name": "track_status",
+          "label": "Track Status",
+          "type": "enum",
+          "value": "LOADING"
+        },
+        {
+          "name": "railcars",
+          "label": "Railcars",
+          "type": "integer",
+          "value": 52
+        },
+        {
+          "name": "containers_assigned",
+          "label": "Containers Assigned",
+          "type": "integer",
+          "value": 104
+        },
+        {
+          "name": "containers_loaded",
+          "label": "Containers Loaded",
+          "type": "integer",
+          "value": 76
+        },
+        {
+          "name": "containers_remaining",
+          "label": "Containers Remaining",
+          "type": "integer",
+          "value": 28
+        },
+        {
+          "name": "destination",
+          "label": "Destination",
+          "type": "string",
+          "value": "San Bernardino, CA"
+        },
+        {
+          "name": "estimated_departure",
+          "label": "Estimated Departure",
+          "type": "datetime",
+          "value": "2026-08-21 18:45"
+        }
+      ]
+    },
+    {
+      "id": "H24",
+      "layoutId": "L09",
+      "name": "Container → Rail Transfer",
+      "popupTitle": "EGHU4829136 - Rail Transfer",
+      "icon": "rail",
+      "position": [
+        -692.9382,
+        5.609,
+        -340.347
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "railcar_id",
+          "label": "Railcar ID",
+          "type": "string",
+          "value": "BNSF-DRX-88421"
+        },
+        {
+          "name": "track_id",
+          "label": "Track ID",
+          "type": "string",
+          "value": "TICTF-L04"
+        },
+        {
+          "name": "transfer_status",
+          "label": "Transfer Status",
+          "type": "enum",
+          "value": "SCHEDULED"
+        },
+        {
+          "name": "destination",
+          "label": "Destination",
+          "type": "string",
+          "value": "San Bernardino"
+        },
+        {
+          "name": "planned_transfer_time",
+          "label": "Planned Transfer",
+          "type": "datetime",
+          "value": "2026-08-21 17:20"
+        },
+        {
+          "name": "estimated_departure",
+          "label": "Estimated Departure",
+          "type": "datetime",
+          "value": "2026-08-21 18:45"
+        },
+        {
+          "name": "transfer_priority",
+          "label": "Priority",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H25",
+      "layoutId": "L09",
+      "name": "TICTF Overview",
+      "popupTitle": "TICTF Rail Operations",
+      "icon": "rail",
+      "position": [
+        -708.7363,
+        6.7102,
+        -300.316
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "facility",
+          "label": "Facility",
+          "type": "string",
+          "value": "Terminal Island Container Transfer Facility"
+        },
+        {
+          "name": "loading_tracks",
+          "label": "Loading Tracks",
+          "type": "integer",
+          "value": 8
+        },
+        {
+          "name": "storage_tracks",
+          "label": "Storage Tracks",
+          "type": "integer",
+          "value": 10
+        },
+        {
+          "name": "arrival_departure_tracks",
+          "label": "Arrival / Departure Tracks",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "loading_track_length_ft",
+          "label": "Loading Track Length",
+          "type": "integer",
+          "value": 2150,
+          "unit": "ft"
+        },
+        {
+          "name": "storage_track_length_ft",
+          "label": "Storage Track Length",
+          "type": "integer",
+          "value": 2300,
+          "unit": "ft"
+        },
+        {
+          "name": "loading_track_capacity_railcars",
+          "label": "Loading Track Capacity",
+          "type": "integer",
+          "value": 56,
+          "unit": "railcars"
+        },
+        {
+          "name": "storage_track_capacity_railcars",
+          "label": "Storage Track Capacity",
+          "type": "integer",
+          "value": 70,
+          "unit": "railcars"
+        },
+        {
+          "name": "current_active_trains",
+          "label": "Active Trains",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "facility_status",
+          "label": "Facility Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        }
+      ]
+    },
+    {
+      "id": "H26",
+      "layoutId": "L10",
+      "name": "Terminal KPI",
+      "popupTitle": "Everport Terminal Performance",
+      "icon": "kpi",
+      "position": [
+        -827.5215,
+        6.7102,
+        -109.3436
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "terminal_area_acres",
+          "label": "Area",
+          "type": "integer",
+          "value": 205,
+          "unit": "acres"
+        },
+        {
+          "name": "berths",
+          "label": "Berths",
+          "type": "string",
+          "value": "226-236"
+        },
+        {
+          "name": "berth_count",
+          "label": "Berth Count",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "total_berth_length_ft",
+          "label": "Berth Length",
+          "type": "integer",
+          "value": 5800,
+          "unit": "ft"
+        },
+        {
+          "name": "water_depth_ft",
+          "label": "Water Depth",
+          "type": "integer",
+          "value": 47,
+          "unit": "ft"
+        },
+        {
+          "name": "post_panamax_cranes",
+          "label": "Post-Panamax Cranes",
+          "type": "integer",
+          "value": 8
+        },
+        {
+          "name": "reefer_plugs",
+          "label": "Reefer Plugs",
+          "type": "integer",
+          "value": 560
+        },
+        {
+          "name": "yard_occupancy",
+          "label": "Yard Occupancy",
+          "type": "percentage",
+          "value": 78,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "active_vessels",
+          "label": "Active Vessels",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "active_cranes",
+          "label": "Active Cranes",
+          "type": "integer",
+          "value": 5
+        },
+        {
+          "name": "trucks_inside_terminal",
+          "label": "Trucks Inside Terminal",
+          "type": "integer",
+          "value": 127
+        },
+        {
+          "name": "rail_trains_active",
+          "label": "Rail Trains Active",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "overall_status",
+          "label": "Overall Status",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H27",
+      "layoutId": "L10",
+      "name": "Operations Intelligence",
+      "popupTitle": "Live Operations Intelligence",
+      "icon": "kpi",
+      "position": [
+        -790.0392,
+        9.1833,
+        -311.3166
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "active_vessels",
+          "label": "Active Vessels",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "vessels_arriving",
+          "label": "Vessels Arriving",
+          "type": "integer",
+          "value": 1
+        },
+        {
+          "name": "vessels_departing",
+          "label": "Vessels Departing",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "active_cranes",
+          "label": "Active Cranes",
+          "type": "integer",
+          "value": 5
+        },
+        {
+          "name": "crane_productivity",
+          "label": "Crane Productivity",
+          "type": "decimal",
+          "value": 30.8,
+          "unit": "moves/h",
+          "decimals": 1
+        },
+        {
+          "name": "yard_occupancy",
+          "label": "Yard Occupancy",
+          "type": "percentage",
+          "value": 78,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "trucks_inside",
+          "label": "Trucks Inside",
+          "type": "integer",
+          "value": 127
+        },
+        {
+          "name": "truck_queue",
+          "label": "Truck Queue",
+          "type": "integer",
+          "value": 12
+        },
+        {
+          "name": "rail_trains_active",
+          "label": "Rail Trains Active",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "equipment_health",
+          "label": "Equipment Health",
+          "type": "integer",
+          "value": 93,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "active_alerts",
+          "label": "Active Alerts",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "critical_alerts",
+          "label": "Critical Alerts",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "overall_operational_status",
+          "label": "Overall Status",
+          "type": "enum",
+          "value": "NORMAL"
+        }
+      ]
+    },
+    {
+      "id": "H28",
+      "layoutId": "L10",
+      "name": "Sustainability",
+      "popupTitle": "Environmental & Energy Performance",
+      "icon": "sustainability",
+      "position": [
+        -724.6568,
+        9.1832,
+        -330.3185
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "amp_status",
+          "label": "Shore Power (AMP)",
+          "type": "enum",
+          "value": "AVAILABLE"
+        },
+        {
+          "name": "vessel_shore_power",
+          "label": "Vessel Shore Power",
+          "type": "enum",
+          "value": "CONNECTED"
+        },
+        {
+          "name": "electric_equipment_active",
+          "label": "Electric Equipment Active",
+          "type": "integer",
+          "value": 18
+        },
+        {
+          "name": "electric_equipment_total",
+          "label": "Electric Equipment Total",
+          "type": "integer",
+          "value": 24
+        },
+        {
+          "name": "estimated_co2_avoided_kg_today",
+          "label": "CO₂ Avoided Today",
+          "type": "integer",
+          "value": 4820,
+          "unit": "kg"
+        },
+        {
+          "name": "estimated_fuel_avoided_l_today",
+          "label": "Fuel Avoided Today",
+          "type": "integer",
+          "value": 1740,
+          "unit": "L"
+        },
+        {
+          "name": "energy_consumption_kwh_today",
+          "label": "Energy Used Today",
+          "type": "integer",
+          "value": 18640,
+          "unit": "kWh"
+        },
+        {
+          "name": "emissions_status",
+          "label": "Emissions",
+          "type": "enum",
+          "value": "WITHIN TARGET"
+        },
+        {
+          "name": "sustainability_score",
+          "label": "Sustainability Score",
+          "type": "integer",
+          "value": 91,
+          "render": "meter",
+          "max": 100
+        }
+      ]
+    },
+    {
+      "id": "H29",
+      "layoutId": "L10",
+      "name": "Predictive Maintenance",
+      "popupTitle": "Asset Health - TH-024",
+      "icon": "equipment",
+      "position": [
+        -753.2811,
+        9.1832,
+        -284.0513
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "fields": [
+        {
+          "name": "asset_id",
+          "label": "Asset ID",
+          "type": "string",
+          "value": "TH-024"
+        },
+        {
+          "name": "equipment_type",
+          "label": "Type",
+          "type": "string",
+          "value": "Electric Top Handler"
+        },
+        {
+          "name": "health_score",
+          "label": "Health Score",
+          "type": "integer",
+          "value": 94,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "current_status",
+          "label": "Current Status",
+          "type": "enum",
+          "value": "OPERATIONAL"
+        },
+        {
+          "name": "predicted_issue",
+          "label": "Predicted Issue",
+          "type": "string",
+          "value": "Hydraulic cooling performance degradation"
+        },
+        {
+          "name": "risk_level",
+          "label": "Risk Level",
+          "type": "enum",
+          "value": "MEDIUM"
+        },
+        {
+          "name": "probability_next_72h",
+          "label": "Probability (72 h)",
+          "type": "percentage",
+          "value": 18,
+          "render": "meter",
+          "max": 100
+        },
+        {
+          "name": "runtime_hours",
+          "label": "Runtime",
+          "type": "decimal",
+          "value": 6482,
+          "unit": "h"
+        },
+        {
+          "name": "next_service_hours",
+          "label": "Next Service",
+          "type": "integer",
+          "value": 126,
+          "unit": "h"
+        },
+        {
+          "name": "recommended_action",
+          "label": "Recommended Action",
+          "type": "string",
+          "value": "Inspect cooling system"
+        },
+        {
+          "name": "predicted_intervention",
+          "label": "Predicted Intervention",
+          "type": "string",
+          "value": "Within 72-96 hours"
+        }
+      ]
+    },
+    {
+      "id": "H30",
+      "layoutId": "L10",
+      "name": "Current Container Journey",
+      "popupTitle": "EGHU4829136 - Complete Cargo Journey",
+      "icon": "journey",
+      "position": [
+        -829.902,
+        3.2881,
+        -214.315
+      ],
+      "rotation": [
+        1.5708,
+        0,
+        -1.1056
+      ],
+      "journey": [
+        {
+          "stage": "Vessel",
+          "label": "On vessel, Bay 42",
+          "state": "ON VESSEL",
+          "layoutId": "L04",
+          "hotspotId": "H09"
+        },
+        {
+          "stage": "Crane",
+          "label": "Discharged by QC-02",
+          "state": "DISCHARGE",
+          "layoutId": "L03",
+          "hotspotId": "H05"
+        },
+        {
+          "stage": "Yard",
+          "label": "Yard A12 / Stack 04",
+          "state": "YARD STORAGE",
+          "layoutId": "L06",
+          "hotspotId": "H14"
+        },
+        {
+          "stage": "Gate",
+          "label": "Truck LA-48291",
+          "state": "APPOINTMENT CONFIRMED",
+          "layoutId": "L08",
+          "hotspotId": "H20"
+        },
+        {
+          "stage": "Rail",
+          "label": "TICTF Track 04",
+          "state": "SCHEDULED",
+          "layoutId": "L09",
+          "hotspotId": "H24"
+        }
+      ],
+      "fields": [
+        {
+          "name": "container_id",
+          "label": "Container ID",
+          "type": "string",
+          "value": "EGHU4829136",
+          "ref": "hero"
+        },
+        {
+          "name": "container_type",
+          "label": "Type",
+          "type": "string",
+          "value": "40 FT HC"
+        },
+        {
+          "name": "gross_weight_kg",
+          "label": "Gross Weight",
+          "type": "integer",
+          "value": 18420,
+          "unit": "kg"
+        },
+        {
+          "name": "vessel",
+          "label": "Vessel",
+          "type": "string",
+          "value": "EVER LEGACY"
+        },
+        {
+          "name": "imo",
+          "label": "IMO",
+          "type": "string",
+          "value": "9876543"
+        },
+        {
+          "name": "berth",
+          "label": "Berth",
+          "type": "string",
+          "value": "226"
+        },
+        {
+          "name": "crane",
+          "label": "Crane",
+          "type": "string",
+          "value": "QC-02"
+        },
+        {
+          "name": "vessel_bay",
+          "label": "Vessel Bay",
+          "type": "string",
+          "value": "42"
+        },
+        {
+          "name": "yard_block",
+          "label": "Yard Block",
+          "type": "string",
+          "value": "A12"
+        },
+        {
+          "name": "yard_stack",
+          "label": "Yard Stack",
+          "type": "string",
+          "value": "A12-04"
+        },
+        {
+          "name": "truck_id",
+          "label": "Truck ID",
+          "type": "string",
+          "value": "LA-48291"
+        },
+        {
+          "name": "rail_option",
+          "label": "Rail Option",
+          "type": "string",
+          "value": "BNSF-LA-742"
+        },
+        {
+          "name": "current_status",
+          "label": "Current Status",
+          "type": "enum",
+          "value": "YARD STORAGE"
+        },
+        {
+          "name": "next_operation",
+          "label": "Next Operation",
+          "type": "enum",
+          "value": "TRUCK PICKUP"
+        },
+        {
+          "name": "planned_departure",
+          "label": "Planned Departure",
+          "type": "datetime",
+          "value": "2026-08-22 09:30"
+        }
+      ]
+    }
+  ]
+}
