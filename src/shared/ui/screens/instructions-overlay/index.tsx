@@ -145,14 +145,27 @@ export function InstructionsOverlay({
     </div>
   );
 
-  // Groups scroll as one body: on a laptop in landscape the full first-person
-  // card is taller than the viewport, and a cropped last row hides the very
-  // controls it is describing.
+  // THE BODY IS THE ONLY PART THAT SCROLLS — title and button stay put, so the
+  // CTA is reachable however little height there is.
+  //
+  // This used to be true of the GROUPED body alone, and every card that ships
+  // today is a flat `items` list (v3's first-person card is 7 tiles at
+  // `columns: 3`), so in practice nothing scrolled. On a phone in landscape the
+  // `short:` breakpoint is in force (max-height 540) and the grid resolves to
+  // two columns below `lg`, which is four rows — taller than the viewport once
+  // the title, subtitle, button and the panel's own padding are counted. The
+  // panel is centred inside a container that does not scroll, so the overflow
+  // went off BOTH edges and the button went with it.
+  //
+  // Both branches are now bounded the same way and the panel is capped to the
+  // viewport, so the overflow has somewhere to go.
+  const bodyScroll =
+    "ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain [touch-action:pan-y]";
   const body = groups?.length ? (
     // Width budget: the panel caps at 100vw-48px and adds px-10 (short: px-5)
     // of its own padding, so the body must stay inside 100vw-128px (short:
     // 100vw-88px) or the panel's overflow-hidden clips the right-hand column.
-    <div className="ui-scrollbar flex w-[min(920px,calc(100vw-128px))] short:w-[min(760px,calc(100vw-88px))] max-h-[62dvh] short:max-h-[58dvh] flex-col gap-4 short:gap-2 overflow-y-auto px-1">
+    <div className={`${bodyScroll} flex w-[min(920px,calc(100vw-128px))] short:w-[min(760px,calc(100vw-88px))] flex-col gap-4 short:gap-2 px-1`}>
       {groups.map((group) => (
         <div key={group.label} className="flex flex-col gap-2 short:gap-1.5">
           <p
@@ -166,14 +179,14 @@ export function InstructionsOverlay({
       ))}
     </div>
   ) : (
-    <div className={`grid ${gridClass} gap-4 short:gap-2 max-w-3xl px-6 short:px-2 w-full`}>
+    <div className={`${bodyScroll} grid ${gridClass} gap-4 short:gap-2 max-w-3xl px-6 short:px-2 w-full`}>
       {(instructions ?? []).map(tile)}
     </div>
   );
 
   const content = (
     <>
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex shrink-0 flex-col items-center gap-1">
         <p className="text-white text-[20px] short:text-[14px] font-semibold tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
           {title}
         </p>
@@ -191,7 +204,7 @@ export function InstructionsOverlay({
 
       <button
         onClick={onAction}
-        className={`${surfaceClass} cursor-pointer px-7 short:px-5 py-2.5 short:py-1.5 rounded-lg text-sm short:text-xs font-semibold ${buttonHoverClass} transition-colors`}
+        className={`${surfaceClass} shrink-0 cursor-pointer px-7 short:px-5 py-2.5 short:py-1.5 rounded-lg text-sm short:text-xs font-semibold ${buttonHoverClass} transition-colors`}
         style={{ ...WHITE_TEXT, ...GLASS_BLUR }}
       >
         {actionLabel}
@@ -210,16 +223,21 @@ export function InstructionsOverlay({
     >
       {contained ? (
         <div
-          className="instr-panel relative overflow-hidden rounded-3xl px-10 py-9 short:px-5 short:py-4 short:rounded-2xl flex flex-col items-center gap-5 short:gap-3 max-w-[min(1000px,calc(100vw-48px))]"
+          className="instr-panel relative overflow-hidden rounded-3xl px-10 py-9 short:px-5 short:py-4 short:rounded-2xl flex flex-col items-center gap-5 short:gap-3 max-w-[min(1000px,calc(100vw-48px))] max-h-[calc(100dvh-32px)] short:max-h-[calc(100dvh-16px)]"
           style={{ ...GLASS_BLUR, ...innerExitStyle(visible) }}
         >
           <div className="instr-panel__pan" aria-hidden />
-          <div className="relative z-10 flex flex-col items-center gap-5 short:gap-3 w-full">
+          <div className="relative z-10 flex min-h-0 w-full flex-col items-center gap-5 short:gap-3">
             {content}
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-5 short:gap-3" style={innerExitStyle(visible)}>{content}</div>
+        <div
+          className="flex max-h-[calc(100dvh-32px)] short:max-h-[calc(100dvh-16px)] min-h-0 flex-col items-center gap-5 short:gap-3"
+          style={innerExitStyle(visible)}
+        >
+          {content}
+        </div>
       )}
     </div>
   );

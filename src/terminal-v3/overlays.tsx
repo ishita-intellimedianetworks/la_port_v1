@@ -36,6 +36,46 @@ import { edgeFeather } from "./scene/model-loader/edge-feather";
 // "Home" / "currently at" are pure XZ proximity to a fixed spot; rotation is
 // ignored. Tight, so any real step away clears them.
 const HOME_REACH_UNITS = 0.8;
+
+/**
+ * How long a teleport's blackout must watch the streamer before it is allowed
+ * to believe the backlog. `useCameraAloft` flips a frame after the teleport and
+ * `StreamedModel` republishes `dressing` on the streaming tick, so for the
+ * first ~100 ms the number still describes the view being LEFT — which reads as
+ * "nothing to do". Three ticks at the authored 10 Hz covers the flip, the tick
+ * that sees it and one more to be sure.
+ */
+const SETTLE_MIN_MS = 350;
+/** Lower once the backlog is down to a tenth of its peak — the tail is the far
+ *  band, which the fog is already swallowing, and waiting it out only makes the
+ *  black screen longer for something nobody can see. */
+const SETTLE_FRACTION = 0.1;
+/** ...but never insist on better than this in absolute terms, so a small jump
+ *  with a peak of 30 is not held to 3. */
+const SETTLE_FLOOR = 8;
+
+/**
+ * A `waitUntil` predicate for `triggerFloorTransition` that holds the blackout
+ * until the streamer has finished re-dressing the view for where the camera
+ * landed.
+ *
+ * Stateful ON PURPOSE, and one per transition: "settled" is relative to how
+ * much this particular jump disturbed, which is not known until after the swap.
+ * The peak is learned by watching rather than predicted, so the same predicate
+ * works for a jump across the district and for one that barely moves.
+ */
+function dressingSettled(): () => boolean {
+  const start = performance.now();
+  let peak = 0;
+  return () => {
+    const n = useProgressStore.getState().streamDressing;
+    if (n > peak) peak = n;
+    if (performance.now() - start < SETTLE_MIN_MS) return false;
+    // Nothing ever went outstanding — a re-entry onto a view already dressed.
+    if (peak === 0) return true;
+    return n <= Math.max(SETTLE_FLOOR, peak * SETTLE_FRACTION);
+  };
+}
 const CURRENT_REACH_UNITS = 0.8;
 
 export default function Overlays() {
@@ -313,10 +353,34 @@ export default function Overlays() {
     // The authored Y is the camera's height, not the ground — probe the floor
     // and let teleportTo re-add the eye height, as Home does.
     const surfaceY = ctrl.probeFloorY(p[0], p[2], p[1]) ?? p[1];
-    triggerFloorTransition(() => {
-      ctrl.teleportTo([p[0], surfaceY, p[2]], r);
-    });
+    triggerFloorTransition(
+      () => {
+        ctrl.teleportTo([p[0], surfaceY, p[2]], r);
+      },
+      // HOLD THE BLACK UNTIL THE VIEW HAS RE-DRESSED ITSELF.
+      //
+      // This is the only transition that used to pass no predicate, so its hold
+      // was BLACKOUT_VISIBLE_MS — zero — and the fade started lifting on the
+      // same tick as the teleport. Everything the jump sets off then happened
+      // in full view: the camera drops from a `layouts[]` framing shot to
+      // standing height, `useCameraAloft` flips on the NEXT frame, and that one
+      // flip swaps the streaming bands (near 150 -> 50, mid 800 -> 250, far
+      // 6000 -> 900), snaps the fog from 6000/6174 to 900/970, and moves the
+      // sun's shadow square from the frozen whole-model framing to the
+      // following one. Behind it the streamer then re-dresses a few hundred
+      // chunks at `texUpgradesPerTick` — 8 a tick on a phone, so ~3.4 s of
+      // geometry and textures visibly sharpening. That is the flicker.
+      //
+      // None of it is made faster here; it is made INVISIBLE, which is what the
+      // blackout is for. `dressing` is the backlog, so the wait is "most of it
+      // has landed" rather than a duration — a warm cache lifts almost at once
+      // and a cold one takes as long as it takes. Bounded twice over: the last
+      // tenth is not waited for (it is the far band, which fog is swallowing
+      // anyway), and `useFadeTransition` caps any hold at MAX_BLACKOUT_WAIT_MS.
+      { waitUntil: dressingSettled() },
+    );
   }, [firstPersonPose, playerControllerRef, closeOverlays, triggerFloorTransition]);
+
 
   /** The First Person circle, or nothing. Hoisted so the dock and the
    *  instructions card are gated by the same value. */

@@ -188,9 +188,14 @@ export default function TerminalProvider({
   const triggerFloorTransition = useCallback(
     (
       swap: () => void,
-      opts?: { waitForModel?: boolean; expectedKey?: string; expectedFloorPlanUrl?: string | null },
+      opts?: {
+        waitForModel?: boolean;
+        expectedKey?: string;
+        expectedFloorPlanUrl?: string | null;
+        waitUntil?: () => boolean;
+      },
     ) => {
-      let waitUntil: (() => boolean) | undefined;
+      let waitUntil: (() => boolean) | undefined = opts?.waitUntil;
       if (opts?.expectedKey) {
         const key = opts.expectedKey;
         const plan = opts.expectedFloorPlanUrl;
@@ -202,9 +207,13 @@ export default function TerminalProvider({
         loadedModelKeyRef.current = null;
         // Also hold until the NEW floor's minimap has updated (its floor-plan is
         // set), so the fade-out reveals the new map — not the old one for a beat.
+        // ANDed with a caller's own predicate rather than replacing it, so a
+        // transition can wait for both the mount and the fill.
+        const caller = opts.waitUntil;
         waitUntil = () =>
           loadedModelKeyRef.current === key &&
-          (!plan || minimapDataRef.current?.imageUrl === plan);
+          (!plan || minimapDataRef.current?.imageUrl === plan) &&
+          (!caller || caller());
       }
       fade.transition(swap, waitUntil);
     },

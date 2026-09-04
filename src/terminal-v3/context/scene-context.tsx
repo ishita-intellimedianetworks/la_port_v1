@@ -37,7 +37,15 @@ export interface SceneContextValue {
   setNavigateFromMinimap: (fn: (x: number, z: number) => void) => void;
   triggerFloorTransition: (
     onBlack: () => void,
-    opts?: { waitForModel?: boolean; expectedKey?: string },
+    opts?: {
+      waitForModel?: boolean;
+      expectedKey?: string;
+      /** Hold the blackout until this returns true, instead of lowering the
+       *  moment the swap runs. For teleports that move the camera far enough
+       *  that the streamer has to re-dress the view — see `dressingSettled`.
+       *  Composed with `expectedKey` when both are given. */
+      waitUntil?: () => boolean;
+    },
   ) => void;
   /** Manually raise the fade — for sequenced cinematics that control blackout timing themselves. */
   fadeRaise: () => void;

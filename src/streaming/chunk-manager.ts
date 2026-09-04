@@ -99,6 +99,20 @@ export interface StreamStats {
   /** True only when textures are actually streaming as GPU-compressed KTX2:
    *  the transcoder loaded AND at least one tier asks for it. */
   ktx2Active: boolean;
+  /**
+   * How many mounted chunks are still wearing the WRONG dress for where the
+   * camera is now — a coarser tier or a smaller texture rung than their band
+   * asks for. Zero means the view has finished sharpening.
+   *
+   * Unlike `loading`, which only counts work already in flight, this is the
+   * BACKLOG: the queue `updateTextures` and `retierResident` drain at
+   * `texUpgradesPerTick` / `retierBudget` per tick. A teleport that moves the
+   * camera far — or a config swap between the ground and aerial bands — makes
+   * it jump to several hundred, and every one of those is a visible change of
+   * appearance when it lands. That is what a transition blackout has to wait
+   * out; see `handleFirstPerson` in terminal-v3/overlays.tsx.
+   */
+  dressing: number;
   byTier: Record<Tier, number>;
 }
 
@@ -177,6 +191,10 @@ export class ChunkManager {
   /** Tier swaps started per tick. Smaller than `maxLoadsPerTick`: the fill is
    *  racing a loading screen, a re-tier costs a decode against a live frame. */
   private retierBudget = 2;
+  /** Backlog of chunks wanting a sharper tier or rung — see `StreamStats.dressing`.
+   *  Written by the two passes that drain it, read only by `stats()`. */
+  private retierWanted = 0;
+  private retexWanted = 0;
   /** The device class this manager was built for. Kept beyond `resolveBudget`
    *  because `rungFor`'s texture clamp needs it. */
   private profile: DeviceProfile;
@@ -480,15 +498,20 @@ export class ChunkManager {
    */
   private updateTextures() {
     const upgrades: { st: ChunkState; dist: number }[] = [];
+    // Counted separately from `upgrades.length`, which this method drains down
+    // to the per-tick budget: the backlog is what is still OUTSTANDING after
+    // the pass, and that is the figure a blackout waits on.
+    let flips = 0;
     for (const st of this.states.values()) {
       if (!st.current || !st.group || st.retexturing) continue;
       const want = this.isTextured(st.current, st.entry);
-      if (want !== st.textured) { this.retexture(st, want); continue; }
+      if (want !== st.textured) { this.retexture(st, want); flips++; continue; }
       if (!want) continue;
       if (st.texPx !== this.rungFor(st.current, st.entry)) {
         upgrades.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
       }
     }
+    this.retexWanted = upgrades.length + flips;
     if (upgrades.length) {
       upgrades.sort((a, b) => a.dist - b.dist);
       const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
@@ -512,9 +535,13 @@ export class ChunkManager {
    * pick QUALITY here, not existence, so nothing can pop.
    */
   private residentBandTier(dist: number): Tier {
-    if (dist < this.cfg.nearDist) return "near";
-    if (dist < this.cfg.midDist) return "mid";
-    return "far";
+    const want: Tier = dist < this.cfg.nearDist ? "near" : dist < this.cfg.midDist ? "mid" : "far";
+    // Clamped to the sharpest tier this device will take. TIER_ORDER runs
+    // near -> mid -> far, so a LOWER index is sharper and the clamp is a
+    // maximum on sharpness, not on distance — the bands are unchanged, and
+    // `nearDist` still selects the 512 px texture rung either way.
+    const cap = this.cfg.sharpestTier ?? "near";
+    return TIER_ORDER.indexOf(want) < TIER_ORDER.indexOf(cap) ? cap : want;
   }
 
   private updateResident() {
@@ -591,6 +618,7 @@ export class ChunkManager {
    * scene stops sharpening rather than showing a hole.
    */
   private retierResident() {
+    this.retierWanted = 0;
     if (this.retierBudget <= 0) return;
     const cap = this.residentCapBytes();
     let resident = cap === Infinity ? 0 : this.residentBytes();
@@ -606,6 +634,7 @@ export class ChunkManager {
       want.push({ st, tier, dist, up });
     }
     if (!want.length) return;
+    this.retierWanted = want.length;
     want.sort((a, b) => a.dist - b.dist);
     for (const w of want) {
       if (started >= this.retierBudget) break;
@@ -1624,6 +1653,7 @@ export class ChunkManager {
       redownloads: this.redownloads,
       decodeRatio: this.decodeRatio,
       ktx2Active: this.ktx2 !== null && TIER_ORDER.some((t) => (this.cfg.texFormat?.[t] ?? "auto") !== "webp"),
+      dressing: this.retierWanted + this.retexWanted,
       byTier,
     };
   }

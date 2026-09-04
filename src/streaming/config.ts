@@ -63,6 +63,29 @@ export interface StreamingConfig {
    *  other on triangles, so cheap tiers save download bytes, not frame time. */
   residentTier: Tier;
   /**
+   * The SHARPEST geometry tier this device will mount, whatever the bands ask
+   * for. `"near"` is no clamp.
+   *
+   * A ceiling on quality rather than on bytes, and it earns its place because
+   * the last rung of the LOD ladder is priced very differently from the rest.
+   * Measured on this bake, over the phone's 25/100 m bands:
+   *
+   *     near band -> far tier   12.0 MB wire   192 MB   3.1 cm grid
+   *     near band -> mid tier   12.1 MB wire   190 MB   1.6 cm grid
+   *     near band -> near tier  15.7 MB wire   198 MB   0.4 cm grid
+   *
+   * Going from `far` to `mid` halves the position error for a tenth of a
+   * megabyte — it is nearly free, because `mid` is where the decimation has
+   * already happened and only the quantisation differs. Going on to `near`
+   * costs another 3.6 MB for a step from 1.6 cm to 0.4 cm, which is below what
+   * a phone screen resolves at walking distance.
+   *
+   * The BANDS still do their job underneath: this only clamps how sharp the
+   * near band may resolve, and `nearDist` continues to select the 512 px
+   * texture rung regardless of what the geometry does.
+   */
+  sharpestTier: Tier;
+  /**
    * Free the JS-heap copy of a chunk's vertex data once the GPU has it
    * ("resident" only). Default false.
    *
@@ -215,6 +238,8 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
     wireBudgetMB: 0,
 
     geometryMode: s.geometry ?? "streamed",
+    // No clamp unless a constrained profile applies one; see `residencyClamp`.
+    sharpestTier: "near" as Tier,
     residentTier: s.residentTier ?? "near",
     // Defaults off, unlike upstream — see the field doc. A bake that asks for
     // it explicitly still gets it; nothing turns it on by omission.
@@ -362,6 +387,11 @@ const MOBILE = {
    * holds ~259 MB of the same model on the same phone without losing context.
    */
   residentBudgetMB: 240,
+  /** The sharpest tier a phone mounts — see `StreamingConfig.sharpestTier` for
+   *  the three-way measurement this comes from. `mid` is where the curve bends:
+   *  it buys half the position error of `far` for a tenth of a megabyte, and
+   *  `near` costs 3.6 MB more for a step the screen cannot resolve. */
+  sharpestTier: "mid" as Tier,
   /**
    * The session download budget, MB. Against this bake:
    *
@@ -555,13 +585,33 @@ function buildAerial(raw: StreamConfig): StreamingConfig | null {
  * decides. Anything genuinely per-view stays in the individual resolvers.
  */
 function residencyClamp(c: StreamingConfig, p: DeviceProfile): StreamingConfig {
-  if (p === "desktop") return c;
+  if (p === "desktop") {
+    // DESKTOP GETS THE HEAP COPY BACK, and nothing else from this function.
+    //
+    // Three keeps a chunk's decoded arrays after upload, so a resident chunk is
+    // charged to the JS heap AND to video memory — the same ~198 MB twice, for
+    // a measured 440 MB total. Freeing the copy is 440 -> 243 MB and changes
+    // nothing on screen.
+    //
+    // It was off here only because it used to be all-or-nothing and would have
+    // broken picking. `pick` settled that: the ground keeps its arrays and stays
+    // raycastable, which is what the route ribbon's probe and walk-to actually
+    // resolve against. What desktop gives up is the same thing a phone already
+    // gives up — a ray no longer hits a BUILDING, it passes through to the
+    // ground behind it and walk-to snaps from there. Portals are untouched;
+    // they match by name against the separate interior GLBs, not against chunks.
+    return { ...c, freeCpuArrays: true };
+  }
   const tier = MOBILE.residentTier;
   return {
     ...c,
     residentTier: tier,
     freeCpuArrays: true,
     residentBudgetMB: MOBILE.residentBudgetMB,
+    // MOBILE ONLY: a "low" machine is a full-size screen at desk distance,
+    // where the step from 1.6 cm to 0.4 cm is visible and it can afford the
+    // 3.6 MB, so it keeps the whole ladder.
+    sharpestTier: p === "mobile" ? MOBILE.sharpestTier : c.sharpestTier,
     // Mobile only: this budget is about the network, and "low" is a full-size
     // machine on a real connection whose problem is its GPU.
     wireBudgetMB: p === "mobile" ? MOBILE.wireBudgetMB : 0,

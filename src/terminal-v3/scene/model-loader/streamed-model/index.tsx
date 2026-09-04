@@ -190,6 +190,11 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
     m.update(camera);
     const s = m.stats();
     onStatsRef.current?.(s);
+    // Published every tick, not just during the opening fill: a teleport
+    // re-dresses the whole view long after `reported` has latched, and the
+    // transition blackout for the bottom bar's First Person circle waits on
+    // exactly this. Cheap — the store drops a write that changes nothing.
+    useProgressStore.getState().setStreamDressing(s.dressing);
     if (reported.current) return;
 
     // `frac` is the share of the opening view that has actually landed. Chunks

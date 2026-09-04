@@ -31,6 +31,18 @@ export type ProgressState = {
    * one's. It stays monotonic WITHIN a mount.
    */
   streamProgress: number;
+  /**
+   * How many mounted chunks are still wearing the wrong tier or texture rung
+   * for where the camera is — `StreamStats.dressing`, republished here so an
+   * HTML overlay outside the canvas can read it.
+   *
+   * The ONE value in this store that is neither monotonic nor a fraction: it
+   * rises the moment the camera jumps and falls as the streamer catches up, and
+   * a transition blackout holds until it has. Everything else here describes a
+   * load that happens once; this describes a view that re-dresses every time
+   * the camera moves a long way.
+   */
+  streamDressing: number;
   assetsWarmed: boolean;
   isLoaded: boolean;
   isRevealed: boolean;
@@ -39,6 +51,8 @@ export type ProgressState = {
   setRevealProgress: (value: number) => void;
   setPrefetchProgress: (value: number) => void;
   setStreamProgress: (value: number) => void;
+  /** Free-moving, unlike the setters above — see `streamDressing`. */
+  setStreamDressing: (value: number) => void;
   /** Back to 0 for a fresh streamer mount. See `streamProgress`. */
   resetStreamProgress: () => void;
   setAssetsWarmed: (value: boolean) => void;
@@ -53,6 +67,7 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
   revealProgress: 0,
   prefetchProgress: 0,
   streamProgress: 0,
+  streamDressing: 0,
   assetsWarmed: false,
   isLoaded: false,
   isRevealed: false,
@@ -65,6 +80,7 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
   setPrefetchProgress: (value) => set({ prefetchProgress: Math.max(get().prefetchProgress, value) }),
   setStreamProgress: (value) => set({ streamProgress: Math.max(get().streamProgress, value) }),
   resetStreamProgress: () => set({ streamProgress: 0 }),
+  setStreamDressing: (value) => set({ streamDressing: value }),
 
   setAssetsWarmed: (value) => set({ assetsWarmed: value }),
   setLoaded: (value) => set({ isLoaded: value }),

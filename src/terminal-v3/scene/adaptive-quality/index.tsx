@@ -32,8 +32,22 @@ import { useFrame, useThree } from "@react-three/fiber";
  *  machines that look perfectly fine at 40. */
 const SLOW_MS = 50;
 /** Climb back only when there is real headroom, so the two thresholds cannot
- *  chatter against each other. 25 ms is 40 fps. */
-const FAST_MS = 25;
+ *  chatter against each other.
+ *
+ *  RAISED FROM 25 ms (40 fps) BECAUSE THE RENDER LOOP IS NOW CAPPED. `delta`
+ *  here is wall-clock time between RENDERED frames, and CanvasWithWrapper's
+ *  FrameLimiter holds that at the cap — 33 ms on a low-power device at 30 fps —
+ *  however little work the frame actually took. Against a 25 ms threshold that
+ *  reads as "no headroom" on every device forever: DPR could still fall on a
+ *  stall and could never climb back, so one slow second during a chunk decode
+ *  would soften the canvas permanently. That is the blur this whole DPR ladder
+ *  exists to avoid, arrived at from the other direction.
+ *
+ *  36 ms clears the 30 fps cap (33.3) with a little slack and still sits well
+ *  under SLOW_MS, so the two keep 14 ms of hysteresis between them. KEEP IT
+ *  ABOVE `1000 / FPS_CAP_LOW_POWER` — lower the cap and this has to move too,
+ *  or the ratchet comes back. */
+const FAST_MS = 36;
 /** Seconds of frames per decision. */
 const WINDOW = 1;
 /** How far quality may fall. Below 0.75 the canvas is soft enough that the
