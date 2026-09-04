@@ -544,8 +544,27 @@ export class ChunkManager {
     return TIER_ORDER.indexOf(want) < TIER_ORDER.indexOf(cap) ? cap : want;
   }
 
+  /** The radius residency is bounded by, Infinity on desktop. Whole-model
+   *  residency is ~190 MB — 91% of a phone's budget — so nothing else fits
+   *  beside it. Fog hides the boundary: StreamFog matches the sky horizon and
+   *  fogRange ends the fade just inside it. */
+  private residentRadius(): number {
+    return this.profile === "desktop" ? Infinity : this.cfg.unloadDist;
+  }
+
   private updateResident() {
     this.flushReveals();
+
+    // Beyond the radius, come down. Hysteresis so a chunk sitting on the line
+    // cannot load/unload every tick. Distance only — no frustum test, so the
+    // set stays 360 degrees and turning never costs anything.
+    const radius = this.residentRadius();
+    if (radius !== Infinity) {
+      for (const st of this.states.values()) {
+        if (!st.current) continue;
+        if (this.surfaceDist(this._cam, st.entry) > radius + this.cfg.hysteresis) this.unmount(st);
+      }
+    }
 
     // Anything still missing, nearest-first. Re-scanned each tick rather than
     // consumed from a queue, so a failed load is retried — bounded by
@@ -555,7 +574,9 @@ export class ChunkManager {
       if (st.current || st.loadingTier) continue;
       if (!st.entry.lods.length) continue;
       if ((this.mountFails.get(st.entry.id) ?? 0) >= ChunkManager.MAX_MOUNT_FAILS) continue;
-      missing.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
+      const d = this.surfaceDist(this._cam, st.entry);
+      if (d > radius) continue;
+      missing.push({ st, dist: d });
     }
     if (missing.length) {
       missing.sort((a, b) => a.dist - b.dist);
@@ -594,6 +615,10 @@ export class ChunkManager {
 
     this.retierResident();
     this.updateTextures();
+    // Residency skips update()'s eviction pass entirely, so idle rungs from a
+    // view swap (the dollhouse pins 128, the ground asks 512/256) were held for
+    // the session. Bounded by budget.texMB.
+    this.evictTextures();
 
     // Every placement, once — the resident set never changes, so sync()'s
     // signature check early-outs on every subsequent tick.
@@ -623,28 +648,32 @@ export class ChunkManager {
     const cap = this.residentCapBytes();
     let resident = cap === Infinity ? 0 : this.residentBytes();
     let started = 0;
-    const want: { st: ChunkState; tier: Tier; dist: number; up: boolean }[] = [];
+    const want: { st: ChunkState; tier: Tier; dist: number }[] = [];
     for (const st of this.states.values()) {
       if (!st.current || st.loadingTier || this.hidden.has(st.entry.id)) continue;
       const dist = this.surfaceDist(this._cam, st.entry);
+      if (dist > this.residentRadius()) continue;
       const tier = this.resolveTier(st.entry, this.residentBandTier(dist));
       if (!tier || tier === st.current) continue;
-      // TIER_ORDER is near -> mid -> far, so a LOWER index is sharper.
-      const up = TIER_ORDER.indexOf(tier) < TIER_ORDER.indexOf(st.current);
-      want.push({ st, tier, dist, up });
+      // UPGRADES ONLY (TIER_ORDER is near -> mid -> far, so lower is sharper).
+      // A downgrade frees little and costs a full re-download, because
+      // freeCpuArrays nulled the cached arrays and the cheaper tier cannot be
+      // re-uploaded. Cycling dollhouse <-> first person would otherwise re-fetch
+      // the same chunks both ways forever. Holding the sharper tier is bounded
+      // by residentBudgetMB, which refuses further upgrades.
+      if (TIER_ORDER.indexOf(tier) >= TIER_ORDER.indexOf(st.current)) continue;
+      want.push({ st, tier, dist });
     }
     if (!want.length) return;
     this.retierWanted = want.length;
     want.sort((a, b) => a.dist - b.dist);
     for (const w of want) {
       if (started >= this.retierBudget) break;
-      if (w.up) {
-        if (this.overWireBudget()) continue;
-        if (cap !== Infinity) {
-          const delta = this.estGeomBytes(w.st.entry, w.tier) - this.estGeomBytes(w.st.entry, w.st.current!);
-          if (resident + delta > cap) continue;
-          resident += delta;
-        }
+      if (this.overWireBudget()) continue;
+      if (cap !== Infinity) {
+        const delta = this.estGeomBytes(w.st.entry, w.tier) - this.estGeomBytes(w.st.entry, w.st.current!);
+        if (resident + delta > cap) continue;
+        resident += delta;
       }
       started++;
       this.mount(w.st, w.tier);
@@ -1103,7 +1132,16 @@ export class ChunkManager {
       }
       st.textured = textured;
       st.texPx = textured ? px : null;
-      if (st.group && st.group !== group) this.scene.remove(st.group);
+      if (st.group && st.group !== group) {
+        this.scene.remove(st.group);
+        // AND free its GPU buffers. `scene.remove` alone does not: three keeps
+        // them uploaded until dispose(). Nothing unmounts under residency, so a
+        // tier swap that only removed the old group leaked it for the session —
+        // every dollhouse round-trip re-tiers and leaked again. The CPU arrays
+        // stay in cpuCache (or were already freed), so this costs a re-upload at
+        // most, exactly as unmount() does.
+        this.disposeGeometry(st.group);
+      }
       // Must precede the add: the arrays go on the next render's upload, and the
       // bounds have to be computed while there is still something to compute.
       if (this.shouldFreeCpu(st.entry.id)) {

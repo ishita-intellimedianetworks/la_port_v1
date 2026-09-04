@@ -84,6 +84,34 @@ const OFF_MESH_M = 8;
  *  The walk starts after it so the marker is seen arriving before it moves. */
 const TELEPORT_SETTLE_MS = FADE_IN_MS + 120 + BLACKOUT_VISIBLE_MS + FADE_OUT_MS + 80;
 
+/** Long-edge cap for the map's decoded layers. 1280 keeps the plan at ~5.6 MB
+ *  instead of 54.7; a phone shows it a few hundred px tall. */
+const MAP_MAX_EDGE = 1280;
+const MAP_MAX_EDGE_DESKTOP = 2048;
+
+/** Downscale a map layer on load and drop the full-size decode: a bitmap is
+ *  w x h x 4 whatever the file weighs, and terminal-plan.webp is 886 KB on the
+ *  wire but 54.7 MB in memory. Only the aspect ratio is read off these
+ *  (containRect); naturalWidth/Height/src are carried for the draw code. */
+function shrinkForMap(img: HTMLImageElement, maxEdge: number): HTMLImageElement {
+  const long = Math.max(img.naturalWidth, img.naturalHeight);
+  if (!long || long <= maxEdge) return img;
+  const k = maxEdge / long;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(img.naturalWidth * k));
+  c.height = Math.max(1, Math.round(img.naturalHeight * k));
+  const cx = c.getContext("2d");
+  if (!cx) return img;
+  cx.imageSmoothingEnabled = true;
+  cx.imageSmoothingQuality = "high";
+  cx.drawImage(img, 0, 0, c.width, c.height);
+  return Object.assign(c, {
+    naturalWidth: c.width,
+    naturalHeight: c.height,
+    src: img.src,
+  }) as unknown as HTMLImageElement;
+}
+
 export function useMinimap() {
   const { playerControllerRef, minimapData, navigateFromMinimap, activeFloor, isMoving, triggerFloorTransition, layoutsOpen, setLayoutsOpen, fovOpen, setFovOpen } = useScene();
 
@@ -682,8 +710,9 @@ export function useMinimap() {
   // through the whole 500ms in-animation.
   useEffect(() => {
     if (!planUrl) return;
+    const maxEdge = isLowPower() ? MAP_MAX_EDGE : MAP_MAX_EDGE_DESKTOP;
     const img = new Image();
-    img.onload = () => { planRef.current = img; };
+    img.onload = () => { planRef.current = shrinkForMap(img, maxEdge); };
     img.src = planUrl;
   }, [planUrl]);
 
@@ -692,8 +721,9 @@ export function useMinimap() {
   // simply appear behind it a beat later.
   useEffect(() => {
     if (!baseUrl) return;
+    const maxEdge = isLowPower() ? MAP_MAX_EDGE : MAP_MAX_EDGE_DESKTOP;
     const img = new Image();
-    img.onload = () => { baseRef.current = img; };
+    img.onload = () => { baseRef.current = shrinkForMap(img, maxEdge); };
     img.src = baseUrl;
   }, [baseUrl]);
 
@@ -903,11 +933,17 @@ export function useMinimap() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    // CAPPED, unlike the raw devicePixelRatio this used. A phone reports 3, so a
+    // maximised map allocated a backing store 9x its logical size — ~13 MB —
+    // while the 3D canvas beside it is held to 1.25. Two of those (this plus the
+    // static cache below) is enough to lose the context on a device already
+    // carrying ~190 MB of resident geometry.
+    const lowPower = isLowPower();
+    const dpr = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
     let raf: number;
     // Owned by this effect, so a canvas swap (floor change, resize remount)
     // releases the backing store rather than leaking one per remount.
-    const statics = createStaticLayers(isLowPower());
+    const statics = createStaticLayers(lowPower);
 
     // Track canvas backing-store size so we only resize on actual change.
     // Setting canvas.width/height every frame triggers a buffer realloc and

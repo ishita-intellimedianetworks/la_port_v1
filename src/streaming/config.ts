@@ -315,24 +315,16 @@ export function streamVariant(id: StreamVariantId): StreamVariant {
 // it tracks any retune. Phones enforce a VRAM ceiling of a few hundred MB
 // before killing the WebGL context.
 const MOBILE = {
-  /**
-   * A phone gives up QUALITY, not distance, so `far` is left alone (farScale 1)
-   * and `mid` pulls in hard instead, resolving most of the frame to the `far`
-   * rung. Measured: the three tiers land within 20% of each other in decoded
-   * memory, so LOD does not buy VRAM, and the frustum cull already keeps the
-   * full 900 m radius under the mobile ceiling. A shrunken radius reads as the
-   * world ending, and fog cannot hide it in tens of metres.
-   *
-   * `near` does come in, because under residency it no longer selects geometry
-   * at all — `rungBand()` is its only live consumer, and what it selects is the
-   * 512 TEXTURE rung. Halving it is how a phone limits that spend at the source
-   * rather than truncating the ladder mid-walk. Check `tierFor`, the
-   * `effUnload` floor, the eviction guard and the pre-mount cap before changing
-   * it; all read `nearDist` on the streamed path.
-   */
+  /** `far` comes in on a phone: whole-model residency is ~190 MB, 91% of what
+   *  the device has, so nothing else fits beside it. 0.55 puts the radius at
+   *  ~495 m and geometry at ~146 MB. Only viable because fog hides the
+   *  boundary — move it together with the fog `start` below. */
+  farScale: 0.55,
+  /** Halved because under residency `nearDist` no longer selects geometry at
+   *  all — `rungBand()` is its only live consumer, and what it picks is the
+   *  512 texture rung. This limits that spend at the source. */
   nearScale: 0.5,
   midScale: 0.4,
-  farScale: 1,
   /**
    * Per-tier ceilings, not a scale, and `near` is not stepped down: with KTX2
    * the full 512 rung (12.3 MB VRAM over this bake's 72 images) is cheaper than
@@ -430,9 +422,19 @@ function mobileProfile(c: StreamingConfig): StreamingConfig {
     transmission: MOBILE.transmission,
     texUpgradesPerTick: Math.max(1, Math.round(c.texUpgradesPerTick * MOBILE.texUpgradesScale)),
     maxDpr: Math.min(c.maxDpr, MOBILE.maxDpr),
-    // No fog override: `far` has not moved, so the fade keeps the full depth it
-    // was tuned with. The cache can be smaller, but it must still exceed the
-    // peak mounted count or the LRU does nothing.
+    // Fog moves WITH the radius. The authored "far" start would leave a ~30 m
+    // fade against a 405 m boundary; "midfar" puts it at (mid+far)/2 = ~252 m,
+    // so geometry is fully dissolved into the sky before it stops existing.
+    // A FRACTION of the unload radius, not a band name — THE DENSITY DIAL.
+    // three's Fog is linear, so there is no density term: the fade runs 0 at
+    // `near` to 1 at `far`, and how far out it STARTS is the only thing that
+    // sets how thick it reads. 0.7 puts it at ~374 m against a 534 m end, so
+    // nothing within 374 m is touched at all and the last 160 m carries the
+    // whole fade. Raise it for lighter and further, lower it for a longer,
+    // heavier fade; the authored "far" would leave ~30 m, which is an edge.
+    fog: { ...c.fog, start: 0.7 },
+    // The cache can be smaller, but must still exceed the peak mounted count or
+    // the LRU does nothing.
     cacheLimit: Math.max(64, Math.round(c.cacheLimit * 0.4)),
     // Geometry mode is NOT overridden: a phone runs whatever the bake authors.
     // Forcing "streamed" here re-arms the bands, the frustum gate, the unload
@@ -707,7 +709,14 @@ export function resolveDollhouseConfig(
       maxDpr: Math.min(dollhouse.maxDpr, LOW.maxDpr),
     }, p);
   }
-  return residencyClamp({ ...dollhouse, maxLoadsPerTick: MOBILE.loadsPerTick }, p);
+  // Fog stays ENABLED here even though the overview authors it off, and pushed
+  // past the model instead. `scene.fog` going null and non-null is what marks
+  // every material for recompile; keeping one Fog installed for the session
+  // means a view swap only moves its near/far. Invisible at this range.
+  return residencyClamp(
+    { ...dollhouse, maxLoadsPerTick: MOBILE.loadsPerTick, fog: { ...dollhouse.fog, enabled: true } },
+    p,
+  );
 }
 
 /**

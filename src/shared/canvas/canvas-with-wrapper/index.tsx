@@ -37,45 +37,15 @@ const GradeExposure: FunctionComponent = () => {
   return null;
 };
 
-/**
- * Frames per second the render loop is allowed to run at.
- *
- * THE SCENE IS FILL- AND DRAW-BOUND, NOT FRAME-BOUND. The resident set is 345
- * chunks over 1,903 material splits, so every rendered frame is ~1,900 draw
- * calls whether or not anything moved — and with R3F's default loop that ran as
- * fast as the panel allowed, forever, including while the player stood still.
- * On a phone that is a sustained thermal load with nothing to show for it: this
- * is click-to-walk, so the camera is stationary most of the time, and the frames
- * in between are redraws of an identical image.
- *
- * Halving the rate halves GPU and CPU work outright, which is a far larger and
- * far cheaper win than anything `AdaptiveQuality` can do — and one it cannot
- * reach on its own, because it only reacts above 50 ms/frame. A handset holding
- * a comfortable 45 fps never trips it and simply runs hot.
- *
- * 60 on a desktop caps 120/144 Hz panels, which were spending three to five
- * thousand draw calls a second on refreshes nobody asked for.
- */
+/** Render-rate ceiling. Every frame is ~1,900 draw calls whether or not
+ *  anything moved, and the loop ran flat out even while standing still. */
 const FPS_CAP = 60;
 const FPS_CAP_LOW_POWER = 30;
 
-/**
- * Rate-limits the render loop. Mounted inside the Canvas because it needs the
- * R3F store; renders nothing.
- *
- * Works with `frameloop="demand"`, where R3F draws only when something calls
- * `invalidate()`. The rAF below still fires at panel rate — it costs a timestamp
- * comparison — but it only invalidates on the interval, so the RENDER rate is
- * what is capped, not the callback rate. Anything else in the app that calls
- * `invalidate()` (drei controls, a transition) still gets its frame immediately,
- * so this is a ceiling rather than a fixed cadence.
- *
- * Deliberately NOT `useFrame`: that runs inside the loop being limited, so it
- * could only ever observe frames, not schedule them.
- */
+/** Rate-limits the render loop. Pairs with `frameloop="demand"`: rAF still ticks
+ *  at panel rate but only invalidates on the interval, so the RENDER rate is
+ *  capped. Other callers of `invalidate()` still get their frame at once. */
 const FrameLimiter: FunctionComponent<{ fps: number }> = ({ fps }) => {
-  // Read through the store rather than subscribing — `invalidate` is stable for
-  // the life of the canvas and the same reasoning as GradeExposure applies.
   const store = useStore();
   useEffect(() => {
     const step = 1000 / fps;
@@ -144,19 +114,23 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             width: "100%",
             position: "relative",
             touchAction: "none",
-            // Grades the 3D image only: the glass UI and drei's Html portals
-            // are siblings of this element, so they stay untinted.
+            // Grades the 3D image only — the glass UI and drei's Html portals
+            // are siblings, so they stay untinted. Device-independent on
+            // purpose: this is a DOM style, and branching it on isLowPower()
+            // mismatches hydration (SSR has no window and answers false).
             filter,
           }}
           gl={{
-            // MSAA off on constrained devices: a multisampled attachment is
-            // ~4× the framebuffer (~29 MB on a landscape phone at DPR 1.5) that
-            // `residentBytes()` cannot see, and the aliasing it hides is barely
-            // visible at that size. Context-creation flag — fixed for the life
-            // of the canvas, so it uses the same `isLowPower()` as shadows/dpr.
+            // Off on low power: a multisampled attachment is ~4x the
+            // framebuffer and invisible to `residentBytes()`. Tried twice, the
+            // phone lost its context both times. It only becomes affordable once
+            // the resident set shrinks — see the resident radius.
             antialias: !lowPower,
             outputColorSpace: THREE.SRGBColorSpace,
-            toneMapping: THREE.NeutralToneMapping
+            // Per-fragment, and a phone is fill-bound first. Off there:
+            // highlights clip instead of rolling off, and `toneMappingExposure`
+            // goes inert with it.
+            toneMapping: lowPower ? THREE.NoToneMapping : THREE.NeutralToneMapping
           }}
           // Paired with FrameLimiter above: R3F draws only when invalidated, and
           // that component is what invalidates, on an interval. Without the
@@ -175,12 +149,10 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
               console.error(
                 "[canvas] WebGL context LOST — the render loop has stopped. " +
                   "On a phone this is usually VRAM. " +
-                  `Streaming GPU budget cut to ${Math.round(scale * 100)}% for this session — ` +
-                  "which only bites in STREAMED mode: updateResident() returns before every " +
-                  "budget check, so under residency this call is advisory and the ceiling has " +
-                  "to be held by freeCpuArrays and the resident tier instead. A residency " +
-                  "session that has freed its CPU arrays cannot repopulate its buffers either, " +
-                  "so recovery there means reloading the page, not restoring in place.",
+                  `Streaming GPU budget cut to ${Math.round(scale * 100)}%, which only ` +
+                  "bites in streamed mode — residency holds its ceiling with freeCpuArrays " +
+                  "and the resident tier, and cannot repopulate freed buffers, so recovery " +
+                  "there is a page reload.",
                 e,
               );
               // Without this the browser may decline to restore at all.

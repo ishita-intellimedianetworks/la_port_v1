@@ -5,7 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import isLowPower from "@/shared/runtime";
 import { useSkyStore } from "@/terminal-v3/stores/sky-store";
-import { sampleSky } from "./palette";
+import { sampleSky, SKY_HORIZON } from "./palette";
 
 /**
  * SkyDome — the `open-sea` study's analytic sky, running here as the backdrop.
@@ -221,6 +221,8 @@ export default function SkyDome({
     (u.uSun.value as THREE.Color).copy(s.sun);
     (u.uSunDir.value as THREE.Vector3).copy(s.sunDir);
     horizon.current.copy(s.horizon);
+    SKY_HORIZON.color.copy(s.horizon);
+    SKY_HORIZON.isSet = true;
   }, [t, aim, material]);
 
   // The material is ours, not R3F's (it comes in as a prop, not a JSX child),

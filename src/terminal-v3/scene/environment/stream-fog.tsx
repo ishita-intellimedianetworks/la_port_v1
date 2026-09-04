@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { fogRange, type StreamingConfig } from "@/streaming/config";
+import { SKY_HORIZON } from "./sky/palette";
 
 /**
  * StreamFog — the thing that lets the download radius be SMALL.
@@ -53,21 +54,40 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
     fog.near = range.near;
     fog.far = range.far;
     if (authored) fog.color.set(authored);
-    scene.fog = fog;
+    if (scene.fog !== fog) scene.fog = fog;
     ours.current = fog;
-    return () => {
-      if (scene.fog === fog) scene.fog = null;
-      if (ours.current === fog) ours.current = null;
-    };
+    // NO CLEANUP HERE. It used to null `ours.current`, which defeated the reuse
+    // directly above: a band retune ran the cleanup first, so the next pass
+    // found no Fog to reuse, built a new object, and three marked every material
+    // in the scene for recompile. That is the blink a second or two after the
+    // blackout lifts — the dollhouse authors fog off and the ground authors it
+    // on, so entering first person swapped the object exactly once, mid-view.
+    // Detaching belongs to unmount, below.
   }, [scene, range?.near, range?.far, authored]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(
+    () => () => {
+      if (scene.fog === ours.current) scene.fog = null;
+      ours.current = null;
+    },
+    [scene],
+  );
 
   useFrame(() => {
     if (authored) return;
     const fog = ours.current;
     if (!fog || scene.fog !== fog) return;
+    // The SKY's horizon colour, not `scene.background`. SkyDome eases the
+    // background black -> horizon across its fade, so sampling it made the fog
+    // BLACK for the first second or two and then drift up to sky colour — read
+    // as "the fog arrives late". The dome publishes the horizon it is actually
+    // drawing, so this matches where the two meet from the first frame.
+    if (SKY_HORIZON.isSet) {
+      fog.color.copy(SKY_HORIZON.color);
+      return;
+    }
+    // Sites with no dome (sky.mode "off") keep the old rule.
     const bg = scene.background;
-    // Only a Color background is something to match. Inside an interior the
-    // background is the HDR texture, and there is no streamed fog there anyway.
     if (bg instanceof THREE.Color) fog.color.copy(bg);
   });
 

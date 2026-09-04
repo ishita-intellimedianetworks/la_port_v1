@@ -673,8 +673,15 @@ export function SceneContent({
 
   useEffect(() => {
     if (skipEffects || !revealComplete) return;
-    gl.domElement.classList.remove("htl-main-loading", "htl-main-revealing");
-    gl.domElement.classList.add("htl-main-ready");
+    const el = gl.domElement;
+    el.classList.remove("htl-main-loading", "htl-main-revealing");
+    el.classList.add("htl-main-ready");
+    // Then drop it. `htl-main-ready` is blur(0) plus `will-change: filter`,
+    // which pins the canvas on its own composited layer for the rest of the
+    // session — the sharpen needs the class, nothing after it does. 450ms
+    // clears the 0.4s transition.
+    const t = setTimeout(() => el.classList.remove("htl-main-ready"), 450);
+    return () => clearTimeout(t);
   }, [skipEffects, revealComplete, gl]);
 
   const roomZonesMapRef = useRef<Map<string, RoomZone[]>>(new Map());

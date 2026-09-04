@@ -314,3 +314,15 @@ export function lightingForT(t: number, aim?: SunAim | null): SkyLighting {
     hemiGroundColor: hex(s.haze),
   };
 }
+
+/**
+ * The horizon colour the dome is currently drawing, published for StreamFog.
+ * Fog and sky must agree where they meet or a band appears at the boundary —
+ * and `scene.background` cannot serve, because SkyDome eases it in over its
+ * fade while the dome shows the horizon immediately. Written by SkyDome each
+ * time the palette resolves; `isSet` stays false on sites with no dome.
+ */
+export const SKY_HORIZON: { color: THREE.Color; isSet: boolean } = {
+  color: new THREE.Color(0x000000),
+  isSet: false,
+};

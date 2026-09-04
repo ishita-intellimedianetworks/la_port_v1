@@ -66,7 +66,10 @@ const MARGIN = 0.18;
  * case is a slightly soft frame, never a memory spike. 8 Mpx ≈ 32 MB RGBA.
  */
 const MAX_PX = 8_000_000;
-const MAX_PX_LOW_POWER = 4_000_000;
+// 1.5 M px = ~6 MB of backing store. Was 4 M (~16 MB), which together with the
+// map's own canvas was ~29 MB appearing the moment the map is maximised — on a
+// phone already near its ceiling, that is what dropped the WebGL context.
+const MAX_PX_LOW_POWER = 1_500_000;
 
 /** Scale drift tolerated before rebuilding mid-gesture. */
 const SCALE_LO = 0.8;
