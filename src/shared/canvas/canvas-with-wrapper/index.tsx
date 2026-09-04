@@ -121,11 +121,13 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             filter,
           }}
           gl={{
-            // Off on low power: a multisampled attachment is ~4x the
-            // framebuffer and invisible to `residentBytes()`. Tried twice, the
-            // phone lost its context both times. It only becomes affordable once
-            // the resident set shrinks — see the resident radius.
-            antialias: !lowPower,
+            // ON EVERYWHERE, as it was before the memory work. It was briefly
+            // off on low power to reclaim the ~20 MB multisample attachment,
+            // and turning it back on lost the context twice — but that was at
+            // 208 MB resident. The fog radius took the phone to 164 MB, so the
+            // attachment now fits with room to spare, and a phone at DPR 1.25
+            // on a 3x panel is the device that needs edge AA most.
+            antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
             // Per-fragment, and a phone is fill-bound first. Off there:
             // highlights clip instead of rolling off, and `toneMappingExposure`
