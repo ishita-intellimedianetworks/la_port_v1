@@ -49,10 +49,12 @@ const BEAD_PX = 24;
  *  Bigger than the mouse figure because a fingertip covers ~9 mm of glass and
  *  you cannot see through it — but only a little, because what a finger needs
  *  is a big enough TARGET, and the target is COLLIDER_MULT_TOUCH below, not
- *  this. 34 made the beads themselves crowd a phone screen; dropping to 26 is
- *  a ~24% smaller marker, and the collider multiplier is raised to match so
- *  the thing you are actually aiming at does not move at all. */
-const BEAD_PX_TOUCH = 26;
+ *  this. 34 made the beads themselves crowd a phone screen; 26 was better and
+ *  still read heavy, so this is 22 — a ~35% smaller marker than the original
+ *  and ~15% smaller than 26. Each of those steps raised the collider
+ *  multiplier to match, so the thing you are actually aiming at has never
+ *  moved: it is 67.6 px across at every one of the three bead sizes. */
+const BEAD_PX_TOUCH = 22;
 
 /** Bounds on the world radius the rule may ask for, as a multiple of the
  *  authored `size`. The floor keeps a marker from collapsing to nothing at the
@@ -74,13 +76,15 @@ const MAX_SCALE_TOUCH = 4;
  *  target is `COLLIDER_MULT / 2` times the bead's width on screen, at every
  *  distance. 3.5 gives a 42 px square around a 24 px bead (fine for a mouse).
  *
- *  Touch is sized from the TARGET backwards: 5.2 around a 26 px bead is
- *  5.2 x 13 = 67.6 px, which is what 4 around the old 34 px bead gave. So the
- *  marker got smaller and the thing a fingertip has to hit did not — still
- *  comfortably past the ~44 px minimum. Shrink the bead again and this has to
- *  rise again, or the two silently re-couple. */
+ *  Touch is sized from the TARGET backwards, and the target is the fixed
+ *  point: 4 x 34 px, 5.2 x 26 px and now 6.15 x 22 px all come to 67.6 px
+ *  across (6.15 x 11 = 67.65). So three times the bead has shrunk and three
+ *  times what a fingertip has to hit has not — still comfortably past the
+ *  ~44 px minimum. Shrink the bead a fourth time and this has to rise again:
+ *  COLLIDER_MULT_TOUCH = 67.6 / (BEAD_PX_TOUCH / 2). Forget it and the two
+ *  silently re-couple, which is the bug this note exists to prevent. */
 const COLLIDER_MULT = 3.5;
-const COLLIDER_MULT_TOUCH = 5.2;
+const COLLIDER_MULT_TOUCH = 6.15;
 
 /** How far a finger may roll between touchdown and lift and still count as a
  *  tap rather than the start of a camera drag (CSS px). */
@@ -372,10 +376,12 @@ export function Hotspot({
               ...NAV_GLASS,
               opacity: hovered ? 1 : 0,
               transition: "opacity 200ms",
-              // Lifted clear of the BEAD, so it has to grow with it — at the
-              // touch size the desktop 26 px put the pill's lower edge inside
-              // the marker.
-              transform: `translateY(${touchUi ? -34 : -26}px)`,
+              // Lifted clear of the BEAD, so it has to track it — at the touch
+              // size the desktop 26 px put the pill's lower edge inside the
+              // marker. Measured from the bead's TOP EDGE, not its centre: the
+              // touch bead's radius is BEAD_PX_TOUCH / 2, so -32 leaves the
+              // same 21 px of air above it that -34 left above the 26 px bead.
+              transform: `translateY(${touchUi ? -32 : -26}px)`,
               color: "var(--nav-text)",
               padding: touchUi ? "6px 14px" : "5px 12px",
               borderRadius: 999,

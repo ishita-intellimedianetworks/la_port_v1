@@ -30,17 +30,17 @@ import { DebugPanel } from "./overlay/debug-panel";
 import { DebugCameraEditor } from "./overlay/debug-panel/camera-editor";
 import { tick } from "@/shared/runtime/diagnostics";
 import { useSite } from "@/config/context";
+import { FIRST_PERSON_VIEW } from "./first-person-view";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
-// "Home" / "currently at" are decided purely by XZ proximity to the fixed start
-// / destination spot (rotation is irrelevant). Tight, so any real step away clears them.
+// "Home" / "currently at" are pure XZ proximity to a fixed spot; rotation is
+// ignored. Tight, so any real step away clears them.
 const HOME_REACH_UNITS = 0.8;
 const CURRENT_REACH_UNITS = 0.8;
 
 export default function Overlays() {
   tick("render:Overlays");
-  // Dev-only (?diag=true): a frozen page is either a render storm or a blocked
-  // main thread. Counting store writes, renders and frames separates the two.
+  // Dev-only (?diag=true): separates a render storm from a blocked main thread.
   useEffect(() => useNavUiStore.subscribe(() => tick("write:navUiStore")), []);
   const ui = useTerminalUi();
   const {
@@ -52,16 +52,14 @@ export default function Overlays() {
     fadeVisible, handleFloorSelect,
     playerControllerRef, triggerFloorTransition,
   } = ui;
-  // Persisted "dollhouse instructions seen" flag — once the overlay's Enter is
-  // tapped we mark it seen so the instructions don't reappear next visit.
+  // Persisted "instructions seen" flags — tapping Enter marks them seen.
   const markInstructionsSeen = useAppStore((s) => s.markInstructionsSeen);
   const markFpInstructionsSeen = useAppStore((s) => s.markFpInstructionsSeen);
   const fpInstructionsSeen = useAppStore((s) => s.fpInstructionsSeen);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
-  // Show the first-person card the first time the player lands in first
-  // person. `fpInstructionsSeen` is persisted, so this fires once and the
-  // dock's button is the way back to it afterwards.
+  // Fires once on first arrival in first person; afterwards the dock's
+  // Instructions button is the way back to the card.
   useEffect(() => {
     if (phase === "firstPerson" && !fpInstructionsSeen) setInstructionsOpen(true);
   }, [phase, fpInstructionsSeen]);
@@ -72,25 +70,22 @@ export default function Overlays() {
   const atHome = useNavUiStore((s) => s.atHome);
   const setAtHome = useNavUiStore((s) => s.setAtHome);
   const goHome = useNavUiStore((s) => s.goHome);
-  // WHICH ROUTE. `/` is frozen at what the main version ships — see the two
-  // uses below; this tree only ever runs as `/v3`, so the newer chrome is
-  // always on.
+  // `/` is frozen at what the main version ships; this tree only runs as /v3,
+  // so the newer chrome is always on.
   const streamVariant = useStreamVariantId();
   const uiFrozen = streamVariant === "v1";
   const setMapExpanded = useNavUiStore((s) => s.setMapExpanded);
   const mapExpanded = useNavUiStore((s) => s.mapExpanded);
   const eventsOpen = useNavUiStore((s) => s.eventsOpen);
-  // Only walks started from a label/directions panel raise the turn HUD; manual
-  // map clicks and 3D double-clicks walk silently (see navigateToFloor).
+  // Only panel-started walks raise the turn HUD; map clicks and double-clicks
+  // walk silently (see navigateToFloor).
   const navHud = useNavUiStore((s) => s.navHud);
   const hotspotInfo = useNavUiStore((s) => s.hotspotInfo);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
 
-  // `isMoving` can jitter for a frame or two (arrival settling into the destination
-  // pose, teleport snaps, path corners) and the overlays gate on it — so they
-  // blinked in/out mid-transition. `stillUi` hides panels IMMEDIATELY when a
-  // walk starts, but only shows them again after ~300ms of continuous
-  // stillness, so a brief stop/settle never flashes a panel.
+  // `isMoving` jitters for a frame or two around arrivals, teleports and path
+  // corners. `stillUi` hides panels immediately on a walk but restores them
+  // only after ~300ms of continuous stillness, so a settle never flashes one.
   const [stillUi, setStillUi] = useState(!isMoving);
   useEffect(() => {
     if (isMoving) { setStillUi(false); return; }
@@ -98,44 +93,33 @@ export default function Overlays() {
     return () => clearTimeout(t);
   }, [isMoving]);
 
-  // Venues flap (right edge) open state, lifted here so it's mutually exclusive
-  // with the left-side panels: opening a left panel — or walking — closes it,
-  // and opening it closes the left panels.
+  // Venues flap (right edge), lifted here so it stays mutually exclusive with
+  // the left-side panels.
   const [venuesOpen, setVenuesOpen] = useState(false);
-  // The one edge flap ("Resources": layouts + their hotspots), mutually
-  // exclusive with the map.
+  // The "Resources" edge flap (layouts + hotspots), exclusive with the map.
   const [hotspotsFlapOpen, setHotspotsFlapOpen] = useState(false);
-  // The at-home accommodation/hostel cards auto-open at home; this lets the user
-  // dismiss them with the corner close button. Reset when leaving home (below) so
-  // the card returns on the next arrival.
+  // The at-home cards auto-open; this tracks the corner close button. Reset on
+  // leaving home (below) so the card returns on the next arrival.
   const [homeCardDismissed, setHomeCardDismissed] = useState(false);
   const leftPanelOpen = mapExpanded || openLabel !== null || eventsOpen;
   useEffect(() => {
     if (leftPanelOpen || isMoving) setVenuesOpen(false);
   }, [leftPanelOpen, isMoving]);
 
-  // Soft-edge feather on the model: ON in the dollhouse overview (rim dissolves
-  // into the backdrop), OFF (sharp) in first-person. A live uniform flip — no
-  // recompile; the transition blackout hides the switch.
+  // Soft-edge feather: on in the dollhouse overview, off in first-person. A
+  // live uniform flip — no recompile; the transition blackout hides it.
   useEffect(() => {
-    // `uEdgeEnabled` multiplies the rim dissolve, so it doubles as an intensity.
-    // Dollhouse-only floors (e.g. the memorial) get a gentle fade (0.4) rather
-    // than the full dissolve; other dollhouse floors get the full effect.
+    // `uEdgeEnabled` multiplies the rim dissolve, so it doubles as intensity:
+    // dollhouse-only floors get a gentle fade instead of the full dissolve.
     edgeFeather.enabled.value =
       phase === "dollhouse" ? (activeFloor?.dollhouseOnly ? 0.4 : 1) : 0;
   }, [phase, activeFloor?.dollhouseOnly]);
 
-  // Where the player ACTUALLY is drives two highlights, via one stable-deps poll
-  // that WRITES the shared store. Both are pure XZ proximity to a FIXED point
-  // (no rotation, no moving anchor):
-  //   • atHome     → stopped within HOME_REACH_UNITS of the start position.
-  //   • currentDest → stopped within CURRENT_REACH_UNITS of a label destination
-  //     (banner + hidden from its own list). Because the reference is the destination's
-  //     fixed spot, stepping away grows the distance and clears it — turning in
-  //     place does NOT (rotation is ignored).
-  // Refs feed the interval so its deps stay stable (else it'd be torn down each
-  // render and never fire → Home stuck "selected" after walking away). Store
-  // setters are read via getState() so they never need to be deps.
+  // One poll writes both position-driven highlights into the store:
+  //   • atHome      → stopped within HOME_REACH_UNITS of the start position.
+  //   • currentDest → stopped within CURRENT_REACH_UNITS of a destination.
+  // Refs feed the interval so its deps stay stable — otherwise it is torn down
+  // every render and never fires. Setters are read via getState().
   const homeRef = useRef<[number, number, number]>([0, 0, 0]);
   const destsRef = useRef<DestinationsByCategory | undefined>(undefined);
   const wasMovingRef = useRef(false);
@@ -152,24 +136,22 @@ export default function Overlays() {
       const p = ctrl.getPosition();
       const moving = ctrl.isMoving();
 
-      // A walk that just STARTED closes the open panel so nothing stale lights
-      // up after it (the highlight comes back from position once stopped).
-      if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); }
+      // A walk that just started closes the open panel; the highlight comes
+      // back from position once stopped. Walking off the ground standpoint
+      // ends it, so the markers return as soon as the player leaves.
+      if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); store.setAtGroundView(false); }
       wasMovingRef.current = moving;
 
       const hp = homeRef.current;
       store.setAtHome(!moving && Math.hypot(p.x - hp[0], p.z - hp[2]) < HOME_REACH_UNITS);
 
-      // Recompute "currently at" only while stopped — during a walk it's hidden
-      // (gated on !isMoving) and keeping the last value avoids mid-walk churn.
+      // Only while stopped: during a walk it is hidden anyway, and keeping the
+      // last value avoids mid-walk churn.
       if (!moving) {
         const dests = destsRef.current;
-        // KEEP the latched destination while the player is still standing at
-        // its camera. Several destinations can share ONE camera pose (CCTV /
-        // Wi-Fi / Concessions all arrive at the concession stand) — re-picking
-        // the nearest by category order every tick would steal the latch from
-        // the one the player actually teleported to (its markers blinked off
-        // after a second).
+        // Keep the latched destination while still standing at its camera:
+        // several destinations can share one pose, and re-picking the nearest
+        // every tick would steal the latch from the one actually travelled to.
         const prev = store.currentDest;
         if (prev && dests) {
           const pd = dests[prev.category]?.find((x) => x.id === prev.id);
@@ -189,9 +171,8 @@ export default function Overlays() {
             }
           }
         }
-        // Arriving at a transit hub (a NEW one — fires once on the transition,
-        // so a manual close while standing there isn't re-opened) auto-opens the
-        // Transport panel, surfacing the live bus list without reopening by hand.
+        // Arriving at a new transit hub auto-opens the Transport panel. Fires
+        // once on the transition, so a manual close is not undone.
         store.setCurrentDest(cur);
         if (cur && cur.category === "transport" && prev?.id !== cur.id) {
           store.setOpenLabel("transport");
@@ -200,23 +181,19 @@ export default function Overlays() {
     }, 200);
     return () => clearInterval(id);
   }, [phase, playerControllerRef]);
-  // The memorial's home pose IS its Main Entrance destination, so currentDest
-  // latches there and homeActive never turns on — the venue card uses this
-  // looser "at home, nothing open" condition instead.
+  // The memorial's home pose IS its Main Entrance destination, so homeActive
+  // never turns on — the venue card uses this looser condition instead.
   const homeCardBase = atHome && openLabel === null;
-  // Standing at the village's Athletes' Hostel destination — shows the
-  // "Explore the room" card there (the interior-entry UI lives at the hostel;
-  // the home/monument card lives at spawn).
+  // Standing at the village's Athletes' Hostel — the interior-entry card lives
+  // here, the monument card at spawn.
   const atHostel = currentDest?.category === "hostel";
   const [hostelCardDismissed, setHostelCardDismissed] = useState(false);
   useEffect(() => {
     if (!atHostel) setHostelCardDismissed(false);
   }, [atHostel]);
-  // The home card shows on ARRIVAL at home (spawn / Home button), not whenever
-  // its conditions re-qualify: opening any overlay while standing at home
-  // counts as dismissing it, so CLOSING that overlay doesn't pop the home card
-  // back open. It re-arms only once the player actually leaves home (the Home
-  // button also re-arms explicitly in handleHome).
+  // The home card shows on arrival, not whenever its conditions re-qualify:
+  // opening any overlay while at home counts as dismissing it. It re-arms on
+  // leaving home, and explicitly in handleHome.
   useEffect(() => {
     if (!atHome) setHomeCardDismissed(false);
   }, [atHome]);
@@ -226,18 +203,14 @@ export default function Overlays() {
       setHostelCardDismissed(true);
     }
   }, [openLabel, mapExpanded, venuesOpen, eventsOpen]);
-  // A venue swap is an ARRIVAL: the switch is made from the venues panel
-  // (which dismisses the card, above) and the player lands directly at the new
-  // venue's home, so the not-at-home reset never fires — re-arm explicitly so
-  // the new venue greets with its home card.
+  // A venue swap lands directly at the new venue's home, so the not-at-home
+  // reset never fires — re-arm explicitly.
   useEffect(() => {
     setHomeCardDismissed(false);
     useNavUiStore.getState().setHotspotInfo(null);
   }, [activeFloorIndex]);
-  // A TELEPORT to another destination never passes through the walk-start
-  // close above (isMoving stays false), so an open hotspot card lingered over
-  // the new spot. Close it as soon as the latched destination stops matching
-  // the card's destination.
+  // A teleport never passes through the walk-start close above (isMoving stays
+  // false), so close the card once the latch stops matching it.
   useEffect(() => {
     const store = useNavUiStore.getState();
     if (store.hotspotInfo && store.hotspotInfo.destId !== currentDest?.id) {
@@ -246,17 +219,10 @@ export default function Overlays() {
   }, [currentDest?.id]);
 
   /**
-   * EXACTLY ONE overlay at a time.
-   *
-   * Resources, the map, the instructions card and a hotspot's data card each
-   * own the screen while they are up, so opening any of them closes the rest.
-   * This used to be a handful of `setThisFalse()` calls copied into each
-   * button, and they had drifted: the map closed Resources but not the
-   * instructions, nothing at all closed the data card, and clicking a bead
-   * left the Resources panel sitting on top of the card it had just opened.
-   *
-   * One function, every caller naming what it is KEEPING, so a new overlay is
-   * one more line here rather than an edit to every other button.
+   * Exactly one overlay at a time — Resources, the map, the instructions card
+   * and a hotspot's data card each own the screen. Callers name what they are
+   * KEEPING, so a new overlay is one line here rather than an edit to every
+   * other button.
    */
   const closeOverlays = useCallback(
     (keep?: "resources" | "map" | "instructions" | "data") => {
@@ -268,23 +234,19 @@ export default function Overlays() {
     [setMapExpanded],
   );
 
-  // Clicking a bead in the 3D scene opens its data card from inside the canvas,
-  // which never touches these panels — so the card is the one overlay that has
-  // to clear the others from here rather than at its own call site.
+  // A marker click opens its card from inside the canvas, which never touches
+  // these panels — so the card clears the others from here, not at its call site.
   const dataCardOpen = !!hotspotInfo;
   useEffect(() => {
     if (dataCardOpen) closeOverlays("data");
   }, [dataCardOpen, closeOverlays]);
 
-  // "Explore the accommodation" — the floor authored as a transition. Used only
-  // to label the accommodation overlay now that the enter-interior action is off.
+  // The floor authored as a transition — now only labels the accommodation overlay.
   const exploreT = activeFloor?.transitions?.[0];
 
-  // Apartment-interior floors get a stripped-down UI (no minimap / toggle /
-  // nav-path); the Home button there EXITS back to the exterior village.
+  // Interior floors get a stripped-down UI; Home there exits to the village.
   const inInterior = !!activeFloor?.interior;
-  // Index of the hotel-room interior floor — the village "Explore Hotel Room"
-  // tab blacks out and swaps straight into it (no fly-in, no double-click).
+  // The hotel-room interior floor — "Explore Hotel Room" swaps straight into it.
   const hotelIndex = useMemo(() => floors.findIndex((f) => f.id === "hotel-room"), [floors]);
   const exitToVillage = useCallback(() => {
     const idx = floors.findIndex((f) => !f.interior);
@@ -303,17 +265,12 @@ export default function Overlays() {
     });
   }, [activeFloor, startPosition, startRotation, playerControllerRef, triggerFloorTransition]);
 
-  // Home = no overlay + home position: close any label panel, drop any
-  // selection / "currently at", clear the preview, return to the start view
-  // (mark at-home optimistically).
+  // Home = no overlay + home position, with at-home marked optimistically.
   const handleHome = useCallback(() => {
-    // Going home is an arrival, so nothing that was open belongs to where the
-    // player is about to be — the map would linger over the teleport, and a
-    // panel would hide the home overlay behind it.
+    // An arrival, so nothing that was open belongs to where the player lands.
     closeOverlays();
     setVenuesOpen(false);
-    // Clicking Home only ever (re)opens the at-home card — re-clicking never
-    // closes it; only the card's X does.
+    // Home only ever (re)opens the at-home card; only its X closes it.
     setHomeCardDismissed(false);
     goHome();
     const ctrl = playerControllerRef.current;
@@ -322,8 +279,7 @@ export default function Overlays() {
     const p = (floorStart ?? startPosition ?? [0, 0, 0]) as [number, number, number];
     const r = (activeFloor?.startRotation ?? startRotation ?? [0, 0, 0]) as [number, number, number];
     const surfaceY = ctrl?.probeFloorY(p[0], p[2], p[1]) ?? p[1];
-    // Fade to black → snap to the start pose → fade back in. No walking or
-    // gliding across the scene — the same soft transition the destination teleport uses.
+    // Fade to black → snap to the start pose → fade back in, as teleports do.
     triggerFloorTransition(() => {
       ctrl?.teleportTo([p[0], surfaceY, p[2]], r);
     });
@@ -331,57 +287,53 @@ export default function Overlays() {
   }, [goHome, playerControllerRef, activeFloor, startPosition, startRotation, setAtHome, closeOverlays, triggerFloorTransition]);
 
   /**
-   * "First Person" — stand at `cameras.firstPerson`, the one authored pose that
-   * is ON the navmesh.
+   * "First Person" — stand at the authored pose that is on the navmesh.
    *
-   * Deliberately NOT handleHome with a different constant. Home is an arrival:
-   * it re-arms the at-home card, clears the latched destination and asserts
-   * `atHome`. This is a relocation — it drops the player somewhere walkable and
-   * says nothing about where that is. `currentDest` and `atHome` are recomputed
-   * from live position by the poll above, so they correct themselves within a
-   * tick and the map's marker follows the player there on its own; writing
-   * either one here would only fight that poll.
+   * Not handleHome with a different constant: Home is an arrival (re-arms the
+   * at-home card, asserts `atHome`), this is a relocation that says nothing
+   * about where it lands. The poll above recomputes `currentDest`/`atHome`
+   * from live position, so writing either here would only fight it.
+   *
+   * /v3 overrides the config pose with `first-person-view.ts`; the fallback is
+   * what makes deleting that file enough to restore the config behaviour. Read
+   * unconditionally, not behind the `??` — `useSite` is a hook.
    */
-  const firstPersonPose = useSite().scene.cameras.firstPerson;
+  const configFirstPerson = useSite().scene.cameras.firstPerson;
+  const firstPersonPose = FIRST_PERSON_VIEW ?? configFirstPerson;
   const handleFirstPerson = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl || !firstPersonPose) return;
     closeOverlays();
     ctrl.clearPreview();
+    // No markers while down there: the poll latches `currentDest` from live XZ
+    // a tick later, which would otherwise light up the nearest layout's set.
+    useNavUiStore.getState().enterGroundView();
     const p = firstPersonPose.position as [number, number, number];
     const r = firstPersonPose.rotation as [number, number, number];
-    // The authored Y is the CAMERA's height, not the ground — probe the floor
-    // and let teleportTo re-add the eye height, exactly as Home does. The
-    // authored value is passed only as the expectedY tie-breaker.
+    // The authored Y is the camera's height, not the ground — probe the floor
+    // and let teleportTo re-add the eye height, as Home does.
     const surfaceY = ctrl.probeFloorY(p[0], p[2], p[1]) ?? p[1];
     triggerFloorTransition(() => {
       ctrl.teleportTo([p[0], surfaceY, p[2]], r);
     });
   }, [firstPersonPose, playerControllerRef, closeOverlays, triggerFloorTransition]);
 
-  /** The First Person circle, or nothing. Needs an authored standpoint, and is
-   *  not drawn on the frozen `/` variant. Hoisted so the dock and the
-   *  instructions card are gated by the SAME value — teaching a circle that is
-   *  not on screen is worse than not teaching it. */
+  /** The First Person circle, or nothing. Hoisted so the dock and the
+   *  instructions card are gated by the same value. */
   const firstPersonAction = !uiFrozen && firstPersonPose ? handleFirstPerson : undefined;
 
-  // Opening the full map covers the screen. The map and the label panel SHARE
-  // the open category + sub-category (nav store), so we keep the label — the
-  // map opens on the same list the panel showed (the panel itself hides via
-  // its !mapExpanded gate). Only the selection + preview route are dropped so
-  // nothing stale lingers behind the map.
+  // The map and the label panel share the open category, so the label is kept
+  // and the map opens on the list the panel showed. Only the selection and
+  // preview route are dropped.
   const handleMapExpanded = useCallback((open: boolean) => {
     if (!open) return;
     useNavUiStore.getState().setSelectedId(null);
     playerControllerRef.current?.clearPreview();
   }, [playerControllerRef]);
 
-  // Crowd Flow fly-over
-  // Opening the Crowd Flow category lifts the player to the authored aerial
-  // pose (pitch-locked straight down) so the zone heatmap reads at a glance;
-  // closing it returns to the pre-fly spot. The return only fires if the
-  // player is still AT the aerial pose — leaving via a destination teleport
-  // (which also closes the panel) must win, not be snapped back.
+  // Crowd Flow fly-over: opening the category lifts the player to the authored
+  // aerial pose, closing it returns to the pre-fly spot. The return fires only
+  // if still at the aerial pose, so a destination teleport out of it wins.
   const crowdFly = activeFloor?.crowdFlowGlb?.flyCamera;
   const crowdOpen = openLabel === "crowdflow";
   const preCrowdPose = useRef<{ pos: [number, number, number]; yaw: number } | null>(null);
@@ -416,8 +368,7 @@ export default function Overlays() {
     wasCrowdOpen.current = crowdOpen;
   }, [crowdOpen, crowdFly, playerControllerRef, triggerFloorTransition]);
 
-  // The loader completes only when the progress bar has filled to 100% AND both
-  // models are downloaded — so it never hides early.
+  // Completes only at 100% AND both models downloaded, so it never hides early.
   const revealProgress = useProgressStore((s) => s.revealProgress);
   const loaderDone = revealProgress >= 0.999 && othersCached;
 
@@ -432,14 +383,12 @@ export default function Overlays() {
           visible={!loaderDone}
           onFadeComplete={() => setShowHud(false)}
           unitName={unitName}
-          // A preview point-cloud is loading on the canvas behind — let it
-          // show through the loading screen once it starts glowing in.
+          // Let the preview point-cloud behind show through once it glows in.
           revealVeil={!!ui.sceneContent.dollHousePreviewUrl}
         />
       )}
-      {/* Dollhouse card — over the dollhouse preview on a first visit. It
-          teaches orbiting and the double-click that leads inside; dismissing it
-          marks it seen and drops into the dollhouse view. */}
+      {/* Dollhouse card — first visit only; teaches orbiting and the
+          double-click that leads inside. */}
       {!inlineMode && hasDollHouse && (
         <InstructionsCard
           mode="dollhouse"
@@ -451,10 +400,8 @@ export default function Overlays() {
         />
       )}
 
-      {/* First-person card — on first arrival in first person, and after that
-          whenever the dock's Instructions button is pressed. It floats in place
-          rather than sending the player back to the dollhouse to read it:
-          these are first-person controls, so they belong where they apply. */}
+      {/* First-person card — first arrival, and any press of the dock's
+          Instructions button. Floats in place, where the controls apply. */}
       {phase === "firstPerson" && (
         <InstructionsCard
           mode="firstPerson"
@@ -489,10 +436,8 @@ export default function Overlays() {
       )}
       */}
 
-      {/* Hotspot readout — opened by CLICKING a 3D marker. The engine reports
-          the click as (destination, marker index); a destination IS a layout
-          and its markers are that layout's hotspots[] in order, so the pair
-          resolves straight back to a hotspot id and its field dictionary. */}
+      {/* Hotspot readout — opened by clicking a 3D marker. The click arrives as
+          (destination, marker index), which resolves back to a hotspot id. */}
       {isReady && hotspotInfo && !fadeVisible && (
         <HotspotDataCard
           destId={hotspotInfo.destId}
@@ -501,13 +446,10 @@ export default function Overlays() {
         />
       )}
 
-      {/* Accommodation overlay — shown at home (like the label panels) when this
-          floor has an interior to step into. Frames it as the participants'
-          accommodation + the block number, with a "view the rooms" action that
-          flies to the transition camera and swaps into the interior. */}
-      {/* Gated on homeCardBase (at home + nothing open). Currently dead on the
-          village — it authors no `transitions`, so exploreT is undefined; the
-          interior-entry UI lives on the hostel-destination card below. */}
+      {/* Accommodation overlay — shown at home when the floor has an interior
+          to step into, with a "view the rooms" action that swaps into it.
+          Currently dead on the village, which authors no `transitions`; its
+          interior-entry UI lives on the hostel card below. */}
       {isReady && phase === "firstPerson" && !inInterior && homeCardBase && exploreT && !homeCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -525,13 +467,9 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Memorial venue card — shown at home (Main Entrance) on the coliseum,
-          mirroring the village accommodation overlay: venue name + zone, then
-          the venue's story. Dismissed via X; re-appears after walking away.
-          NOTE: gated on atHome + no open panel, NOT homeActive — the memorial's
-          home pose IS the Main Entrance destination, so `currentDest` latches
-          there immediately and homeActive (which requires no current
-          destination) would never turn on. */}
+      {/* Memorial venue card — shown at home on the coliseum. Gated on
+          homeCardBase, not homeActive: the memorial's home pose IS the Main
+          Entrance destination, so homeActive would never turn on. */}
       {isReady && phase === "firstPerson" && !inInterior && homeCardBase && activeFloor?.id === "memorial" && !homeCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -581,8 +519,7 @@ export default function Overlays() {
             border: "1.5px solid var(--nav-border)",
             boxShadow: "var(--nav-shadow-chip)",
             opacity: mapEntered && !fadeVisible && !mapExpanded ? 1 : 0,
-            // Leaves the way the Resources panel beside it does — off the left
-            // edge — so the whole left side clears as one movement.
+            // Leaves off the left edge, as the Resources panel beside it does.
             transform: mapExpanded ? "translateX(calc(-100% - 24px))" : "translateX(0)",
             pointerEvents: mapExpanded ? "none" : undefined,
           }}
@@ -620,12 +557,9 @@ export default function Overlays() {
         </button>
       )}
 
-      {/* Left edge: the single "Resources" panel — layouts, each expandable
-          to its child hotspots. Tucked away behind any overlay that owns the
-          screen — the instructions card, or a resource's data card — because
-          that overlay is what the viewer is meant to be reading and chrome
-          standing beside it competes for attention. It slides back in on its
-          own when the overlay closes, keeping whatever was unfolded. */}
+      {/* Left edge: the "Resources" panel — layouts, each expandable to its
+          hotspots. Tucks away behind any overlay that owns the screen and
+          slides back when it closes, keeping whatever was unfolded. */}
       {phase === "firstPerson" && (
         <HotspotsFlap
           open={hotspotsFlapOpen}
@@ -634,8 +568,7 @@ export default function Overlays() {
             setHotspotsFlapOpen(next);
           }}
           disabled={fadeVisible}
-          // The map is the widest overlay there is and it opens over this edge,
-          // so the panel slides out rather than sitting under it.
+          // The map opens over this edge, so the panel slides out of its way.
           tucked={isMoving || instructionsOpen || dataCardOpen || mapExpanded}
         />
       )}
@@ -643,33 +576,26 @@ export default function Overlays() {
       {/* Bottom dock: the four actions that work from anywhere. */}
       {phase === "firstPerson" && (
         <BottomBar
-          // Fades out under the same overlays the left flap tucks behind: while
-          // a card is being read the four circles are not the thing to press,
-          // and the way out of the card is the card's own close button.
+          // Fades out under the same overlays the left flap tucks behind.
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen && !dataCardOpen}
-          // Resources or the map is open: drop the dock off the bottom edge.
-          // Either one is the tallest thing on screen and, on a landscape phone,
-          // ends within a thumb's width of these circles. Tucked rather than
-          // merely hidden, so the dock travels instead of dimming in place —
-          // and the Map circle stays reachable, since tapping it is what put
-          // the map up.
+          // Resources or the map open: drop the dock off the bottom edge. On a
+          // landscape phone either ends within a thumb's width of these
+          // circles. Tucked, not hidden, so the Map circle stays reachable.
           tucked={hotspotsFlapOpen || mapExpanded}
           mapOpen={mapExpanded}
           onOpenMap={() => {
-            // Read the toggle BEFORE closeOverlays sets it false, or the map
-            // could never be opened — only closed and immediately reopened.
+            // Read the toggle before closeOverlays sets it false, or the map
+            // could only ever be closed and immediately reopened.
             const next = !mapExpanded;
             closeOverlays("map");
             setMapExpanded(next);
           }}
           onDollhouse={() => {
             closeOverlays();
-            // The return leg of the same asymmetry the entry has: the walking
-            // view streams chunks and the dollhouse draws a single GLB, so this
-            // tears one model down and builds another. `expectedKey` holds the
-            // blackout until that GLB is actually mounted — it was released on
-            // the way in (deliberate memory policy), so it has to re-parse, and
-            // without the gate the fade lifts onto an empty scene.
+            // The walking view streams chunks and the dollhouse draws a single
+            // GLB, so this tears one model down and builds another.
+            // `expectedKey` holds the blackout until that GLB is mounted —
+            // it was released on the way in, so it has to re-parse first.
             triggerFloorTransition(() => setPhase("dollhouse"), {
               expectedKey: activeFloor?.id,
             });
@@ -679,22 +605,17 @@ export default function Overlays() {
             setInstructionsOpen(true);
           }}
           onHome={handleHome}
-          // TWO WAYS OF NOT OFFERING SOMETHING, and they are not interchangeable.
-          // The Map circle stays in the dock, greyed and out of the tab order.
-          // It ships on the main version that way, and removing it instead would
-          // reflow the row and move where the muscle memory for Home and
-          // Dollhouse lands.
-          // First Person is omitted outright: it has never shipped, so there is
-          // no position to preserve and a greyed circle would only advertise
-          // something nobody is missing. `undefined` is also what a site with no
-          // `cameras.firstPerson` pose passes, so BottomBar already handles it.
+          // Map stays in the dock, greyed and out of the tab order — removing
+          // it would reflow the row and move where Home and Dollhouse land.
+          // First Person is omitted outright: it has never shipped, and
+          // `undefined` is what a site with no authored pose passes anyway.
           mapDisabled={uiFrozen}
           onFirstPerson={firstPersonAction}
         />
       )}
 
-      {/* Stop + speed — bottom-centre glass dock while walking (the rail keeps its
-          icons). The open map window has its own Stop, so hide this then. */}
+      {/* Stop + speed — bottom-centre dock while walking. The open map window
+          has its own Stop, so hide this then. */}
       {phase === "firstPerson" && !inInterior && isMoving && !mapExpanded && (
         <div
           className="fixed bottom-6 left-1/2 z-120 flex items-center gap-1.5 rounded-[14px] p-[5px_7px] transition-[opacity,transform] duration-[280ms] ease-out short:bottom-2 short:rounded-[10px] short:p-[4px_6px]"
@@ -724,10 +645,8 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Monument home card — the village spawn/Home pose IS the Olympic
-          Village Monument, so the at-home overlay presents the monument
-          (mirroring the memorial venue card). The hostel/interior-entry card
-          moved to the hostel destination below. */}
+      {/* Monument home card — the village spawn pose IS the Olympic Village
+          Monument, so the at-home overlay presents it. */}
       {isReady && phase === "firstPerson" && !inInterior && activeFloor?.id === "village" && homeCardBase && !homeCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -747,13 +666,10 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Hostel overlay — shown standing AT the village's Athletes' Hostel
-          destination (walk/teleport there via the Hostel category). Describes
-          the hostel and carries the "Explore the room" action: one tap blacks
-          out and swaps straight into the hotel interior + its navmesh (no
-          camera fly-in, no double-click). handleFloorSelect owns the blackout
-          and waits for the model before fading back; the Y is snapped to the
-          hostel navmesh (see useSceneNavigation). */}
+      {/* Hostel overlay — shown standing at the village's Athletes' Hostel.
+          "Explore the room" blacks out and swaps straight into the hotel
+          interior and its navmesh; handleFloorSelect owns the blackout and
+          waits for the model before fading back. */}
       {isReady && phase === "firstPerson" && !inInterior && activeFloor?.id === "village" && atHostel && openLabel === null && hotelIndex >= 0 && !hostelCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -786,13 +702,9 @@ export default function Overlays() {
 
       <FadeScreen visible={fadeVisible} />
 
-      {/* ?debug=true only — the whole look AND the whole framing in one panel:
-          time of day, where the sun is, every light value, the grade, the field
-          of view, the navmesh overlay and a live binding to the camera, plus
-          the JSON to paste back into the site file. Parked below PerfMeter in the
-          same corner. The card is the framing loop — it names the row the
-          camera landed on, arms the inputs, and copies or SAVES the pose back
-          into the site file behind a confirmation. */}
+      {/* ?debug=true only — look and framing in one panel: sun, lights, grade,
+          FOV, the navmesh overlay and a live camera binding, plus the JSON to
+          paste back into the site file. */}
       {ui.sceneContent.debug && (
         <>
           <DebugPanel />

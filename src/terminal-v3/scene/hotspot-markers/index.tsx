@@ -5,24 +5,14 @@ import { useNavUiStore } from "../../stores/nav-ui-store";
 import { Hotspot } from "./hotspot";
 
 interface HotspotMarkersProps {
-  /** Base marker radius in world units (FloorConfig.hsSize). The marker is
-   *  drawn at a constant size on SCREEN — this is the radius that rule scales
-   *  from, and the bound it is clamped against. */
+  /** Base marker radius in world units (FloorConfig.hsSize). Markers draw at a
+   *  constant screen size; this is what that scaling starts from and clamps to. */
   hsSize?: number;
 }
 
 /**
- * The resource markers in the scene.
- *
- * What is drawn follows entirely from what was picked in the Resources panel —
- * one selected resource, or the resources belonging to the layout the player
- * stands at. See the note over `ids` below.
- *
- * There is deliberately NO proximity rule. An earlier version also surfaced
- * whatever fell within a radius of the player, re-ranked four times a second
- * with hysteresis to stop the set flickering. It meant arriving at one layout
- * showed a neighbour's discs, and what a viewer saw depended on where they
- * happened to be standing rather than on what they had asked for.
+ * The resource markers in the scene. What is drawn follows entirely from what
+ * was picked in the Resources panel — never from proximity to the player.
  */
 export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const site = useSite();
@@ -30,29 +20,19 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
   const currentLayoutId = useNavUiStore((s) => s.currentDest?.id ?? null);
   const openHotspotId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
+  const atGroundView = useNavUiStore((s) => s.atGroundView);
 
-  // EITHER / OR, never both — the marker set answers "what did you ask for?"
-  //   a resource was picked   exactly that one disc, nothing else. Narrowing to
-  //                           a single resource is the whole point of picking
-  //                           it; leaving its siblings up made the selection
-  //                           invisible among them.
-  //   a layout was picked     every resource filed under it, regardless of
-  //                           distance. Several layouts frame their resources
-  //                           from further than 60 units and L10 overlooks the
-  //                           terminal from 180 up, so ranking by distance
-  //                           would arrive somewhere and show nothing that
-  //                           belongs to it — the opposite of travelling there.
-  // Distance plays no part any more: proximity used to add whatever happened to
-  // be close, which meant arriving at one layout surfaced a neighbour's discs.
+  // Either/or, never both: a picked resource shows that disc alone, otherwise
+  // every resource filed under the current layout regardless of distance.
   const own = currentLayoutId ? (site.layoutById[currentLayoutId]?.hotspots ?? []) : [];
   const picked = selectedHotspotId ? [selectedHotspotId] : own;
 
-  // A marker whose card is OPEN takes itself down. The card is the thing being
-  // read at that moment, and the disc is only ever the way in to it — leaving
-  // it lit behind the card meant a pulsing bead competing with the panel it had
-  // just opened, and on a close-framed marker it sat under the card's own
-  // glass. It comes straight back when the card closes (`setHotspotInfo(null)`).
+  // A marker whose card is open takes itself down — it would otherwise pulse
+  // behind, or under, the panel it just opened. Restored on `setHotspotInfo(null)`.
   const ids = openHotspotId ? picked.filter((id) => id !== openHotspotId) : picked;
+
+  // At the ground standpoint: no markers at all. See `atGroundView` in the nav store.
+  if (atGroundView) return null;
 
   return (
     <>
@@ -69,8 +49,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            // Every marker is white — the pulse alone marks the selection, so
-            // the discs stay one consistent thing rather than two kinds.
+            // Markers are all white; the pulse alone marks the selection.
             pulse={isSelected}
             onHotspotClick={() =>
               setHotspotInfo({

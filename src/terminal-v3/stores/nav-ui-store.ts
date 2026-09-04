@@ -24,11 +24,8 @@ export interface CurrentDest {
 /** A clicked 3D marker — drives the centred hotspot card. */
 export interface HotspotInfo {
   destId: string;
-  /** The hotspot this card is about (H01-H30).
-   *
-   *  Carried as an ID, not just a label: the 3D marker set has to know which
-   *  disc the open card belongs to so it can take that one down, and matching
-   *  on display text would break the moment a name is reworded. */
+  /** The hotspot this card is about (H01-H30). An ID, not a label — the marker
+   *  set matches on it to take the open card's own disc down. */
   hotspotId: string;
   destLabel: string;
   category: DestinationCategory;
@@ -46,16 +43,11 @@ type OptionByCat = Partial<Record<DestinationCategory, string | null>>;
 
 /**
  * The single source of truth for wayfinding UI — which panel is open, what is
- * selected, and where the player is standing. The left rail, the destination
- * panel, the map and the 3D markers all read it, so one update reaches all of
- * them and they cannot drift apart.
+ * selected, and where the player is standing. The rail, panel, map and 3D
+ * markers all read it.
  *
- * `currentDest` and `atHome` are POSITION-driven: one poll in Overlays writes
+ * `currentDest` and `atHome` are position-driven: one poll in Overlays writes
  * them from the player's live XZ, and nothing else recomputes them.
- *
- * Built on `createStore`, which requires a selector and drops writes that
- * change nothing — see the note in `shared/stores/create-store.ts` for why
- * that matters here.
  */
 export interface NavUiState {
   /** Open category (null = none) — drives the panel AND the map's pin set. */
@@ -78,14 +70,19 @@ export interface NavUiState {
    *  can undo it without ever clearing a manual pick. */
   autoOptionCat: DestinationCategory | null;
   hotspotInfo: HotspotInfo | null;
-  /**
-   * The hotspot the operator has picked from the list (H01-H30), or null.
-   *
-   * This is what puts a marker in the 3D scene: markers appear only for the
-   * selected hotspot, so the view shows the one point being discussed rather
-   * than every disc in the layout at once.
-   */
+  /** The hotspot picked from the list (H01-H30), or null. When set, the scene
+   *  shows that marker alone rather than every disc in the layout. */
   selectedHotspotId: string | null;
+  /**
+   * True while standing at the bottom bar's ground standpoint
+   * (`FIRST_PERSON_VIEW`), which takes every marker out of the scene.
+   *
+   * A flag rather than a camera-height test: the per-hotspot ground views in
+   * `ground-views.ts` are also at standing height and must keep their marker.
+   * Cleared by `setSelectedHotspotId` — every travel path calls it — and by the
+   * position poll once the player walks away.
+   */
+  atGroundView: boolean;
   crowdFlowZones: CrowdFlowZoneRect[];
 
   /** Toggle a category; switching to a different one drops the selection. */
@@ -108,7 +105,12 @@ export interface NavUiState {
   requestPortal: (transition: FloorTransition) => void;
   clearPortal: () => void;
   setHotspotInfo: (info: HotspotInfo | null) => void;
+  /** Also clears `atGroundView` — touching a marker is always a departure. */
   setSelectedHotspotId: (id: string | null) => void;
+  /** Arrive at the ground standpoint. One action rather than three setters,
+   *  since `setSelectedHotspotId` would undo the flag. */
+  enterGroundView: () => void;
+  setAtGroundView: (value: boolean) => void;
   setCrowdFlowZones: (zones: CrowdFlowZoneRect[]) => void;
   reset: () => void;
 }
@@ -130,17 +132,14 @@ const INITIAL = {
   autoOptionCat: null,
   hotspotInfo: null,
   selectedHotspotId: null,
+  atGroundView: false,
   crowdFlowZones: NO_ZONES,
 } satisfies Partial<NavUiState>;
 
 /**
- * Replace a category's remembered option, returning the SAME object when the
- * value is already what it should be.
- *
- * The map subscribes to `optionByCat`. Spreading a fresh object on every write
- * — as the previous version did on every `setCurrentDest` — re-rendered the map
- * whenever the player moved between destinations, for a value that had not
- * changed.
+ * Replace a category's remembered option, returning the same object when the
+ * value is already correct — the map subscribes to `optionByCat`, so a fresh
+ * identity on every `setCurrentDest` re-rendered it on every move.
  */
 function withOption(
   current: OptionByCat,
@@ -174,9 +173,8 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
 
   setOpenLabel: (category) => {
     const { selectedId, currentDest } = get();
-    // Opening a category while standing AT its selected destination drops that
-    // selection, so the panel shows the list rather than a stale "You're here".
-    // An explicit pick re-selects immediately afterwards.
+    // Opening a category while standing at its selected destination drops that
+    // selection, so the panel shows the list, not a stale "You're here".
     const standingOnSelection = !!category && !!selectedId && currentDest?.id === selectedId;
     set({ openLabel: category, selectedId: standingOnSelection ? null : selectedId });
   },
@@ -208,9 +206,8 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
       autoOptionCat = null;
     }
 
-    // Only a REACHED destination — one that was selected and navigated to —
-    // auto-selects its sub-category. Merely standing near a place never flips
-    // the panel or map tabs.
+    // Only a reached destination — selected and navigated to — auto-selects its
+    // sub-category; standing near a place never flips the tabs.
     if (dest && state.selectedId === dest.id) {
       optionByCat = withOption(optionByCat, dest.category, dest.option ?? null);
       autoOptionCat = dest.category;
@@ -244,7 +241,7 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
     }),
 
   goHome: () =>
-    set({ openLabel: null, selectedId: null, currentDest: null, eventsOpen: false }),
+    set({ openLabel: null, selectedId: null, currentDest: null, eventsOpen: false, atGroundView: false }),
 
   closePanel: () => set({ openLabel: null, lastLabel: null, selectedId: null }),
 
@@ -252,7 +249,9 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
   clearPortal: () => set({ pendingPortal: null }),
 
   setHotspotInfo: (info) => set({ hotspotInfo: info }),
-  setSelectedHotspotId: (id) => set({ selectedHotspotId: id }),
+  setSelectedHotspotId: (id) => set({ selectedHotspotId: id, atGroundView: false }),
+  enterGroundView: () => set({ atGroundView: true, selectedHotspotId: null, hotspotInfo: null }),
+  setAtGroundView: (value) => set({ atGroundView: value }),
   setCrowdFlowZones: (zones) => set({ crowdFlowZones: zones }),
 
   reset: () => set({ ...INITIAL }),
