@@ -1193,6 +1193,7 @@ export class ChunkManager {
       const def = idx === undefined ? undefined : this.materials[idx];
       const m = mesh.material as THREE.MeshStandardMaterial;
       if (!m || !def?.textures) return;
+      if (def.textures.baseColor && !mesh.geometry.getAttribute("uv")) return;
       const T = def.textures;
       if (!textured) {
         // Going flat is meant to be visible — it is what "beyond textureDist"
@@ -1428,16 +1429,48 @@ export class ChunkManager {
       // opts in — read off the geometry, since the port's OSM_Buildings carry
       // their tint as vertex colours on 23% of the model's triangles.
       const hasVertexColor = !!mesh.geometry.getAttribute("color");
-      mesh.material = this.buildMaterial(def, textured ? tier : null, owner, pending, hasVertexColor, tier, rung);
-      // Hide un-texturable shells: some decimated mid/far prims lose their UVs
-      // in baking and would render as a solid white patch (the near LOD keeps
-      // them, so the building returns as you approach). Gated on the material
-      // actually wanting a baseColor map — 46% of this model's triangles are
-      // authored with no material and no TEXCOORD_0, and testing `!hasUV` alone
-      // hid every road in the scene.
-      const wantsBaseColor = textured && !!def?.textures.baseColor;
+      // Can this primitive sample the maps its material declares? Every slot
+      // reads through `uv`; without one, binding a map makes every vertex read
+      // the same corner texel.
       const hasUV = !!mesh.geometry.getAttribute("uv");
-      mesh.visible = !(wantsBaseColor && !hasUV);
+      const unmappable = textured && !!def?.textures?.baseColor && !hasUV;
+      mesh.material = this.buildMaterial(def, textured ? tier : null, owner, pending, hasVertexColor, tier, rung, !unmappable);
+      // SHADE un-texturable geometry rather than hiding it.
+      //
+      // This used to be `mesh.visible = !(wantsBaseColor && !hasUV)`. The
+      // reasoning was sound — a map bound to UV-less geometry makes every vertex
+      // sample one corner texel, so it renders as a flat patch — but switching
+      // the mesh off is the wrong cure: what gets hidden is real geometry that a
+      // source defect happens to have stripped the UVs from.
+      //
+      // Measured across the three bakes this app serves (near tier):
+      //     /    v5-obj         6 prims / 4,975 tris  (M_Metal.001, M_Rail_Ballast)
+      //     /v2  v6wo-inst-mo   7 prims /   384 tris  (M_Metal.001)
+      //     /v3  v8o-inst-mo    2 prims /   192 tris  (M_Metal.001)
+      // On v8 those two primitives are the support pillars of both solar
+      // canopies, so the roofs rendered as slabs floating on nothing — a far
+      // worse artefact than a flat-shaded pillar.
+      //
+      // So: drop the maps (buildMaterial was told not to bind them) and tint the
+      // material by the image's AVERAGE colour instead. The geometry comes back
+      // flat-shaded but lit by its own normals, so its faces still read as
+      // solid, at the cost of one 1-2 KB fetch per image and no GPU memory.
+      //
+      // Geometry authored with no material at all has no `def.textures` and is
+      // untouched: on this model that is 46% of the triangles (rails,
+      // ballast_bed, the road/curb/sidewalk networks), for which a missing UV
+      // set is normal rather than damage.
+      mesh.visible = true;
+      if (unmappable) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        pending.push(
+          this.averageColor(def!.textures!.baseColor!).then((c) => {
+            if (!c) return;
+            mat.color.multiply(c);
+            mat.needsUpdate = true;
+          }),
+        );
+      }
     });
     // Settles, never rejects: setTex catches its own failures, so one dead
     // texture cannot wedge a chunk out of the scene.
@@ -1454,6 +1487,59 @@ export class ChunkManager {
     return mountTier === "near";
   }
 
+  /**
+   * The AVERAGE COLOUR of a texture image, for geometry that cannot sample it.
+   *
+   * A primitive whose material declares a baseColour map but which carries no
+   * UV set has nothing to sample the map WITH: three binds no `uv` attribute,
+   * WebGL hands the shader the generic default (0,0), and every vertex reads
+   * the same corner texel. On the v8 bake that corner is (103,100,103) — a grey
+   * within a few percent of the deck the geometry stands on.
+   *
+   * One texel is a bad summary of an image; the average is a good one. Drawing
+   * the image into a 1x1 canvas makes the browser box-filter the whole thing
+   * down for us, so this costs one fetch of the SMALLEST rung — 1-2 KB, and
+   * ~113 KB for all 72 images of a bake if every one were ever needed — and
+   * stores a single THREE.Color. No texture is created, nothing reaches the
+   * GPU, and the answer is cached per image for the session.
+   *
+   * WebP is forced rather than KTX2: a 2D canvas cannot decode a
+   * compressed-texture container, and the WebP rung always exists.
+   *
+   * Ported from LA_PORT_ADAPTIVE's `src/runtime/ChunkManager.ts`.
+   */
+  private avgColors = new Map<number, Promise<THREE.Color | null>>();
+
+  private averageColor(slot: TexSlot): Promise<THREE.Color | null> {
+    const hit = this.avgColors.get(slot.image);
+    if (hit) return hit;
+    const p = (async (): Promise<THREE.Color | null> => {
+      if (typeof document === "undefined") return null;
+      // px = 1 clamps to the smallest rung; "webp" forces the canvas-decodable
+      // file. Reusing pickTex keeps URL resolution in one place.
+      const pick = this.pickTex(slot, 1, "webp");
+      if (!pick) return null;
+      try {
+        const res = await fetch(this.assetBase + pick.url);
+        if (!res.ok) return null;
+        const bmp = await createImageBitmap(await res.blob());
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 1;
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return null;
+        ctx.drawImage(bmp, 0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        bmp.close?.();
+        // The rung is sRGB-encoded; the material's colour is linear.
+        return new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+      } catch {
+        return null;
+      }
+    })();
+    this.avgColors.set(slot.image, p);
+    return p;
+  }
+
   private buildMaterial(
     def: MaterialDef | undefined,
     tier: Tier | null,
@@ -1465,6 +1551,10 @@ export class ChunkManager {
     mountTier: Tier | null = tier,
     /** The rung to request. Defaults to the tier's own. */
     px?: number,
+    /** False when the primitive carries NO UV set. Every map in `def.textures`
+     *  is sampled through `uv`, so without one they cannot be bound to anything
+     *  meaningful — see `averageColor`, which is what the caller substitutes. */
+    mappable = true,
   ): THREE.Material {
     const wantsTransmission = !!def && (def.transmission ?? 0) > 0;
     const hasTransmission = wantsTransmission && this.transmissionAllowed(mountTier);
@@ -1502,7 +1592,7 @@ export class ChunkManager {
         if (def.attenuationDistance != null) pm.attenuationDistance = def.attenuationDistance;
       }
 
-      if (tier && def.textures) {
+      if (tier && def.textures && mappable) {
         const rung = px ?? this.rungFor(tier);
         // Format is per tier too — see <site>.json > stream.tiers.<t>.texture.
         const fmt = this.cfg.texFormat?.[tier] ?? "auto";
