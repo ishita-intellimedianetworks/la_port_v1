@@ -6,6 +6,7 @@ import { InstanceLayer } from "./instance-layer";
 import { MeshoptDecoder } from "meshoptimizer";
 import { TIER_ORDER, type Tier, type TexFormat, type StreamingConfig, type DeviceProfile } from "./config";
 import type { Manifest, ChunkEntry, MaterialDef, TexManifest, TexSlot } from "./types";
+import type { StreamHideRule } from "@/config/schema";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
 import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
 
@@ -16,18 +17,15 @@ interface ChunkState {
   loadingTier: Tier | null;
   textured: boolean;
   outTicks: number;
-  /** Refcount owner token for the textures the CURRENTLY VISIBLE materials use.
-   *  Each mount/retexture acquires under a FRESH token and only releases the old
-   *  one after the swap — otherwise releasing first drops the refcount to zero
-   *  and disposes textures that the on-screen mesh is still drawing with, which
-   *  renders it white. */
+  /** Refcount owner token for the textures the visible materials use. Each
+   *  mount/retexture acquires under a fresh token and releases the old one only
+   *  after the swap, or the on-screen mesh loses its textures mid-load. */
   texOwner: string | null;
   /** True while retexture() has a load in flight, so the update tick doesn't
    *  stack duplicate passes over the same group. */
   retexturing?: boolean;
   /** The rung the materials on screen were dressed at, or null when untextured.
-   *  Progressive mounting dresses a chunk at the smallest rung and promotes it
-   *  later, so "is this chunk textured" stopped being a boolean question. */
+   *  Progressive mounting promotes a chunk later, so "textured" is not boolean. */
   texPx: number | null;
 }
 
@@ -64,15 +62,11 @@ function sphereGizmo(center: [number, number, number], radius: number): THREE.Li
 }
 
 /**
- * The UV set a slot samples, clamped to one three can compile.
- *
- * three turns `texture.channel` straight into an attribute name (0 -> `uv`,
- * n -> `uv{n}`), so an out-of-range value reaches the shader verbatim: this
- * bake ships three slots with `uv: -1` (M_Rail_Ballast, M_Metal.001) and one
- * with `uv: 3` (M_Road_Arterial_Baked_C5), and `-1` compiles to `vec3(uv-1, 1)`
- * — a vec2 minus an int, which fails to link and drops every material sharing
- * that program. The chunks only ever carry TEXCOORD_0/1, so anything outside
- * that is a bake artefact and 0 is the honest reading of it.
+ * The UV set a slot samples, clamped to one three can compile. three turns
+ * `texture.channel` straight into an attribute name, so an out-of-range value
+ * reaches the shader verbatim and fails to link, dropping every material
+ * sharing that program. This bake ships slots with `uv: -1` and `uv: 3`; the
+ * chunks only carry TEXCOORD_0/1, so anything else is a bake artefact.
  */
 function uvChannel(slot?: TexSlot): number {
   const uv = slot?.uv ?? 0;
@@ -83,30 +77,27 @@ export interface StreamStats {
   visible: number;
   loading: number;
   tris: number;
-  /** CPU cache: DECODED heap bytes of every group held (mounted ones included —
-   *  three keeps their typed arrays after upload). Was the encoded size. */
+  /** Decoded heap bytes of every group held, mounted ones included — three
+   *  keeps their typed arrays after upload. */
   cacheBytes: number;
   cacheCount: number;
   residentBytes: number;
   texCount: number;
-  /** Decoded texture bytes resident, and how many of those are idle (zero refs,
-   *  kept against a walk-back rather than disposed). */
+  /** Decoded texture bytes resident, and how many are idle (zero refs, kept
+   *  against a walk-back rather than disposed). */
   texBytes: number;
   texIdle: number;
-  /** The three ceilings in force, MB — so the HUD can show headroom, not just
-   *  a number with nothing to compare it to. */
+  /** The three ceilings in force, MB, so the HUD can show headroom. */
   budgetMB: { cpu: number; gpu: number; tex: number };
-  /** Churn since mount. `redownloads` counts chunk urls decoded, evicted, then
-   *  fetched again — the figure that says whether cpuMB is set too low. */
+  /** Churn since mount. `redownloads` — decoded, evicted, then fetched again —
+   *  is the figure that says whether cpuMB is set too low. */
   evictedChunks: number;
   evictedTextures: number;
   redownloads: number;
   /** Learned decoded/encoded ratio. Seeded at this bake's measured 13.5. */
   decodeRatio: number;
-  /** True only when textures are ACTUALLY streaming as GPU-compressed KTX2 —
-   *  i.e. the transcoder loaded AND at least one tier asks for it. It used to
-   *  report merely that the loader existed, so the HUD read "KTX2" while every
-   *  request on the wire was a .webp. */
+  /** True only when textures are actually streaming as GPU-compressed KTX2:
+   *  the transcoder loaded AND at least one tier asks for it. */
   ktx2Active: boolean;
   byTier: Record<Tier, number>;
 }
@@ -122,48 +113,40 @@ export class ChunkManager {
 
   private states = new Map<string, ChunkState>();
   private cpuCache = new Map<string, THREE.Group>();
-  /** url -> DECODED heap bytes of that group, measured off the geometry once at
-   *  parse time. Was the manifest's encoded size, which is ~13.5x smaller on
-   *  this bake and made every ceiling in this file unenforceable. */
+  /** url → decoded heap bytes, measured off the geometry once at parse time.
+   *  The manifest's encoded size is ~13.5x smaller and bounds nothing. */
   private cpuBytes = new Map<string, number>();
   private texCache = new Map<string, THREE.Texture>();
   private texLoading = new Map<string, Promise<THREE.Texture | null>>();
   private texRefs = new Map<string, Set<string>>();
-  /** owner token -> the texture keys it holds. The reverse index of `texRefs`,
-   *  so releasing one mount costs the keys IT touched rather than a walk of
-   *  every key in the cache on every unmount. */
+  /** owner token → the texture keys it holds. The reverse index of `texRefs`,
+   *  so releasing a mount costs only the keys it touched. */
   private texOwned = new Map<string, Set<string>>();
-  /** texKey -> DECODED byte size, measured off the texture (block-compressed
-   *  mips for KTX2, RGBA8 + mip chain for WebP). Was the encoded file size. */
+  /** texKey → decoded byte size, measured off the texture (block-compressed
+   *  mips for KTX2, RGBA8 + mip chain for WebP). */
   private texBytes = new Map<string, number>();
-  /** Textures nobody references right now, least-recently-idled first. They are
-   *  KEPT, not disposed: 69 images serve 816 chunks, and the rung is part of the
-   *  cache key, so the near-rung set drops to zero refs every time you walk 50 m
-   *  and was being re-fetched and re-decoded on the way back. Eviction happens
-   *  when the texture budget is actually exceeded, not when a refcount hits 0. */
+  /** Textures nobody references right now, least-recently-idled first. Kept,
+   *  not disposed: the rung is part of the cache key, so the near-rung set drops
+   *  to zero refs every ~50 m walked. Eviction happens when the texture budget
+   *  is exceeded, not when a refcount hits 0. */
   private texIdle = new Map<string, true>();
   private texSeq = 0;
   /** Real-byte ceilings for the three pools. See `memory.ts`. */
   private budget: MemoryBudget;
-  /** Churn counters, surfaced through stats() so the HUD reports eviction and
-   *  re-download rates instead of leaving them to be reasoned about. */
+  /** Churn counters, surfaced through stats() for the HUD. */
   private evictedChunks = 0;
   private evictedTextures = 0;
   private redownloads = 0;
   private everCached = new Set<string>();
   private ktx2: KTX2Loader | null = null;
-  /** Shared-geometry layer. Null until initInstancing() finds a palette, and null
-   *  forever for models baked without one — so this whole path stays inert for
-   *  the existing bakes. */
+  /** Shared-geometry layer. Null until initInstancing() finds a palette, and
+   *  null forever for models baked without one. */
   private instances: InstanceLayer | null = null;
-  /** Chunks whose placements should be drawn this tick. Tracked separately from
-   *  the mounted set because a FULLY instanced chunk has no GLB to mount: it
-   *  resolves to tier null and would drop out of residency entirely. */
+  /** Chunks whose placements should be drawn this tick. Separate from the
+   *  mounted set because a fully instanced chunk has no GLB to mount. */
   private instResident: ChunkEntry[] = [];
-  /** Animated subtrees (the crane rigs). Always resident — together they are a
-   *  fraction of a percent of the model, and they cannot be chunked at all: a
-   *  chunk bakes the node matrix into its vertices, and an animation is exactly
-   *  a moving node matrix. */
+  /** Animated subtrees (the crane rigs). Always resident, and unchunkable: a
+   *  chunk bakes the node matrix into its vertices. */
   private animGroup: THREE.Group | null = null;
   private mixer: THREE.AnimationMixer | null = null;
 
@@ -177,31 +160,44 @@ export class ChunkManager {
   private gizmos = new Map<string, THREE.LineSegments>();
   private boundsOn = false;
 
-  /** Chunk ids the current config hides — resolved from `cfg.hide` against the
-   *  manifest and `materials.json`, and re-resolved on every `setConfig` since
-   *  the rules are authored per VIEW. A hidden chunk is decided as "unload" in
-   *  `update()`, so it never downloads and an already-mounted one is dropped on
-   *  the next tick. */
+  /** Chunk ids the current config hides, resolved from `cfg.hide` and
+   *  re-resolved on every `setConfig` since the rules are authored per view. A
+   *  hidden chunk is decided as "unload", so it never downloads. */
   private hidden = new Set<string>();
+  /** Chunks whose CPU vertex arrays are kept under `freeCpuArrays`, so they
+   *  stay raycastable. Everything else is freed on reveal. */
+  private pickable = new Set<string>();
+  /** Urls whose heap copy has been handed to the GPU and dropped. `cpuBytes`
+   *  still prices the GPU-side buffer, so this stops the heap totals
+   *  double-counting it. */
+  private cpuFreed = new Set<string>();
+  /** One-shot latch so the resident-ceiling warning is logged once, not every
+   *  tick for the rest of the session. */
+  private capReported = false;
+  /** Tier swaps started per tick. Smaller than `maxLoadsPerTick`: the fill is
+   *  racing a loading screen, a re-tier costs a decode against a live frame. */
+  private retierBudget = 2;
+  /** The device class this manager was built for. Kept beyond `resolveBudget`
+   *  because `rungFor`'s texture clamp needs it. */
+  private profile: DeviceProfile;
+  /** Bytes pulled over the network this session, counted at the point of fetch
+   *  so cache hits and piggybacked loads are free. Drives `cfg.wireBudgetMB`. */
+  private wireBytes = 0;
+  /** One-shot latch for the wire-budget notice. */
+  private wireReported = false;
 
   /** Object names in `animated.glb` the current config hides, and the objects
-   *  that were actually switched off for them. The animated group is
-   *  permanently resident, so hiding is a `visible = false` rather than an
-   *  unload — see `StreamHideRule.node`. */
+   *  switched off for them. That group is permanently resident, so hiding is a
+   *  `visible = false` — see `StreamHideRule.node`. */
   private hiddenNodes = new Set<string>();
   private hiddenAnimated: THREE.Object3D[] = [];
 
   /**
-   * Chunks that have finished decoding and dressing but are NOT yet in the
-   * scene.
-   *
-   * Adding each one the moment its own decode returns is what makes a fill read
-   * as assembly rather than as arrival: decode time tracks chunk size and this
-   * bake's chunks span two orders of magnitude, so a batch requested together
-   * lands scattered over seconds, essentially in size order — which is no order
-   * at all to the eye. Holding them and flushing on the streaming tick turns
-   * that into a few coherent waves, and because the flush is sorted by distance
-   * each wave fills outward from the camera.
+   * Chunks that have finished decoding and dressing but are not yet in the
+   * scene. Decode time tracks chunk size, so adding each on completion lands a
+   * batch scattered over seconds in size order — no order at all to the eye.
+   * Flushing on the streaming tick, sorted by distance, turns that into a few
+   * coherent waves filling outward from the camera.
    */
   private pendingReveal: {
     st: ChunkState;
@@ -216,12 +212,8 @@ export class ChunkManager {
 
   /**
    * Consecutive failed mounts per chunk id, and the ceiling that stops one dead
-   * URL costing the frame.
-   *
-   * Only "resident" reads them, because only it re-scans for missing chunks
-   * every tick instead of consuming a queue: a chunk whose load throws is
-   * otherwise picked up again immediately, forever, and a manifest entry whose
-   * file is genuinely gone would spin the loader for the whole session.
+   * URL costing the frame. Only "resident" reads them, because only it re-scans
+   * for missing chunks every tick rather than consuming a queue.
    */
   private mountFails = new Map<string, number>();
   private static readonly MAX_MOUNT_FAILS = 3;
@@ -245,16 +237,14 @@ export class ChunkManager {
     tex: TexManifest;
     dracoPath?: string;
     mode?: "adaptive" | "full";
-    /** Required: it comes from `<site>.json > stream` via resolveStreamConfig().
-     *  There is deliberately no built-in fallback — a default here would be a
-     *  second, silent source of tuning. */
+    /** From `<site>.json > stream` via resolveStreamConfig(). No built-in
+     *  fallback — a default here would be a second, silent source of tuning. */
     config: StreamingConfig;
     renderer?: THREE.WebGLRenderer;
     ktx2Path?: string;
-    /** Real-byte ceilings. Omitted, they are resolved for this device — see
-     *  `memory.ts > resolveBudget`. Deliberately NOT part of StreamingConfig:
-     *  the bands are authored per SCENE in the site file, while these are a property
-     *  of the DEVICE, and the aerial/ground swap must not move them. */
+    /** Real-byte ceilings; omitted, they are resolved for this device (see
+     *  `memory.ts`). Not part of StreamingConfig: the bands are per SCENE,
+     *  these are per DEVICE, and the aerial/ground swap must not move them. */
     budget?: MemoryBudget;
     profile?: DeviceProfile;
   }) {
@@ -266,31 +256,27 @@ export class ChunkManager {
     this.mode = opts.mode ?? "adaptive";
     this.cfg = opts.config;
     this.effUnload = this.cfg.unloadDist;
-    this.budget = opts.budget ?? resolveBudget(opts.profile ?? "desktop", opts.renderer);
+    this.profile = opts.profile ?? "desktop";
+    this.budget = opts.budget ?? resolveBudget(this.profile, opts.renderer);
 
     const draco = new DRACOLoader();
     draco.setDecoderPath(opts.dracoPath ?? "/draco/");
-    // Decode WIDER. three's default pool is 4 workers, and on a Draco-compressed
-    // chunk set that is the throughput ceiling on the whole fill: decoding is
-    // what stands between asking for a chunk and being able to show it, and
-    // `loadsPerTick` cannot raise a number the decoder is already the bottleneck
-    // for. One core is left for the main thread's own work, which is why this is
-    // hardwareConcurrency MINUS one rather than all of it.
+    // Decode wider: three's default 4 workers is the throughput ceiling on the
+    // whole fill, and `loadsPerTick` cannot raise past the decoder. Minus one
+    // core, left for the main thread.
     draco.setWorkerLimit(
       Math.max(4, Math.min(12, (typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4) - 1)),
     );
     draco.preload();
     this.loader = new GLTFLoader();
     this.loader.setDRACOLoader(draco);
-    // Chunk tiers may be Draco OR meshopt (EXT_meshopt_compression) — the codec
-    // is chosen per tier by the bake. Both decoders are registered so
-    // a chunk loads whichever way it was baked; an unused one costs nothing.
+    // Chunk tiers may be Draco or meshopt, chosen per tier by the bake. Both
+    // decoders are registered; an unused one costs nothing.
     this.loader.setMeshoptDecoder(MeshoptDecoder as unknown as Parameters<GLTFLoader["setMeshoptDecoder"]>[0]);
 
-    // KTX2 textures stay GPU-compressed (huge VRAM saving) but need the renderer
-    // to know which transcode target (BC7/ASTC/ETC2/…) the GPU supports. Only
-    // enabled when a renderer is supplied AND the manifest actually carries ktx2
-    // urls; otherwise the runtime transparently falls back to WebP.
+    // KTX2 stays GPU-compressed but needs the renderer to know the transcode
+    // target. Enabled only with a renderer and ktx2 urls in the manifest;
+    // otherwise the runtime falls back to WebP.
     const hasKtx2 = opts.tex.images.some((im) => im.rungs.some((r) => r.ktx2));
     if (opts.renderer && hasKtx2 && this.cfg.useKtx2) {
       try {
@@ -309,32 +295,39 @@ export class ChunkManager {
     }
 
     this.hidden = this.resolveHidden();
+    this.pickable = this.resolvePickable();
     this.hiddenNodes = this.resolveHiddenNodes();
   }
 
   /**
-   * `cfg.hide` -> the chunk ids it matches.
+   * `cfg.hide` → the chunk ids it matches. The rules name a source mesh by the
+   * MATERIAL it carries, the only name the bake keeps; `minRadiusMetres` is the
+   * tie-break for a shared material (the district ground plane and the
+   * terminal's pavement are the same one, 8 km apart in size).
    *
-   * The rules name a source mesh by the MATERIAL it carries, because that is
-   * the only name the bake keeps: a chunk GLB's node and mesh are both unnamed,
-   * while `materials.json` still carries what the source scene called each
-   * material. `minRadiusMetres` is the tie-break for a material that is shared
-   * — the district ground plane and the terminal's own pavement are the same
-   * material, and only one of them is 8 km across.
-   *
-   * A rule matches when EVERY predicate it states holds. One that states none
-   * matches nothing, so a typo cannot blank the model.
+   * A rule matches when every predicate it states holds, so a typo that states
+   * none matches nothing rather than blanking the model.
    */
   private resolveHidden(): Set<string> {
-    const rules = this.cfg.hide;
+    return this.resolveChunkRules(this.cfg.hide);
+  }
+
+  /** Chunks that keep their CPU vertex arrays under `freeCpuArrays`. Same rule
+   *  vocabulary as `hide`, opposite sense — see `StreamConfig.pick`. */
+  private resolvePickable(): Set<string> {
+    return this.resolveChunkRules(this.cfg.pick);
+  }
+
+  /** Resolve material/radius rules to chunk ids — the only place the manifest
+   *  and `materials.json` are both in hand, hence not in config.ts. */
+  private resolveChunkRules(rules: StreamHideRule[] | undefined): Set<string> {
     const out = new Set<string>();
     if (!rules?.length) return out;
     const nameOf = new Map(this.materials.map((m) => [m.index, m.name]));
     for (const c of this.manifest.chunks) {
       for (const r of rules) {
-        // A `node` rule addresses the animated group, not the chunks — see
-        // resolveHiddenNodes. Skipping it here is what stops it matching every
-        // chunk by stating no chunk predicate.
+        // A `node` rule addresses the animated group, not the chunks. Skipping
+        // it stops it matching everything by stating no chunk predicate.
         if (r.node !== undefined) continue;
         if (r.material === undefined && r.minRadiusMetres === undefined) continue;
         if (r.material !== undefined) {
@@ -349,13 +342,9 @@ export class ChunkManager {
     return out;
   }
 
-  /** The `node` half of `cfg.hide` — object names in `animated.glb`.
-   *
-   *  Separate from the chunk rules because it is a different addressing scheme
-   *  over a different thing: chunks are anonymous and are named by the material
-   *  they carry, while the animated group keeps the source hierarchy and is
-   *  named directly. See `StreamHideRule.node` for why that group cannot be
-   *  reached by a chunk rule at all. */
+  /** The `node` half of `cfg.hide` — object names in `animated.glb`. A
+   *  different addressing scheme: chunks are anonymous and named by material,
+   *  the animated group keeps its source hierarchy. */
   private resolveHiddenNodes(): Set<string> {
     const out = new Set<string>();
     for (const r of this.cfg.hide ?? []) if (r.node) out.add(r.node);
@@ -363,15 +352,11 @@ export class ChunkManager {
   }
 
   /**
-   * Apply the current `node` rules to the animated group.
+   * Apply the current `node` rules to the animated group. Reversible by
+   * construction — exactly the objects this hid are the ones it un-hides, so a
+   * mesh invisible for another reason is never switched back on.
    *
-   * Reversible by construction: exactly the objects this hid are the objects it
-   * un-hides, so a mesh that is invisible for some OTHER reason (applyMaterials
-   * hides un-texturable shells) is never quietly switched back on.
-   *
-   * Called from both `setConfig` and `initAnimation` because either can land
-   * last — the dollhouse config is normally in force before `animated.glb`
-   * finishes downloading, and the view can also swap long after it has.
+   * Called from both `setConfig` and `initAnimation`, since either can land last.
    */
   private applyNodeHiding() {
     for (const o of this.hiddenAnimated) o.visible = true;
@@ -386,30 +371,22 @@ export class ChunkManager {
   }
 
   /**
-   * Swap the streaming config in place.
+   * Swap the streaming config in place — the ground and aerial views are two
+   * strategies over the same manifest. Rebuilding the manager would throw away
+   * `cpuCache`, so returning would re-download everything; here the next
+   * `update()` re-decides each tier and the cache re-mounts off the network.
    *
-   * Used to move between the ground view and the aerial view, which are two
-   * genuinely different strategies over the SAME manifest (see the `aerial`
-   * `aerial` block in the site file). Rebuilding the manager instead would throw
-   * away `cpuCache` — every decoded chunk — so returning to the ground would
-   * re-download the whole walk-around set. Here the next `update()` simply
-   * re-decides every chunk's tier against the new numbers, and anything the
-   * cache still holds re-mounts without touching the network.
-   *
-   * `effUnload` is reset rather than carried over: it is a running average of a
-   * feedback loop tuned to the OLD bands, and a value shrunk under the ground
-   * budget would otherwise start the aerial view already clamped.
+   * `effUnload` is reset, not carried over: it is a feedback value tuned to the
+   * old bands and would start the new view already clamped.
    */
   setConfig(cfg: StreamingConfig) {
     this.cfg = cfg;
     this.effUnload = cfg.unloadDist;
-    // Re-resolved rather than carried over: `hide` is authored per view, so the
-    // dollhouse's backdrop planes come back the moment the walking config takes
-    // over (and vice versa) — on the next tick, through the ordinary
-    // mount/unmount path.
+    // Re-resolved, not carried over: `hide` is per view, so the dollhouse's
+    // backdrop planes come back on the next tick through the normal path.
     this.hidden = this.resolveHidden();
-    // The animated group has no mount/unmount path to ride, so its rules are
-    // applied here and now rather than being picked up by the next tick.
+    this.pickable = this.resolvePickable();
+    // The animated group has no mount/unmount path to ride, so apply now.
     this.hiddenNodes = this.resolveHiddenNodes();
     this.applyNodeHiding();
   }
@@ -423,20 +400,12 @@ export class ChunkManager {
 
   /** Distance from camera to the chunk surface (0 when the camera is inside it).
    *
-   *  Measured to the bounding BOX, not the bounding sphere. The sphere is the
-   *  half-DIAGONAL, so for anything elongated it credits a chunk with far more
-   *  nearness than it has: a 400 m quay wall seen broadside from 300 m scored
-   *  a surface distance of 0 and loaded, while a 4 m bollard standing on it
-   *  scored 300 and did not. Because the band test is the same for both, the
-   *  big object stayed and its co-located detail vanished — a canopy without
-   *  its poles, a stack without its containers.
-   *
-   *  The box is always inside the sphere, so this distance is always >= the old
-   *  one: strictly fewer chunks load, and each one is tiered more honestly.
-   *  Measured over 150 ground cameras on portla-c5-v4, 360 deg, at the old
-   *  50/150/300 bands: holes 3057 -> 2242 objects, resident 6.0 -> 5.3 MB.
-   *  It is a better metric, but it is NOT the cure on its own — see `_bands`
-   *  in `<site>.json > stream`, whose numbers are what actually closed the gap. */
+   *  Measured to the bounding BOX, not the sphere. The sphere is the
+   *  half-diagonal, so an elongated chunk is credited with far more nearness
+   *  than it has — a 400 m quay wall scored 0 from 300 m while a bollard
+   *  standing on it scored 300, so the big object stayed and its co-located
+   *  detail vanished. The box is always inside the sphere, so fewer chunks load
+   *  and each is tiered more honestly. */
   private surfaceDist(cam: THREE.Vector3, c: ChunkEntry): number {
     const mn = c.bbox.min,
       mx = c.bbox.max;
@@ -454,30 +423,13 @@ export class ChunkManager {
       if (scale > 0) d = dist / scale;
     }
     const h = current ? this.cfg.hysteresis : 0;
-    // THE BUDGET-ADJUSTED RADIUS, APPLIED TO THE WHOLE LADDER.
-    //
-    // `effUnload` is the actuator the memory ceiling drives: phase 4 of update()
-    // shrinks it 15% per over-budget tick, to a floor of nearDist * 1.5. It used
-    // to be tested only AFTER the farDist test, which meant the one thing it
-    // could gate was the sliver between farDist and unloadDist — 495-545 m on
-    // the mobile bands, 900-990 m on the desktop ones. Everything inside farDist
-    // was re-requested however far the radius had collapsed, so the loop could
-    // not converge: over budget -> evict the furthest chunks -> next tick the
-    // bands ask for those same chunks -> evict again.
-    //
-    // That is not a hypothetical. Measured on the v8w bake, the mobile bands ask
-    // ~152 MB of decoded geometry at spawn and ~171 MB median across the model,
-    // against an 80 MB ceiling on a tight phone — so it ran every tick from the
-    // moment the scene mounted. The eviction score is `dist + (out-of-view ?
-    // 1e6 : 0)`, which puts the churn exactly at the edge of vision, and since
-    // one building's parts span several chunks it reads as buildings with pieces
-    // missing that change as you turn, rather than as a smaller world.
-    //
-    // Tested FIRST, the same figure does what it was always documented to do:
-    // the world shrinks smoothly under pressure and then holds. The
-    // alwaysLoadDist exemption — on the TRUE distance, not the radius-scaled one
-    // — is what stops a collapsing radius from ever blanking what the player is
-    // standing next to.
+    // The budget-adjusted radius, applied to the WHOLE ladder rather than only
+    // to the sliver past farDist. `effUnload` is the actuator the memory ceiling
+    // drives (phase 4 of update() shrinks it 15% per over-budget tick); tested
+    // last, everything inside farDist was re-requested however far it had
+    // collapsed, so the loop could not converge — evict, re-request, evict.
+    // The alwaysLoadDist exemption is on the TRUE distance, so a collapsing
+    // radius can never blank what the player is standing next to.
     const lim = Math.min(this.cfg.unloadDist, this.effUnload);
     if (d >= lim + h && dist > this.cfg.alwaysLoadDist) return null;
     if (d < this.cfg.nearDist) return "near";
@@ -488,8 +440,7 @@ export class ChunkManager {
   }
 
   /** The tier a chunk should mount at: its band, or `cfg.forceTier` when the
-   *  view pins one. The pin never overrides the null — what loads and what
-   *  unloads stays the bands' decision, only the quality is overridden. */
+   *  view pins one. The pin never overrides the null — only the quality. */
   private bandTier(dist: number, st: ChunkState): Tier | null {
     const band = this.tierFor(dist, st.entry, st.current);
     if (band === null) return null;
@@ -516,26 +467,16 @@ export class ChunkManager {
   }
 
   /**
-   * The texture pass. Shared by both geometry modes and, in "resident" mode,
-   * the only adaptive work left per tick.
+   * The texture pass. Shared by both geometry modes and, under residency, the
+   * only adaptive work left per tick. Two things can be out of date:
    *
-   * Two things can be out of date on a mounted chunk:
+   *   a) whether a chunk is textured at all — a distance cutoff, not the tier;
+   *   b) which RUNG it carries — progressive mounting dresses it at the
+   *      smallest rung, and this promotes it to its tier's own.
    *
-   *   a) whether it is textured at all — that follows a distance cutoff rather
-   *      than the tier, so a chunk stays loaded past textureDist but drops to a
-   *      flat material once beyond it;
-   *   b) which RUNG it carries — progressive mounting dresses a chunk at the
-   *      smallest rung so it can appear immediately, and this is where it is
-   *      promoted to the rung its tier actually asks for.
-   *
-   * (a) is unbudgeted: it is a downgrade to a flat material, or a chunk coming
-   * back into the textured zone, and both are rare. (b) is budgeted and
-   * nearest-first, because after a fill EVERY chunk wants an upgrade at once
-   * and an unbounded wave would re-saturate the network the fill just cleared.
-   *
-   * Works unchanged under residency: `st.current` is then always
-   * `residentTier`, so `texRung[st.current]` is that tier's rung for every
-   * chunk and only the distance CUTOFF in (a) still varies.
+   * (a) is unbudgeted and rare. (b) is budgeted and nearest-first: after a fill
+   * every chunk wants an upgrade at once, and an unbounded wave would
+   * re-saturate the network the fill just cleared.
    */
   private updateTextures() {
     const upgrades: { st: ChunkState; dist: number }[] = [];
@@ -544,7 +485,7 @@ export class ChunkManager {
       const want = this.isTextured(st.current, st.entry);
       if (want !== st.textured) { this.retexture(st, want); continue; }
       if (!want) continue;
-      if (st.texPx !== this.cfg.texRung[st.current]) {
+      if (st.texPx !== this.rungFor(st.current, st.entry)) {
         upgrades.push({ st, dist: this.surfaceDist(this._cam, st.entry) });
       }
     }
@@ -553,32 +494,35 @@ export class ChunkManager {
       const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
       for (let i = 0; i < Math.min(perTick, upgrades.length); i++) {
         const u = upgrades[i];
-        this.retexture(u.st, true, this.cfg.texRung[u.st.current!]);
+        this.retexture(u.st, true, this.rungFor(u.st.current!, u.st.entry));
       }
     }
   }
 
   /**
-   * WHOLE-MODEL RESIDENCY — a different strategy, not a setting of the other
-   * one: no distance bands, no frustum gate, no unloading, no memory governor.
+   * Which LOD a chunk is resident at — by band, not one tier for the world.
    *
-   * Every chunk is mounted once at `residentTier` and stays. What that buys is
-   * the absence of artefacts rather than a number: nothing pops in, nothing
-   * swaps LOD mid-walk, and the resident-byte governor can no longer evict a
-   * chunk that the very next tick re-requests. It is only affordable because
-   * the near tier of this bake is a few tens of megabytes; `geometryMode` is
-   * the gate that keeps it opt-in per bake.
+   * One flat `residentTier` forced an impossible choice: `near` is 68.2 MB on
+   * the wire, and `far` quantizes positions to an 11-bit, 3.1 cm grid that
+   * visibly bends every straight edge in the port. Reading the bands here
+   * resolves it — the handful of chunks inside `nearDist` carry the meshopt
+   * tier, everything past `midDist` stays on the 12.0 MB far tier.
    *
-   * Textures still adapt — they are the one thing that genuinely varies with
-   * distance, and they swap in place so they never flash.
+   * NEVER returns null, which is the whole difference from `tierFor()`: bands
+   * pick QUALITY here, not existence, so nothing can pop.
    */
+  private residentBandTier(dist: number): Tier {
+    if (dist < this.cfg.nearDist) return "near";
+    if (dist < this.cfg.midDist) return "mid";
+    return "far";
+  }
+
   private updateResident() {
     this.flushReveals();
 
-    // Anything still missing, nearest-first. RE-SCANNED each tick rather than
-    // consumed from a queue, so a chunk whose load failed is retried instead of
-    // being silently absent for the whole session — bounded by MAX_MOUNT_FAILS
-    // so a genuinely dead URL cannot spin forever.
+    // Anything still missing, nearest-first. Re-scanned each tick rather than
+    // consumed from a queue, so a failed load is retried — bounded by
+    // MAX_MOUNT_FAILS so a dead URL cannot spin forever.
     const missing: { st: ChunkState; dist: number }[] = [];
     for (const st of this.states.values()) {
       if (st.current || st.loadingTier) continue;
@@ -588,18 +532,44 @@ export class ChunkManager {
     }
     if (missing.length) {
       missing.sort((a, b) => a.dist - b.dist);
+      // The one ceiling residency has: everything else that bounds memory lives
+      // in update(), which this method returns before.
+      //
+      // Enforced by refusing to START a load, never by evicting — eviction is
+      // what residency exists to avoid. With the nearest-first sort above, a
+      // tight ceiling gives up the far edge of the world, which fades into fog
+      // anyway, and never what the camera is standing next to.
+      const cap = this.residentCapBytes();
+      let projected = cap === Infinity ? 0 : this.residentBytes();
       const n = Math.min(this.cfg.maxLoadsPerTick, missing.length);
       for (let i = 0; i < n; i++) {
-        const tier = this.resolveTier(missing[i].st.entry, this.cfg.residentTier);
-        if (tier) this.mount(missing[i].st, tier);
+        const tier = this.resolveTier(missing[i].st.entry, this.residentBandTier(missing[i].dist));
+        if (!tier) continue;
+        if (cap !== Infinity) {
+          const cost = this.estGeomBytes(missing[i].st.entry, tier);
+          if (projected + cost > cap) {
+            if (!this.capReported) {
+              this.capReported = true;
+              console.warn(
+                `[stream] resident ceiling reached at ${(projected / 1048576).toFixed(0)} MB ` +
+                  `of ${(cap / 1048576).toFixed(0)} MB (residentBudgetMB). Further chunks are ` +
+                  "not being mounted; the far edge of the model will be missing. Raise " +
+                  "residentBudgetMB, or drop residentTier, if this is biting in normal use.",
+              );
+            }
+            break;
+          }
+          projected += cost;
+        }
+        this.mount(missing[i].st, tier);
       }
     }
 
+    this.retierResident();
     this.updateTextures();
 
-    // Every placement, once. The resident set never changes after this, so
-    // sync()'s signature check early-outs on every subsequent tick and the
-    // instance buffers are built exactly one time.
+    // Every placement, once — the resident set never changes, so sync()'s
+    // signature check early-outs on every subsequent tick.
     if (this.instances && !this.instSynced) {
       this.instResident = this.manifest.chunks.filter((c) => c.inst);
       this.instances.sync(this.instResident);
@@ -607,50 +577,92 @@ export class ChunkManager {
     }
   }
 
+  /**
+   * Move already-mounted chunks onto the tier their current band asks for, so
+   * walking toward a building sharpens its geometry and walking away releases it.
+   *
+   * Safe under residency, whose no-mid-walk-re-tier rule is about UNLOADING: a
+   * tier swap keeps the previous group on screen, fully textured, for the whole
+   * load, and `flushReveals()` exchanges them only once the replacement is
+   * dressed (`isSwap` even suppresses the preview rung).
+   *
+   * Upgrades are budgeted, downgrades are not: a sharper tier is a download and
+   * is refused once `wireBudgetMB` or the resident ceiling is reached, so the
+   * scene stops sharpening rather than showing a hole.
+   */
+  private retierResident() {
+    if (this.retierBudget <= 0) return;
+    const cap = this.residentCapBytes();
+    let resident = cap === Infinity ? 0 : this.residentBytes();
+    let started = 0;
+    const want: { st: ChunkState; tier: Tier; dist: number; up: boolean }[] = [];
+    for (const st of this.states.values()) {
+      if (!st.current || st.loadingTier || this.hidden.has(st.entry.id)) continue;
+      const dist = this.surfaceDist(this._cam, st.entry);
+      const tier = this.resolveTier(st.entry, this.residentBandTier(dist));
+      if (!tier || tier === st.current) continue;
+      // TIER_ORDER is near -> mid -> far, so a LOWER index is sharper.
+      const up = TIER_ORDER.indexOf(tier) < TIER_ORDER.indexOf(st.current);
+      want.push({ st, tier, dist, up });
+    }
+    if (!want.length) return;
+    want.sort((a, b) => a.dist - b.dist);
+    for (const w of want) {
+      if (started >= this.retierBudget) break;
+      if (w.up) {
+        if (this.overWireBudget()) continue;
+        if (cap !== Infinity) {
+          const delta = this.estGeomBytes(w.st.entry, w.tier) - this.estGeomBytes(w.st.entry, w.st.current!);
+          if (resident + delta > cap) continue;
+          resident += delta;
+        }
+      }
+      started++;
+      this.mount(w.st, w.tier);
+    }
+  }
+
   /** Main entry — call ~updateHz times/sec with the camera. */
   update(camera: THREE.Camera) {
     camera.getWorldPosition(this._cam);
-    // Residency is a different strategy, not a setting of this one — see
-    // updateResident() for what it drops and why.
+    // Residency is a different strategy — see updateResident().
     if (this.mode === "adaptive" && this.cfg.geometryMode === "resident") {
       this.updateResident();
       return;
     }
-    // View frustum for this tick (stream culling): only chunks the camera can
-    // see are loaded, except a 360° bubble of nearby chunks (alwaysLoadDist).
+    // Stream culling: only chunks the camera can see load, except a 360° bubble
+    // of nearby ones (alwaysLoadDist).
     const cull = this.mode === "adaptive" && this.cfg.frustumCull;
     if (cull) {
-      // Compute the inverse ourselves rather than trusting camera.matrixWorldInverse,
-      // which the renderer only refreshes at draw time (could be stale on the first tick).
+      // Our own inverse: camera.matrixWorldInverse only refreshes at draw time
+      // and can be stale on the first tick.
       camera.updateMatrixWorld();
       this._camInv.copy(camera.matrixWorld).invert();
       this._projView.multiplyMatrices(camera.projectionMatrix, this._camInv);
       this._frustum.setFromProjectionMatrix(this._projView);
     }
 
-    // 0. Show whatever finished decoding since the last tick, as one wave.
-    //    Before the tier decisions below, so this tick reasons about what is
-    //    actually on screen rather than about a set one flush out of date.
+    // Show whatever finished decoding since the last tick, as one wave — before
+    // the tier decisions, so they reason about what is actually on screen.
     this.flushReveals();
 
     const changes: { st: ChunkState; want: Tier | null; dist: number }[] = [];
     this.instResident.length = 0;
     for (const st of this.states.values()) {
       const dist = this.surfaceDist(this._cam, st.entry);
-      // Hidden chunks are decided before anything else: never downloaded, and
-      // unmounted on the first tick after a config that hides them takes over.
+      // Hidden chunks are decided first: never downloaded, and unmounted on the
+      // first tick after a config that hides them takes over.
       const hidden = this.hidden.has(st.entry.id);
       let want = hidden
         ? null
         : this.mode === "full"
           ? this.resolveTier(st.entry, "near")
           : this.resolveTier(st.entry, this.bandTier(dist, st));
-      // Cull out-of-view chunks beyond the always-load bubble. Nearby chunks
-      // (dist <= alwaysLoadDist) stay loaded 360° so looking around is instant.
+      // Cull out-of-view chunks beyond the always-load bubble; nearer ones stay
+      // loaded 360° so looking around is instant.
       if (cull && want !== null && dist > this.cfg.alwaysLoadDist && !this.inView(st.entry)) {
-        // Anti-thrash: a chunk that just left the view is kept for a short grace
-        // period before we unload+dispose it, so turning/walking doesn't churn
-        // GPU re-uploads. Only after `cullGraceTicks` out-of-view ticks does it go.
+        // Anti-thrash: a chunk that just left the view is held for
+        // `cullGraceTicks` so turning does not churn GPU re-uploads.
         if (st.current !== null && st.outTicks < this.cfg.cullGraceTicks) {
           st.outTicks++;
           want = st.current;
@@ -660,21 +672,16 @@ export class ChunkManager {
       } else {
         st.outTicks = 0;
       }
-      // Queue a change when the desired tier differs from what's mounted — UNLESS
-      // we're already loading exactly that tier (avoid duplicate loads). The old
-      // guard `st.loadingTier !== want` mis-fired on UNLOADS: with want=null and
-      // nothing loading (loadingTier=null), `null !== null` is false, so far
-      // chunks that should unload were never queued. They then lingered past
-      // unloadDist, crossed textureDist, got their textures stripped, and showed
-      // as white shells. Only skip when a load for `want` is genuinely in flight.
+      // Queue a change when the desired tier differs from what is mounted,
+      // unless that exact tier is already in flight. Testing `loadingTier !==
+      // want` instead mis-fires on unloads (null !== null is false), leaving far
+      // chunks mounted past textureDist as white shells.
       const alreadyLoadingWant = want !== null && st.loadingTier === want;
       if (want !== st.current && !alreadyLoadingWant) changes.push({ st, want, dist });
 
-      // Instance residency is decided from the BAND, not from `want`. A chunk
-      // that is entirely instanced has no lods, so resolveTier() returns null for
-      // it and it would never count as resident — yet its placements are exactly
-      // what should be drawn. Re-test the band directly, and apply the same
-      // frustum rule so instanced geometry culls like everything else.
+      // Instance residency comes from the BAND, not `want`: a fully instanced
+      // chunk has no lods, so resolveTier() returns null even though its
+      // placements are exactly what should be drawn.
       if (st.entry.inst && this.instances && !hidden) {
         const inBand = this.mode === "full" || this.tierFor(dist, st.entry, st.current) !== null;
         const visible = !cull || dist <= this.cfg.alwaysLoadDist || this.inView(st.entry);
@@ -687,12 +694,9 @@ export class ChunkManager {
 
     for (const u of unloads) this.unmount(u.st);
     let budget = this.cfg.maxLoadsPerTick;
-    // HARD CAP, applied BEFORE mounting. The feedback loop in phase 4 can only
-    // react after the fact (so the figure would briefly overshoot); this refuses
-    // to start a load that would push us past the ceiling in the first place.
-    // Geometry cost is known up front from the manifest; texture cost is handled
-    // by phase 4. Chunks inside nearDist are always allowed — never blank out
-    // what the camera is standing in.
+    // Hard cap applied BEFORE mounting: the feedback loop below can only react
+    // after the fact. Geometry cost is known up front from the manifest;
+    // textures are handled there. Chunks inside nearDist are always allowed.
     const hardCap = this.gpuCapBytes();
     let projected = hardCap === Infinity ? 0 : this.residentBytes();
     for (const l of loads) {
@@ -709,9 +713,9 @@ export class ChunkManager {
 
     this.updateTextures();
 
-    // 4. HARD MEMORY CEILING. Distance bands alone can't bound memory (density
-    //    varies), so drive the effective unload radius from what's actually
-    //    resident: shrink it while over budget, ease it back out when under.
+    // Hard memory ceiling: density varies, so bands alone cannot bound memory.
+    // Drive the unload radius from what is actually resident — shrink it while
+    // over budget, ease it back out when under.
     const gpuCap = this.gpuCapBytes();
     if (gpuCap !== Infinity) {
       const budget = gpuCap;
@@ -719,11 +723,9 @@ export class ChunkManager {
       if (bytes > budget) {
         this.effUnload = Math.max(this.cfg.nearDist * 1.5, this.effUnload * 0.85);
         // Far over: evict the furthest resident chunks now rather than waiting
-        // for the radius to converge over several ticks.
+        // for the radius to converge. All the way down to the ceiling, since
+        // textures acquired during mount are only accounted for here.
         let guard = 0;
-        // Evict all the way down to the ceiling (not 5% over) — the budget is a
-        // hard limit, and textures acquired during mount can only be accounted
-        // for here, after the fact.
         while (bytes > budget && guard++ < 32) {
           let worst: ChunkState | null = null;
           let worstScore = -1;
@@ -731,10 +733,8 @@ export class ChunkManager {
           for (const st of this.states.values()) {
             if (!st.current || !st.group) continue;
             const d = this.surfaceDist(this._cam, st.entry);
-            // Evict what you CANNOT see first — dropping an on-screen chunk
-            // makes a building visibly vanish (or half-vanish, since one
-            // building's parts span several chunks). Out-of-view chunks are
-            // scored far higher so they always go first.
+            // Evict what cannot be seen first: one building's parts span
+            // several chunks, so dropping an on-screen one half-vanishes it.
             const score = d + (cull && !this.inView(st.entry) ? 1e6 : 0);
             if (score > worstScore) { worstScore = score; worstD = d; worst = st; }
           }
@@ -747,15 +747,13 @@ export class ChunkManager {
       }
     }
 
-    // 4a. The other two pools. Both are bounded here rather than at their point
-    //     of use: the CPU cache used to be trimmed only from inside mount(), so
-    //     descending out of the aerial view — which mounts nothing new — left it
-    //     sitting at the aerial ceiling indefinitely.
+    // The other two pools, bounded here rather than at their point of use:
+    // trimming the CPU cache only inside mount() left it at the aerial ceiling
+    // indefinitely after descending, since that mounts nothing new.
     this.evictCache();
     this.evictTextures();
 
-    // 4b. redraw the shared instance buffers for whatever is resident now.
-    //     Cheap: it early-outs unless the resident set actually changed.
+    // Redraw the shared instance buffers; early-outs unless the set changed.
     this.instances?.sync(this.instResident);
 
     if (this.boundsOn) {
@@ -772,14 +770,9 @@ export class ChunkManager {
     }
   }
 
-  /** DECODED bytes uploaded to the GPU right now: the vertex buffers of every
-   *  mounted chunk, plus every texture currently resident.
-   *
-   *  This used to sum the manifest's ENCODED sizes and compare them to
-   *  `residentBudgetMB`, which is what made the ceiling unenforceable: at the
-   *  13.5x decode ratio measured on this bake, a "34 MB" budget was really
-   *  ~460 MB, so the feedback loop below never once fired. Measured off the
-   *  decoded geometry instead, there is no ratio left to drift. */
+  /** Decoded bytes uploaded to the GPU right now: the vertex buffers of every
+   *  mounted chunk plus every resident texture. Measured off the decoded
+   *  geometry, so there is no encode ratio left to drift. */
   private residentBytes(): number {
     let n = 0;
     for (const st of this.states.values()) {
@@ -790,12 +783,17 @@ export class ChunkManager {
     return n + this.textureBytesTotal();
   }
 
-  /** Heap held by decoded groups — mounted AND merely cached. three keeps the
+  /** Heap held by decoded groups, mounted and merely cached. three keeps the
    *  typed arrays after upload, so a mounted chunk is charged here as well as
-   *  in residentBytes(); that double charge is real and was previously invisible. */
+   *  in residentBytes() — that double charge is real. */
   private cpuCacheBytes(): number {
     let n = 0;
-    for (const b of this.cpuBytes.values()) n += b;
+    for (const [url, b] of this.cpuBytes) {
+      // Handed to the GPU and dropped: still resident in VRAM, where
+      // residentBytes() prices them, but no longer heap.
+      if (this.cpuFreed.has(url)) continue;
+      n += b;
+    }
     return n;
   }
 
@@ -805,34 +803,34 @@ export class ChunkManager {
     return n;
   }
 
-  /** The GPU ceiling actually in force: the lower of what this DEVICE can
-   *  afford and what the scene asks for.
+  /**
+   * The ceiling `updateResident()` fills up to, in real decoded bytes.
    *
-   *  Two knobs rather than one because they answer different questions.
-   *  `budget.gpuMB` is the device's limit and must not move when the view
-   *  swaps; `cfg.residentBudgetMB` is per-config, which is how the aerial view
-   *  — where all 816 chunks are legitimately in frame at the far tier — asks
-   *  for more headroom than the walking view needs. Both are now REAL decoded
-   *  megabytes; `residentBudgetMB` used to be encoded bytes, which is why 34
-   *  was really ~460 MB and never bound anything. */
+   * Deliberately not `gpuCapBytes()`: the device figures in memory.ts were sized
+   * for the STREAMED path, where a moving frustum means only a slice is ever
+   * mounted, so they would refuse ~40% of the model on a device that can hold
+   * it. `residentBudgetMB` is the per-view figure authored against a whole-model
+   * fill. `currentGpuScale()` still applies, so a context loss tightens this.
+   */
+  private residentCapBytes(): number {
+    const mb = this.cfg.residentBudgetMB;
+    if (!(mb > 0)) return Infinity;
+    return mb * currentGpuScale() * 1048576;
+  }
+
   private gpuCapBytes(): number {
     const dev = this.budget.gpuMB > 0 ? this.budget.gpuMB : Infinity;
     const scene = this.cfg.residentBudgetMB > 0 ? this.cfg.residentBudgetMB : Infinity;
     const mb = Math.min(dev, scene);
     if (mb === Infinity) return Infinity;
-    // Read the degrade scale LIVE rather than baking it in at construction: a
-    // context loss lands on the canvas mid-session, and the next tick must
-    // already be evicting against the reduced ceiling.
+    // Read live, not baked in at construction: a context loss lands mid-session
+    // and the next tick must already evict against the reduced ceiling.
     return mb * currentGpuScale() * 1048576;
   }
 
-  /** What a chunk WILL cost once decoded, for the pre-mount hard cap.
-   *
-   *  Exact once the chunk has been decoded at that tier. Before that, the only
-   *  figure available is the manifest's encoded size, so it is scaled by a
-   *  decode ratio LEARNED from the chunks already measured this session rather
-   *  than hardcoded — the 13.5x in the site file's note is true of this bake and
-   *  would silently mislead on the next one. */
+  /** What a chunk will cost once decoded, for the pre-mount hard cap. Exact
+   *  once decoded at that tier; before that, the manifest's encoded size scaled
+   *  by a ratio learned this session rather than hardcoded per bake. */
   private estGeomBytes(c: ChunkEntry, tier: Tier): number {
     const url = this.lodUrl(c, tier);
     const known = url ? this.cpuBytes.get(url) : undefined;
@@ -842,8 +840,8 @@ export class ChunkManager {
     return lod.bytes * this.decodeRatio;
   }
 
-  /** Running mean of decoded/encoded over every chunk measured so far. Seeded
-   *  with this bake's measured figure so the very first tick is not wild. */
+  /** Running mean of decoded/encoded, seeded with this bake's measured figure
+   *  so the first tick is not wild. */
   private decodeRatio = 13.5;
   private ratioSamples = 0;
 
@@ -851,8 +849,7 @@ export class ChunkManager {
     if (encoded <= 0 || decoded <= 0) return;
     const r = decoded / encoded;
     this.ratioSamples++;
-    // Plain incremental mean; converges within the first few dozen chunks and
-    // then barely moves, which is what we want from a sizing hint.
+    // Plain incremental mean: converges within a few dozen chunks, then holds.
     this.decodeRatio += (r - this.decodeRatio) / Math.min(this.ratioSamples, 64);
   }
 
@@ -860,6 +857,75 @@ export class ChunkManager {
     const lod = c.lods.find((l) => l.tier === tier);
     return lod ? this.assetBase + lod.url : null;
   }
+
+  /**
+   * The texture rung this tier actually gets, once the encoding is known.
+   *
+   * `cfg.texRung` is authored against GPU-compressed textures at ~1 byte per
+   * texel; the same rung as WebP decodes to RGBA8 plus mips at ~5.33. Over this
+   * bake's 72 images the 512 rung is 12.3 MB as KTX2 and 49.3 MB as WebP.
+   *
+   * Whether the KTX2 counterparts exist is a property of the BAKE, and the
+   * format request degrades silently per rung — so without this clamp the
+   * largest non-geometry item swings 4x on which bake the env var points at.
+   * Desktop is exempt; it is not the device that loses its context over 37 MB.
+   */
+  private rungFor(tier: Tier, c?: ChunkEntry): number {
+    // The wire budget, applied first. Past the ceiling every chunk asks for the
+    // cheapest rung, which by then is almost always a texture-cache hit — so
+    // spending stops without stripping anything on screen. Geometry does not
+    // come through here and is never refused.
+    if (this.overWireBudget()) {
+      if (!this.wireReported) {
+        this.wireReported = true;
+        console.warn(
+          `[stream] wire budget spent: ${(this.wireBytes / 1048576).toFixed(1)} MB of ` +
+            `${this.cfg.wireBudgetMB} MB. Texture rungs are pinned to the cheapest from here; ` +
+            "geometry is unaffected. Raise stream wireBudgetMB to allow more.",
+        );
+      }
+      return this.cfg.texRung.far;
+    }
+    const want = this.rungBand(tier, c);
+    if (this.profile === "desktop" || this.ktx2) return want;
+    return Math.min(want, ChunkManager.WEBP_RUNG_CAP);
+  }
+
+  /** Has this session pulled more than `cfg.wireBudgetMB` off the network? */
+  private overWireBudget(): boolean {
+    const mb = this.cfg.wireBudgetMB;
+    return mb > 0 && this.wireBytes >= mb * 1048576;
+  }
+
+  /**
+   * Which rung a chunk asks for — by DISTANCE under residency, by tier otherwise.
+   *
+   * Under `streamed` the band picks the tier and the tier picks the rung. Under
+   * `resident` that collapses: `st.current` is always `residentTier`, so
+   * dropping it to `far` for its triangle count also pinned every texture in
+   * the scene to the far rung, applying the cheap rung at arm's length.
+   *
+   * So the rung follows the same band arithmetic while the GEOMETRY stays
+   * pinned: triangles are what a phone cannot hold, texels are what it can.
+   * `updateTextures()` swaps rungs in place, so a chunk sharpens as you approach
+   * with no flash and no re-download. Costs nothing when near/mid/far all name
+   * the same rung.
+   */
+  private rungBand(tier: Tier, c?: ChunkEntry): number {
+    const R = this.cfg.texRung;
+    // Desktop is exempt: its resident tier is `near`, already the sharpest rung
+    // on every chunk, so banding it would only take sharpness away.
+    if (this.profile === "desktop") return R[tier];
+    if (this.cfg.geometryMode !== "resident" || !c) return R[tier];
+    const d = this.surfaceDist(this._cam, c);
+    if (d < this.cfg.nearDist) return R.near;
+    if (d < this.cfg.midDist) return R.mid;
+    return R.far;
+  }
+
+  /** One rung down from 512: 17.3 MB rather than 49.3 MB as WebP, and less
+   *  visible on a phone screen than a lost context. */
+  private static readonly WEBP_RUNG_CAP = 256;
 
   /** A chunk is textured if its tier is a textured tier AND its surface is
    *  within textureDist (keeps the textured zone smaller than the loaded zone). */
@@ -875,18 +941,29 @@ export class ChunkManager {
     if (!url) { st.loadingTier = null; return; }
     try {
       let group = this.cpuCache.get(url);
+      // A freed group can never be re-uploaded: the typed arrays are gone, so it
+      // would mount as an empty mesh and render as nothing. Unconditional, not
+      // gated on the geometry mode — band-driven re-tiering re-mounts under
+      // residency too, so a freed url is always a re-download.
+      if (group && this.cpuFreed.has(url)) {
+        this.cpuCache.delete(url);
+        this.cpuBytes.delete(url);
+        this.cpuFreed.delete(url);
+        group = undefined;
+      }
       if (group) {
         this.cpuCache.delete(url);
         this.cpuCache.set(url, group);
       } else {
-        // A url we have decoded before and evicted is a re-download — the churn
-        // figure the HUD reports, and the one that says whether cpuMB is too low.
+        // A url decoded before and evicted is a re-download — the churn figure
+        // that says whether cpuMB is too low.
         if (this.everCached.has(url)) this.redownloads++;
+        // The only place a chunk goes to the network; cpuCache hits stay free.
+        this.wireBytes += st.entry.lods.find((l) => l.tier === tier)?.bytes ?? 0;
         const gltf = await this.loader.loadAsync(url);
         group = gltf.scene;
         this.cpuCache.set(url, group);
-        // MEASURED, not estimated: walk the decoded attributes. This is the
-        // number every ceiling in this file is enforced against.
+        // Measured off the decoded attributes — what every ceiling here uses.
         const bytes = geometryBytes(group);
         this.cpuBytes.set(url, bytes);
         this.everCached.add(url);
@@ -896,46 +973,34 @@ export class ChunkManager {
       if (st.loadingTier !== tier) return;
 
       const textured = this.isTextured(tier, st.entry);
-      // Wait for the textures BEFORE putting anything on screen. three's
+      // Wait for the textures BEFORE putting anything on screen: three's
       // TextureLoader hands back an empty texture and fills the pixels in later,
-      // so mounting first meant a chunk appeared as raw white geometry until its
-      // images arrived. Awaiting here means a chunk is either absent or fully
-      // textured — never a white shell, and never half-dressed next to its
-      // neighbours. The previously mounted tier stays visible, fully textured,
-      // for the whole load: we acquire under a NEW owner token and only release
-      // the old one after the swap below.
-      // WHICH rung it waits for is the difference between a scene that appears
-      // in one piece and one that assembles itself in front of you. At the
-      // tier's own rung every chunk waits on its own images, so chunks land one
-      // at a time in whatever order the network returns them. At the preview
-      // rung they nearly all hit the texture cache instead — the whole image set
-      // is ~0.1 MB at 128 px and is SHARED between chunks — so a neighbourhood
-      // appears together and sharpens a moment later (the upgrade pass in
-      // update() phase 3).
-      // Two exceptions, both because the preview rung is for filling a BLANK,
-      // never for replacing something already on screen:
-      //   a tier SWAP keeps the previous tier visible for the whole load, so
-      //   there is nothing to hurry and no reason to accept a blurry
-      //   intermediate — dropping to 128 px and climbing back would be a
-      //   visible quality dip every time you walk toward a building;
-      //   NEAR is by definition what is being looked at. The preview rung
-      //   resolves to ~128 px, which on a decal off a 2048 source is mush, and
-      //   near is only a few dozen chunks, so waiting for their real textures
-      //   costs almost nothing.
+      // so a chunk would appear as raw white geometry. The previously mounted
+      // tier stays visible throughout — acquire under a new owner token and
+      // release the old one only after the swap below.
+      //
+      // WHICH rung it waits for decides whether the scene appears in one piece.
+      // At the tier's own rung each chunk waits on its own images and they land
+      // one at a time; at the preview rung they nearly all hit the texture cache
+      // (the whole 128 px set is ~0.1 MB and shared), so a neighbourhood arrives
+      // together and sharpens a moment later.
+      //
+      // Two exceptions, both because the preview rung fills a BLANK rather than
+      // replacing something on screen: a tier SWAP keeps the previous tier
+      // visible anyway, so a blurry intermediate is a pure quality dip; and NEAR
+      // is by definition what is being looked at, where ~128 px is mush and the
+      // few dozen chunks cost almost nothing to wait for.
       const isSwap = st.group !== null && st.current !== null;
-      // RESIDENT mode never previews. The preview rung exists to cover a blank
-      // area fast while the camera is already in the scene; under residency the
-      // whole fill happens behind the loading screen, where a blurry-then-sharp
-      // pass buys nothing and only risks the loader lifting mid-upgrade. It is
-      // also nearly free to skip — chunks share images, so after the first
-      // handful every request is a texture-cache hit anyway.
+      // Resident mode never previews: the whole fill happens behind the loading
+      // screen, where a blurry-then-sharp pass buys nothing and risks the loader
+      // lifting mid-upgrade.
       const preview =
         this.cfg.progressiveTex &&
         textured &&
         !isSwap &&
         tier !== "near" &&
         this.cfg.geometryMode !== "resident";
-      const px = preview ? PREVIEW_PX : this.cfg.texRung[tier];
+      const px = preview ? PREVIEW_PX : this.rungFor(tier, st.entry);
       const owner = `${st.entry.id}#${++this.texSeq}`;
       await this.applyMaterials(group, tier, textured, owner, px);
       if (st.loadingTier !== tier) {
@@ -943,54 +1008,43 @@ export class ChunkManager {
         return;
       }
 
-      // Ready, but NOT shown yet — queued for the next flush so it arrives with
-      // its neighbours. `loadingTier` deliberately stays set until then: it is
-      // what stops a duplicate load being queued for the same chunk, and what
-      // keeps evictCache() from disposing the group between here and the flush.
+      // Ready but not shown — queued for the next flush so it arrives with its
+      // neighbours. `loadingTier` stays set until then: it blocks a duplicate
+      // load and keeps evictCache() off the group in the meantime.
       this.pendingReveal.push({ st, group, tier, owner, textured, px, at: performance.now() });
       queued = true;
     } catch (e) {
-      // Counted so the resident scan can give up on a URL that never resolves;
-      // ignored by the streamed path, which will simply re-evaluate the chunk
-      // next time the camera brings it back into a band.
+      // Counted so the resident scan can give up on a URL that never resolves.
       this.mountFails.set(st.entry.id, (this.mountFails.get(st.entry.id) ?? 0) + 1);
       console.error("chunk load failed", url, e);
     } finally {
-      // A QUEUED chunk keeps `loadingTier` until flushReveals clears it. Clearing
-      // it here would make every reveal look stale and drop the whole batch.
+      // A queued chunk keeps `loadingTier` until flushReveals clears it, or
+      // every reveal looks stale and the whole batch is dropped.
       if (!queued && st.loadingTier === tier) st.loadingTier = null;
     }
   }
 
   /**
-   * Reveal decoded chunks as an OUTWARD SWEEP, not in the order they happened to
-   * finish.
+   * Reveal decoded chunks as an outward sweep rather than in completion order.
    *
-   * This is the whole of the arrival smoothing, and it is done by ORDERING
-   * rather than by shading — deliberately. Two per-chunk fades were tried in the
-   * repo this came from and both read as flicker, not as a fade: a plain alpha
-   * ramp (flipping `transparent` moves a mesh into the transparent pass, where
-   * it sorts against itself and shows its own back faces, and recompiles the
-   * shader at each end of the ramp), and `alphaHash` (a STOCHASTIC threshold
-   * meant to be resolved by temporal AA — without TAA it is animated per-pixel
-   * noise). Nothing here touches a material, so there is nothing left to
-   * flicker.
+   * All of the arrival smoothing is ORDERING, not shading: per-chunk fades were
+   * tried and both read as flicker — an alpha ramp moves the mesh into the
+   * transparent pass and recompiles at each end, and `alphaHash` without TAA is
+   * animated per-pixel noise. Nothing here touches a material.
    *
-   * The rule: a chunk waits until nothing NEARER is still decoding. Decode time
-   * tracks chunk size, so completion order is essentially size order, which is
-   * why an unordered fill looked random. Gating on "is anything closer still
-   * coming?" turns it into a front that moves out from the camera.
+   * The rule: a chunk waits until nothing nearer is still decoding. Decode time
+   * tracks chunk size, so completion order is essentially size order — gating on
+   * "is anything closer still coming?" turns it into a front moving outward.
    *
-   * MAX_HOLD_MS is the escape hatch: one slow near chunk must not dam everything
-   * behind it, so anything waiting longer than that goes anyway.
+   * MAX_HOLD_MS is the escape hatch, so one slow near chunk cannot dam the rest.
    */
   private static readonly MAX_HOLD_MS = 600;
 
   private flushReveals() {
     if (!this.pendingReveal.length) return;
 
-    // The nearest chunk still DECODING — queued ones are already done, so they
-    // must not count as blocking themselves.
+    // The nearest chunk still decoding — queued ones are done and must not
+    // count as blocking themselves.
     const queued = new Set(this.pendingReveal.map((r) => r.st));
     let nearestInFlight = Infinity;
     for (const st of this.states.values()) {
@@ -1013,8 +1067,7 @@ export class ChunkManager {
     ready.sort((a, b) => this.surfaceDist(this._cam, a.st.entry) - this.surfaceDist(this._cam, b.st.entry));
     for (const r of ready) {
       const { st, group, tier, owner, textured, px } = r;
-      // The world moved on while this sat in the queue — the chunk was unloaded,
-      // or re-tiered out from under it. Drop it and let go of its textures.
+      // Unloaded or re-tiered while it sat in the queue. Drop it.
       if (st.loadingTier !== tier) {
         this.releaseTextures(owner);
         continue;
@@ -1022,9 +1075,22 @@ export class ChunkManager {
       st.textured = textured;
       st.texPx = textured ? px : null;
       if (st.group && st.group !== group) this.scene.remove(st.group);
+      // Must precede the add: the arrays go on the next render's upload, and the
+      // bounds have to be computed while there is still something to compute.
+      if (this.shouldFreeCpu(st.entry.id)) {
+        // Never let this stop a reveal: failing to free costs memory, throwing
+        // would leave the chunk unmounted and re-queued every tick.
+        try {
+          this.armCpuArrayRelease(group);
+          const url = this.lodUrl(st.entry, tier);
+          if (url) this.cpuFreed.add(url);
+        } catch (e) {
+          console.warn("[stream] freeCpuArrays: could not arm release for", st.entry.id, e);
+        }
+      }
       if (group.parent !== this.scene) this.scene.add(group);
-      // Old textures are only now unreferenced — anything still shared with the
-      // new tier keeps a nonzero refcount and is never disposed.
+      // Old textures are only now unreferenced; anything shared with the new
+      // tier keeps a nonzero refcount.
       if (st.texOwner && st.texOwner !== owner) this.releaseTextures(st.texOwner);
       st.texOwner = owner;
       st.group = group;
@@ -1035,20 +1101,14 @@ export class ChunkManager {
   }
 
   /**
-   * Re-dress an ALREADY VISIBLE group by swapping MAPS ON THE EXISTING
-   * MATERIALS — never by rebuilding them.
+   * Re-dress an already-visible group by swapping maps on the EXISTING
+   * materials, never by rebuilding them.
    *
-   * This is the whole difference between a texture upgrade you cannot see and a
-   * white flash. `applyMaterials()` disposes each material and builds a fresh
-   * one whose `map` is null until its image resolves; run against a group that
-   * is on screen, the mesh renders untextured for the length of a network fetch.
-   * That was tolerable when the only caller was the textureDist crossing, which
-   * essentially never fires (textureDist == unloadDist). Progressive mounting
-   * makes EVERY chunk take this path once, a few at a time, so the scene would
-   * flash its way through itself mesh by mesh.
-   *
-   * Here the old map stays bound until `assign` swaps the new one in, so there
-   * is no frame without a texture.
+   * `applyMaterials()` disposes each material and builds a fresh one whose `map`
+   * is null until its image resolves, so on screen the mesh renders untextured
+   * for the length of a fetch — and progressive mounting makes every chunk take
+   * this path once. Here the old map stays bound until `assign` swaps the new
+   * one in, so there is no frame without a texture.
    */
   private async reskinTextures(
     group: THREE.Group,
@@ -1068,9 +1128,8 @@ export class ChunkManager {
       if (!m || !def?.textures) return;
       const T = def.textures;
       if (!textured) {
-        // Going flat: this one IS a visible change, and is meant to be — it is
-        // what "beyond textureDist" looks like. Dropping the maps is immediate
-        // because there is nothing to wait for.
+        // Going flat is meant to be visible — it is what "beyond textureDist"
+        // looks like — and immediate, since there is nothing to wait for.
         m.map = null;
         m.normalMap = null;
         m.metalnessMap = null;
@@ -1088,16 +1147,14 @@ export class ChunkManager {
     await Promise.all(pending);
   }
 
-  /** Re-dress an ALREADY VISIBLE group: either because it crossed textureDist,
-   *  or to promote it off the progressive preview rung. The new maps are fetched
-   *  and assigned before the old owner is released, so the mesh is never on
-   *  screen with a disposed or missing texture. Guarded by `st.retexturing` so
-   *  the update tick can't stack duplicate passes. */
+  /** Re-dress a visible group — it crossed textureDist, or is being promoted
+   *  off the preview rung. New maps are assigned before the old owner is
+   *  released, and `st.retexturing` stops the tick stacking duplicate passes. */
   private async retexture(st: ChunkState, want: boolean, px?: number) {
     const group = st.group, tier = st.current;
     if (!group || !tier) return;
     st.retexturing = true;
-    const rung = px ?? this.cfg.texRung[tier];
+    const rung = px ?? this.rungFor(tier);
     const owner = `${st.entry.id}#${++this.texSeq}`;
     try {
       await this.reskinTextures(group, tier, want, owner, rung);
@@ -1115,16 +1172,13 @@ export class ChunkManager {
   }
 
   private unmount(st: ChunkState) {
-    // Cancel any load still in flight for this chunk: mount() re-checks
-    // loadingTier after its await and bails when it no longer matches, so a
-    // chunk that leaves the view mid-load won't briefly pop in then tear down.
+    // Cancel any in-flight load: mount() re-checks loadingTier after its await,
+    // so a chunk leaving the view mid-load does not pop in and tear down.
     st.loadingTier = null;
     if (st.group) {
       this.scene.remove(st.group);
-      // Actually free the GPU vertex buffers now (scene.remove alone does NOT —
-      // three keeps them uploaded until geometry.dispose()). The BufferAttribute
-      // data stays in JS memory inside cpuCache, so re-mounting just re-uploads
-      // (no re-download / re-decode) until the LRU eventually evicts it.
+      // scene.remove alone does not free the GPU buffers. The attribute data
+      // stays in cpuCache, so a re-mount re-uploads without re-downloading.
       this.disposeGeometry(st.group);
     }
     if (st.texOwner) this.releaseTextures(st.texOwner);
@@ -1150,8 +1204,8 @@ export class ChunkManager {
     group.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
-      // The bounds tree is plain JS memory that geometry.dispose() knows
-      // nothing about, and this is the point the geometry stops being reusable.
+      // The bounds tree is plain JS memory geometry.dispose() knows nothing
+      // about, and this is where the geometry stops being reusable.
       if (m.geometry) dropBoundsTree(m.geometry);
       m.geometry?.dispose();
       (m.material as THREE.Material)?.dispose?.();
@@ -1159,26 +1213,18 @@ export class ChunkManager {
   }
 
   /**
-   * LRU-bound the CPU cache BY BYTES, dropping least-recently-used groups that
-   * are not on screen until the heap is back under `budget.cpuMB`.
+   * LRU-bound the CPU cache BY BYTES, dropping least-recently-used off-screen
+   * groups until the heap is back under `budget.cpuMB`.
    *
-   * It used to be bounded by ENTRY COUNT (`cache.limitChunks`), which cannot
-   * bound memory here for two reasons. Chunk sizes span a 3.6 m to 692 m radius,
-   * so one slot is not one cost. And the count was reasoned against the 816
-   * chunks in the manifest while the cache is keyed by URL — 816 chunks x 3
-   * tiers = 2,448 distinct entries, since one chunk you walk up to occupies
-   * far, mid and near in turn. With ~230 mounted urls protected, the authored
-   * 500 left ~270 free slots, which a walk exhausts in a minute or two and then
-   * evicts steadily.
-   *
-   * `cacheLimit` is still honoured as a secondary cap so an authored number is
-   * never silently ignored, but the byte ceiling is what actually governs.
-   * Never evicts a mounted chunk — that would blank the scene.
+   * An entry count cannot bound memory here: chunk radii span 3.6 m to 692 m, so
+   * one slot is not one cost, and the cache is keyed by URL — one chunk walked
+   * up to occupies far, mid and near in turn. `cacheLimit` is honoured as a
+   * secondary cap, but the byte ceiling governs. Never evicts a mounted chunk.
    */
   private evictCache() {
     // Residency never unmounts, so every cached group is still referenced and
-    // the scan can only ever be work with no result. Guarded here rather than
-    // only at the call site because mount() trims the cache too.
+    // the scan can only be work with no result. Guarded here because mount()
+    // trims the cache too.
     if (this.cfg.geometryMode === "resident") return;
     const cap = this.budget.cpuMB * 1048576;
     let bytes = this.cpuCacheBytes();
@@ -1187,9 +1233,9 @@ export class ChunkManager {
     const mounted = new Set<string>();
     for (const st of this.states.values()) {
       if (st.current) { const u = this.lodUrl(st.entry, st.current); if (u) mounted.add(u); }
-      // Also protect a tier that is mid-mount. Since mounting now waits for
-      // textures, a decoded group can sit here unmounted for a while; evicting
-      // it would dispose the geometry we are about to add to the scene.
+      // Also protect a tier mid-mount: mounting waits for textures, so a decoded
+      // group can sit here a while and evicting it disposes what is about to
+      // be added to the scene.
       if (st.loadingTier) { const u = this.lodUrl(st.entry, st.loadingTier); if (u) mounted.add(u); }
     }
     for (const [url, group] of this.cpuCache) {
@@ -1206,14 +1252,10 @@ export class ChunkManager {
   /**
    * Bound the texture cache by bytes, evicting only what nothing references.
    *
-   * The old policy disposed a texture the instant its refcount hit zero, with
-   * none of the anti-thrash the rest of this file has (20 m band hysteresis,
-   * `cullGraceTicks`, the chunk LRU). Because the cache key carries the rung —
-   * image 0 at 512, 256 and 128 px are three independent entries — the near-rung
-   * set drops to zero refs every time the last chunk within `nearDist` unmounts,
-   * i.e. roughly every 50 m walked, and every one of them was then re-fetched
-   * and re-decoded on the way back. Idle textures are cheap to keep: all 70
-   * images at the 128 px rung total 0.1 MB.
+   * Disposing on a zero refcount instead has none of the anti-thrash the rest of
+   * this file has: the cache key carries the rung, so the near-rung set drops to
+   * zero refs roughly every 50 m walked and was re-fetched on the way back. Idle
+   * textures are cheap to keep — all 70 images at 128 px total 0.1 MB.
    */
   private evictTextures() {
     const cap = this.budget.texMB * currentGpuScale() * 1048576;
@@ -1221,8 +1263,7 @@ export class ChunkManager {
     if (bytes <= cap) return;
     for (const key of this.texIdle.keys()) {
       if (bytes <= cap) break;
-      // Re-acquired since it was idled: acquire() removes it from texIdle, so
-      // this is belt-and-braces against a key lingering in the idle list.
+      // Belt-and-braces against a re-acquired key lingering in the idle list.
       if ((this.texRefs.get(key)?.size ?? 0) > 0) continue;
       this.texCache.get(key)?.dispose();
       bytes -= this.texBytes.get(key) ?? 0;
@@ -1234,75 +1275,111 @@ export class ChunkManager {
     }
   }
 
-  /** Builds every material for the group and resolves once all their textures
-   *  are actually decoded and assigned. Callers must await this before showing
-   *  the group, or it renders untextured white.
+  /** Does this chunk give up its JS-heap vertex copy? Only under residency
+   *  (`streamed` re-mounts by re-uploading from `cpuCache`) and only for chunks
+   *  `cfg.pick` does not match — see `StreamingConfig.freeCpuArrays`. */
+  private shouldFreeCpu(chunkId: string): boolean {
+    return (
+      this.cfg.geometryMode === "resident" &&
+      this.cfg.freeCpuArrays &&
+      !this.pickable.has(chunkId)
+    );
+  }
+
+  /**
+   * Hand a group's vertex data to the GPU and drop the heap copy.
    *
-   *  Acquires texture refs under `owner` and releases NOTHING — the caller owns
-   *  the handover, releasing the previous token only once this group is on
-   *  screen. Releasing here (as this used to) disposed textures the visible mesh
-   *  was still using. */
+   * The interleaved-buffer case matters here because the near tier is meshopt: an
+   * attribute whose byteStride exceeds its element size arrives as an
+   * InterleavedBufferAttribute, where `array` has no setter and `onUpload` lives
+   * on the shared InterleavedBuffer instead. Calling `onUpload` on the attribute
+   * throws, and `updateResident` then re-queues the chunk every tick forever.
+   */
+  private armCpuArrayRelease(group: THREE.Group) {
+    const drop = function (this: { array: ArrayLike<number> | null }) {
+      this.array = null;
+    };
+    // A buffer shared by several attributes must only be armed once.
+    const armed = new Set<object>();
+    const arm = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null) => {
+      if (!a) return;
+      const t = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute
+        ? (a as THREE.InterleavedBufferAttribute).data
+        : a;
+      const target = t as unknown as { onUpload?: (cb: () => void) => void };
+      if (!target || armed.has(target) || typeof target.onUpload !== "function") return;
+      armed.add(target);
+      target.onUpload(drop as () => void);
+    };
+    group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const g = mesh.geometry;
+      // Must precede the release: three computes these lazily at cull time.
+      if (!g.boundingBox) g.computeBoundingBox();
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      for (const attr of Object.values(g.attributes)) arm(attr);
+      arm(g.getIndex());
+      // A freed chunk cannot build a bounds tree, so take it out of picking
+      // rather than letting `lazyBvhRaycast` discover that per ray.
+      mesh.raycast = () => {};
+    });
+  }
+
+  /** Builds every material for the group and resolves once their textures are
+   *  decoded and assigned; callers must await it or the group renders white.
+   *
+   *  Acquires texture refs under `owner` and releases nothing — the caller owns
+   *  the handover, releasing the previous token once the group is on screen. */
   private async applyMaterials(group: THREE.Group, tier: Tier, textured: boolean, owner: string, px?: number) {
-    // The rung to request. Explicit so mount() can dress a chunk at the preview
-    // rung and a later pass can upgrade the SAME group to the tier's own.
-    const rung = px ?? this.cfg.texRung[tier];
+    // Explicit so mount() can dress at the preview rung and a later pass can
+    // upgrade the same group to the tier's own.
+    const rung = px ?? this.rungFor(tier);
     const pending: Promise<void>[] = [];
     group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      // Recover the source material index. We can only read it from the GLB
-      // material name ("mat_N") on the FIRST pass — after that we overwrite the
-      // material with an unnamed one, so cache the index on the mesh. Without
-      // this, a chunk that unloads and returns re-reads name "" -> idx -1 ->
-      // gray/untextured fallback.
+      // The source material index is readable from the GLB material name
+      // ("mat_N") only on the first pass, since we overwrite it with an unnamed
+      // material — so cache it on the mesh or a re-mount falls back to gray.
       let idx = mesh.userData.matIdx as number | undefined;
       if (idx === undefined) {
         const name = (mesh.material as THREE.Material)?.name ?? "";
         idx = name.startsWith("mat_") ? parseInt(name.slice(4), 10) : -1;
         mesh.userData.matIdx = idx;
-        // Streamed chunks sit directly on the scene, outside drei's <Bvh>, and
-        // everything that picks the world raycasts scene.children. Give each
-        // chunk mesh a raycast that builds its bounds tree on first real hit.
+        // Chunks sit directly on the scene, outside drei's <Bvh>, so give each
+        // mesh a raycast that builds its bounds tree on first real hit.
         mesh.raycast = lazyBvhRaycast;
-        // Same shadow contract as the single-GLB loader this replaced: every
-        // mesh both casts and receives, so buildings shade themselves and the
-        // ground. The sun's map is frozen after a burst per fit (SceneLights),
-        // so this stays cheap to walk.
+        // Every mesh casts and receives, so buildings shade themselves and the
+        // ground. The sun's map is frozen after a burst per fit (SceneLights).
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
       const def = this.materials[idx];
       (mesh.material as THREE.Material)?.dispose?.();
-      // COLOR_0 -> three's `color` attribute. It only takes effect if the
-      // material opts in, so read it off the geometry rather than the material
-      // def: the port's OSM_Buildings carry their tint as vertex colours on 23%
-      // of the model's triangles, and without this they all render flat.
+      // COLOR_0 → three's `color` attribute, which only applies if the material
+      // opts in — read off the geometry, since the port's OSM_Buildings carry
+      // their tint as vertex colours on 23% of the model's triangles.
       const hasVertexColor = !!mesh.geometry.getAttribute("color");
       mesh.material = this.buildMaterial(def, textured ? tier : null, owner, pending, hasVertexColor, tier, rung);
-      // Hide un-texturable shells: some decimated mid/far LOD prims lose their
-      // UVs in baking, so a texture can't map onto them and they'd render as a
-      // solid white patch. The near LOD keeps all its UVs, so the building comes
-      // back fully textured as you approach.
-      // But this only applies to geometry that is SUPPOSED to carry a baseColor
-      // map. Plenty of source geometry is authored with no material at all and
-      // therefore no TEXCOORD_0 — in the LA port that is 46% of the triangles
-      // (rails, ballast_bed, the road/curb/sidewalk networks). For those, a
-      // missing UV set is normal, not damage, and the old `textured && !hasUV`
-      // test hid every road in the scene. Gate on the material actually wanting
-      // a texture instead.
+      // Hide un-texturable shells: some decimated mid/far prims lose their UVs
+      // in baking and would render as a solid white patch (the near LOD keeps
+      // them, so the building returns as you approach). Gated on the material
+      // actually wanting a baseColor map — 46% of this model's triangles are
+      // authored with no material and no TEXCOORD_0, and testing `!hasUV` alone
+      // hid every road in the scene.
       const wantsBaseColor = textured && !!def?.textures.baseColor;
       const hasUV = !!mesh.geometry.getAttribute("uv");
       mesh.visible = !(wantsBaseColor && !hasUV);
     });
-    // settle, never reject: setTex catches its own failures and resolves, so a
-    // single dead texture can't wedge a chunk out of the scene forever.
+    // Settles, never rejects: setTex catches its own failures, so one dead
+    // texture cannot wedge a chunk out of the scene.
     await Promise.all(pending);
   }
 
   /** True when three's transmission pass may run for a chunk mounted at
-   *  `mountTier`. See `StreamConfig.render.transmission` for why this is gated:
-   *  ONE visible transmissive material re-renders the whole opaque scene into a
-   *  buffer every frame, which roughly doubles draw calls. */
+   *  `mountTier`. One visible transmissive material re-renders the whole opaque
+   *  scene every frame — see `StreamConfig.render.transmission`. */
   private transmissionAllowed(mountTier: Tier | null): boolean {
     const mode = this.cfg.transmission;
     if (mode === "all") return true;
@@ -1339,18 +1416,17 @@ export class ChunkManager {
       m.side = def.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
 
       if (wantsTransmission && !hasTransmission) {
-        // Transmission is gated off for this tier, so stand it in with plain
-        // alpha. This bake's transmissive materials all carry no baseColour map
-        // and `thickness: 0`, which is exactly the case where the two look
-        // near-identical — and this costs no extra scene render.
+        // Gated off for this tier, so stand it in with plain alpha. This bake's
+        // transmissive materials carry no baseColour map and `thickness: 0`,
+        // where the two look near-identical.
         m.transparent = true;
         m.opacity = Math.max(0.05, 1 - (def.transmission ?? 0) * 0.85);
         m.depthWrite = false;
       }
 
       if (hasTransmission) {
-        // Glass / water: transparent-refractive. Rendered via three's transmission
-        // pass so you can see textured geometry behind it (e.g. the pool bottom).
+        // Glass / water: rendered through three's transmission pass so textured
+        // geometry behind it shows.
         const pm = m as THREE.MeshPhysicalMaterial;
         pm.transmission = def.transmission!;
         pm.ior = def.ior ?? 1.5;
@@ -1360,15 +1436,12 @@ export class ChunkManager {
       }
 
       if (tier && def.textures) {
-        const rung = px ?? this.cfg.texRung[tier];
-        // Format is per tier too, so a distant chunk can take the cheap
-        // GPU-compressed rung while what you stand next to stays WebP-crisp
-        // (or vice versa). See <site>.json > stream.tiers.<t>.texture.format.
+        const rung = px ?? this.rungFor(tier);
+        // Format is per tier too — see <site>.json > stream.tiers.<t>.texture.
         const fmt = this.cfg.texFormat?.[tier] ?? "auto";
         const T = def.textures;
-        // Every slot returns a promise that settles when the image is decoded and
-        // assigned; applyMaterials awaits them all so the mesh is never shown
-        // with a half-populated material.
+        // Each slot settles when its image is decoded and assigned;
+        // applyMaterials awaits them all so no mesh is shown half-dressed.
         if (T.baseColor) pending.push(this.setTex(T.baseColor, rung, "srgb", owner, (t) => { m.map = t; m.needsUpdate = true; }, fmt));
         if (T.normal) pending.push(this.setTex(T.normal, rung, "linear", owner, (t) => { m.normalMap = t; m.needsUpdate = true; }, fmt));
         if (T.metallicRoughness)
@@ -1396,19 +1469,16 @@ export class ChunkManager {
     const chosen = avail.find((p) => p <= px) ?? avail[avail.length - 1];
     const rung = img.rungs.find((r) => r.px === chosen)!;
     const wS = this.glWrap(slot.wrapS), wT = this.glWrap(slot.wrapT);
-    // Format is per tier (<site>.json > stream.tiers.<t>.texture.format):
-    //   "ktx2" prefer GPU-compressed, "webp" force the WebP rung, "auto" = ktx2
-    //   when available. A ktx2 request silently falls back to webp when the rung
-    //   was never baked or the GPU cannot transcode — never a hard failure.
+    // "ktx2" prefers GPU-compressed, "webp" forces the WebP rung, "auto" takes
+    // ktx2 when available. A ktx2 request falls back to webp per-rung when it
+    // was never baked or the GPU cannot transcode — never a hard failure.
     const useKtx2 = format !== "webp" && !!this.ktx2 && !!rung.ktx2;
     const url = useKtx2 ? rung.ktx2! : rung.url;
     const bytes = useKtx2 ? rung.ktx2Bytes ?? rung.bytes : rung.bytes;
-    // key includes wrap (same image, different tiling = different texture),
-    // format (a webp and a ktx2 of the same rung are distinct GPU objects), and
-    // the UV channel + KHR_texture_transform. The last part matters: the port
-    // reuses one image across slots that scale it differently, and THREE stores
-    // channel/offset/repeat ON the texture — sharing one instance between them
-    // would make whichever loaded last win for both.
+    // The key includes wrap, format, the UV channel and KHR_texture_transform.
+    // The last matters: the port reuses one image across slots that scale it
+    // differently, and three stores channel/offset/repeat ON the texture, so
+    // sharing an instance would let whichever loaded last win for both.
     const xf = slot.transform;
     const xfKey = xf ? `~${xf.offset}:${xf.scale}:${xf.rotation}` : "";
     const key = `${slot.image}@${chosen}#${wS},${wT}${useKtx2 ? "!k" : ""}|uv${uvChannel(slot)}${xfKey}`;
@@ -1427,12 +1497,11 @@ export class ChunkManager {
     tex.wrapT = wT;
     tex.colorSpace = space === "srgb" ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     tex.anisotropy = 8;
-    // Which UV attribute to sample. three reads `channel` (0 -> uv, 1 -> uv1);
-    // the port's ground/water normal + metallicRoughness maps live on uv1.
+    // three reads `channel` (0 → uv, 1 → uv1); the port's ground/water normal
+    // and metallicRoughness maps live on uv1.
     tex.channel = uvChannel(slot);
-    // KHR_texture_transform. Mirrors three's own GLTFLoader handling: offset and
-    // scale map straight onto offset/repeat, and rotation is NEGATED because
-    // glTF rotates the UVs while three rotates the texture, about center (0,0).
+    // KHR_texture_transform, as three's own GLTFLoader handles it: rotation is
+    // negated because glTF rotates the UVs while three rotates the texture.
     const xf = slot?.transform;
     if (xf) {
       tex.offset.fromArray(xf.offset);
@@ -1443,13 +1512,11 @@ export class ChunkManager {
     tex.needsUpdate = true;
   }
 
-  /** Acquire a texture and hand it to `assign` once the pixels are actually
-   *  there. BOTH paths are async: KTX2 transcodes on a worker, and three's
-   *  TextureLoader also decodes off-thread — `.load()` returns an empty texture
-   *  immediately, which is what used to put white buildings on screen. The
-   *  returned promise resolves only after `assign` has run (or the load failed),
-   *  so callers can gate mounting on it. Shared textures are refcounted per
-   *  chunk and deduped by key. */
+  /** Acquire a texture and hand it to `assign` once the pixels are there. Both
+   *  paths are async — `.load()` returns an empty texture immediately, which is
+   *  what puts white buildings on screen — so the returned promise resolves only
+   *  after `assign` has run and callers can gate mounting on it. Shared textures
+   *  are refcounted per chunk and deduped by key. */
   private setTex(
     slot: TexSlot,
     px: number,
@@ -1464,17 +1531,20 @@ export class ChunkManager {
     this.texRefs.get(pick.key)!.add(owner);
     if (!this.texOwned.has(owner)) this.texOwned.set(owner, new Set());
     this.texOwned.get(owner)!.add(pick.key);
-    // Referenced again — take it back off the idle list so evictTextures()
-    // cannot drop a texture that is about to be drawn with.
+    // Referenced again: off the idle list, so evictTextures() cannot drop a
+    // texture that is about to be drawn with.
     this.texIdle.delete(pick.key);
 
     const cached = this.texCache.get(pick.key);
     if (cached) { assign(cached); return Promise.resolve(); }
 
-    // One in-flight load per key, whichever format it resolves to; a second
-    // chunk wanting the same image piggybacks instead of re-fetching.
+    // One in-flight load per key; a second chunk wanting the same image
+    // piggybacks instead of re-fetching.
     let p = this.texLoading.get(pick.key);
     if (!p) {
+      // Inside `if (!p)`, so a second chunk piggybacking on an in-flight load
+      // is not charged twice, and a texCache hit above never reaches here.
+      this.wireBytes += pick.bytes;
       const loader: { loadAsync(url: string): Promise<THREE.Texture> } =
         pick.useKtx2 && this.ktx2 ? this.ktx2 : new THREE.TextureLoader();
       p = loader
@@ -1484,10 +1554,8 @@ export class ChunkManager {
           this.texLoading.delete(pick.key);
           if ((this.texRefs.get(pick.key)?.size ?? 0) === 0) { tex.dispose(); return null; }
           this.texCache.set(pick.key, tex);
-          // MEASURED off the decoded texture: block-compressed mip chain for a
-          // KTX2, RGBA8 + generated mips for a WebP. `pick.bytes` is the file
-          // size on the wire, which for a 512 px WebP understates the resident
-          // cost by ~40x.
+          // Measured off the decoded texture. `pick.bytes` is the wire size,
+          // which for a 512 px WebP understates the resident cost by ~40x.
           this.texBytes.set(pick.key, textureBytes(tex));
           return tex;
         })
@@ -1501,15 +1569,10 @@ export class ChunkManager {
     return p.then((t) => { if (t) assign(t); });
   }
 
-  /** Drop one mount's claim on its textures.
-   *
-   *  A key that falls to zero refs is IDLED, not disposed — it joins the LRU
-   *  tail and only actually goes when `evictTextures()` finds the pool over
-   *  budget. That is the whole anti-thrash fix: turning around, or walking a
-   *  block and back, no longer re-fetches and re-decodes the near rung.
-   *
-   *  Walks only the keys THIS owner held (via `texOwned`) rather than the whole
-   *  cache, which the old version did on every single unmount. */
+  /** Drop one mount's claim on its textures. A key that falls to zero refs is
+   *  IDLED, not disposed — it joins the LRU tail and only goes when
+   *  `evictTextures()` finds the pool over budget, so walking a block and back
+   *  no longer re-fetches the near rung. Walks only the keys this owner held. */
   private releaseTextures(owner: string) {
     const keys = this.texOwned.get(owner);
     if (!keys) return;
@@ -1517,8 +1580,8 @@ export class ChunkManager {
       const refs = this.texRefs.get(key);
       if (!refs) continue;
       refs.delete(owner);
-      // Idle, not dead. Re-inserted at the tail so the most recently released
-      // texture is the LAST one evicted.
+      // Idle, not dead: re-inserted at the tail so the most recently released
+      // texture is the last one evicted.
       if (refs.size === 0 && this.texCache.has(key)) {
         this.texIdle.delete(key);
         this.texIdle.set(key, true);
@@ -1565,30 +1628,24 @@ export class ChunkManager {
     };
   }
 
-  /** Look for a shared instance palette and, if the model has one, start drawing
-   *  from it. Safe and cheap to call for every model: a missing palette.glb just
-   *  returns false and leaves this manager on the pure per-chunk path. */
+  /** Look for a shared instance palette and draw from it if the model has one.
+   *  A missing palette.glb returns false and leaves the per-chunk path. */
   async initInstancing(): Promise<boolean> {
     if (this.instances) return true;
     if (!this.manifest.chunks.some((c) => c.inst)) return false;
     const layer = new InstanceLayer(this.scene, this.assetBase, this.loader, (matIdx) => {
-      // Palette geometry is always resident, so it is always textured at the
-      // near rung. Its textures are held under one permanent owner token rather
-      // than a per-chunk one — they must outlive any individual chunk.
-      // The transmission gate gets `null`, NOT the near tier. The palette is
-      // resident for the whole session, so treating it as near would keep the
-      // transmission pass — a full extra scene render — switched on permanently
-      // no matter what the chunk tiers were doing, which is exactly the cost the
-      // gate exists to remove. Only "all" turns it on here.
+      // Palette geometry is always resident, so it is textured at the near rung
+      // under one permanent owner token that outlives any chunk.
+      // The transmission gate gets `null`, not the near tier: the palette is
+      // resident all session, so treating it as near would leave the extra scene
+      // render on permanently. Only "all" turns it on here.
       const pending: Promise<void>[] = [];
       const gate = this.cfg.transmission === "all" ? TIER_ORDER[0] : null;
       return this.buildMaterial(this.materials[matIdx], TIER_ORDER[0], "palette", pending, false, gate);
     });
     const ok = await layer.load();
-    // The palette download outlives a dispose() that lands mid-flight (React
-    // Strict Mode remounts this manager, and so does any view that unmounts the
-    // scene). Without this check the layer would add its InstancedMeshes to a
-    // scene the manager no longer owns, and nothing would ever take them out.
+    // The download outlives a dispose() that lands mid-flight, and without this
+    // the layer would add its meshes to a scene nobody owns any more.
     if (!ok) return false;
     if (this.disposed) { layer.dispose(); return false; }
     this.instances = layer;
@@ -1608,11 +1665,9 @@ export class ChunkManager {
       console.error("animated.glb failed to load", e);
       return false;
     }
-    // Always resident, so it is textured at the near rung under a permanent
-    // owner token rather than a per-chunk one.
+    // Always resident: textured at the near rung under a permanent owner token.
     await this.applyMaterials(gltf.scene, TIER_ORDER[0], true, "animated");
-    // Same race as initInstancing(): don't attach a rig to a scene this manager
-    // has already let go of.
+    // Same race as initInstancing(): do not attach to a released scene.
     if (this.disposed) {
       this.releaseTextures("animated");
       this.disposeGroupFull(gltf.scene);
@@ -1620,9 +1675,8 @@ export class ChunkManager {
     }
     this.scene.add(gltf.scene);
     this.animGroup = gltf.scene;
-    // The config was very likely set before this download finished, so apply
-    // its `node` rules now — otherwise the dollhouse gets its ocean back every
-    // time animated.glb happens to land after the view has already switched.
+    // The config was likely set before this download finished, so apply its
+    // `node` rules now or the dollhouse gets its ocean back.
     this.applyNodeHiding();
     this.mixer = new THREE.AnimationMixer(gltf.scene);
     for (const clip of gltf.animations) this.mixer.clipAction(clip).play();
