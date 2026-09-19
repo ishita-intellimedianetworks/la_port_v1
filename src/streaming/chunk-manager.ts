@@ -116,6 +116,12 @@ export interface StreamStats {
   byTier: Record<Tier, number>;
 }
 
+/** Clip names as a key: case, spaces, underscores and hyphens all ignored, so
+ *  what a site file asks for survives a rename in Blender. */
+function normaliseClip(name: string): string {
+  return name.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
 export class ChunkManager {
   private scene: THREE.Scene;
   private assetBase: string;
@@ -163,6 +169,24 @@ export class ChunkManager {
    *  chunk bakes the node matrix into its vertices. */
   private animGroup: THREE.Group | null = null;
   private mixer: THREE.AnimationMixer | null = null;
+  /** Every clip baked into `animated.glb`, held because the split between
+   *  looping and one-shot can be re-decided after the download lands. */
+  private clips: THREE.AnimationClip[] = [];
+  /** Clips that run forever: the ambient life of the terminal. */
+  private loopActions: THREE.AnimationAction[] = [];
+  /** Clips fired by hand, by normalised name. Never part of the loop set. */
+  private onceActions = new Map<string, THREE.AnimationAction>();
+  /** Normalised names the caller has claimed as one-shots. Empty by default,
+   *  which is what keeps the old "everything loops" behaviour. */
+  private oneShotNames = new Set<string>();
+  /** Whether the loop set is advancing. One-shots ignore it: firing one is an
+   *  explicit act, and it should not silently do nothing. */
+  private loopsRunning = true;
+  /** One-shots that have been fired and have not yet finished. A CLAMPED action
+   *  still reports `isRunning()` - it is sitting on its last frame with no
+   *  cycle left - so the mixer's `finished` event is the only honest signal. */
+  private oncePlaying = new Set<string>();
+  private onMixerFinished: ((e: { action: THREE.AnimationAction }) => void) | null = null;
 
   private _cam = new THREE.Vector3();
   private _frustum = new THREE.Frustum();
@@ -1837,8 +1861,139 @@ export class ChunkManager {
     // `node` rules now or the dollhouse gets its ocean back.
     this.applyNodeHiding();
     this.mixer = new THREE.AnimationMixer(gltf.scene);
-    for (const clip of gltf.animations) this.mixer.clipAction(clip).play();
+    this.onMixerFinished = (e) => {
+      for (const [name, action] of this.onceActions) {
+        if (action === e.action) this.oncePlaying.delete(name);
+      }
+    };
+    this.mixer.addEventListener("finished", this.onMixerFinished as never);
+    this.clips = gltf.animations;
+    this.buildActions();
     return gltf.animations.length > 0;
+  }
+
+  /**
+   * Split the baked clips into the loop set and the one-shots.
+   *
+   * Called again if the policy changes after the download lands, which it
+   * usually does: `setOneShotClips` comes from config on mount and
+   * `animated.glb` arrives whenever the network gets to it.
+   */
+  private buildActions() {
+    const mixer = this.mixer;
+    if (!mixer) return;
+    this.loopActions = [];
+    this.onceActions.clear();
+    this.oncePlaying.clear();
+    for (const clip of this.clips) {
+      const action = mixer.clipAction(clip);
+      action.stop();
+      if (this.oneShotNames.has(normaliseClip(clip.name))) {
+        // Held on its last frame rather than snapping back: a gate that opens
+        // and then teleports shut is worse than one that stays open.
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        this.onceActions.set(normaliseClip(clip.name), action);
+      } else {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        this.loopActions.push(action);
+        action.play();
+        action.paused = !this.loopsRunning;
+      }
+    }
+  }
+
+  /** Every clip name baked into `animated.glb`, straight from the manifest.
+   *  Available before the GLB itself has downloaded. */
+  animationClips(): string[] {
+    return this.manifest?.animated?.clips ?? [];
+  }
+
+  /**
+   * Name the clips that must NOT loop - they are played by hand instead.
+   *
+   * Matching ignores case, spaces, underscores and hyphens, so "GateSequence",
+   * "gate_sequence" and "Gate Sequence" are the same clip. The bake names these
+   * and the site file refers to them; being strict about the spelling would
+   * turn a naming choice in Blender into a silent missing animation.
+   */
+  setOneShotClips(names: string[]) {
+    const next = new Set(names.map(normaliseClip).filter(Boolean));
+    if (next.size === this.oneShotNames.size && [...next].every((n) => this.oneShotNames.has(n))) {
+      return;
+    }
+    this.oneShotNames = next;
+    // The GLB may already be up, in which case the split has to be redone.
+    if (this.mixer) {
+      this.buildActions();
+      this.warnUnmatched();
+    }
+  }
+
+  /**
+   * A name in the site file that matches no baked clip does nothing at all,
+   * which on screen is indistinguishable from an animation that was never
+   * authored. Say which names missed AND what the bake actually carries, so the
+   * fix does not need a second round trip.
+   */
+  private warnUnmatched() {
+    const have = new Set(this.clips.map((c) => normaliseClip(c.name)));
+    const missing = [...this.oneShotNames].filter((n) => !have.has(n));
+    if (!missing.length) return;
+    console.warn(
+      `[stream] animation: no clip matches ${missing.join(", ")}. ` +
+        `This bake carries: ${this.clips.map((c) => c.name).join(", ") || "(none)"}`,
+    );
+  }
+
+  /** Run or hold the loop set. Paused rather than stopped, so resuming picks
+   *  the water up where it left off instead of snapping it back to frame 0. */
+  setLoopsRunning(on: boolean) {
+    if (this.loopsRunning === on) return;
+    this.loopsRunning = on;
+    for (const action of this.loopActions) action.paused = !on;
+  }
+
+  /**
+   * Fire a one-shot clip from the start. Returns false when no clip of that
+   * name is baked, which is the caller's cue that the site file and the bake
+   * disagree - worth surfacing rather than swallowing.
+   */
+  playClipOnce(name: string): boolean {
+    const key = normaliseClip(name);
+    const action = this.onceActions.get(key);
+    if (!action) return false;
+    // ALWAYS reset. Replaying a finished, clamped action without this does
+    // nothing - it sits at its end time with no cycle left to run, which reads
+    // as "the trigger stopped working" the second time it is pressed.
+    action.reset();
+    action.paused = false;
+    action.play();
+    this.oncePlaying.add(key);
+    return true;
+  }
+
+  /**
+   * Halt a one-shot and rewind it.
+   *
+   * `stop()` rather than a fade: the rig returns to frame 0, so a gate caught
+   * half-open shuts before it re-opens. That reset is the point - the next play
+   * is meant to be the sequence from the beginning, not a jump-cut into the
+   * middle of it.
+   */
+  stopClip(name: string): boolean {
+    const key = normaliseClip(name);
+    const action = this.onceActions.get(key);
+    if (!action) return false;
+    action.stop();
+    this.oncePlaying.delete(key);
+    return true;
+  }
+
+  /** Is a one-shot mid-flight? `isRunning()` cannot answer this: a clamped
+   *  action that has already finished still reports true. */
+  isClipPlaying(name: string): boolean {
+    return this.oncePlaying.has(normaliseClip(name));
   }
 
   /** Advance the animation clock. Call once per rendered frame, in seconds. */
@@ -1884,7 +2039,23 @@ export class ChunkManager {
     this.cpuBytes.clear();
     this.everCached.clear();
     this.states.clear();
-    if (this.mixer) { this.mixer.stopAllAction(); this.mixer = null; }
+    if (this.mixer) {
+      if (this.onMixerFinished) {
+        this.mixer.removeEventListener("finished", this.onMixerFinished as never);
+      }
+      this.mixer.stopAllAction();
+      // The mixer caches an action per (clip, root) internally, so uncaching is
+      // what stops a scene swap holding the old clips alive through this
+      // manager. It has to happen while `animGroup` is still the root, which is
+      // why it sits above the group's own disposal rather than beside it.
+      if (this.animGroup) this.mixer.uncacheRoot(this.animGroup);
+      this.mixer = null;
+    }
+    this.onMixerFinished = null;
+    this.clips = [];
+    this.loopActions = [];
+    this.onceActions.clear();
+    this.oncePlaying.clear();
     if (this.animGroup) {
       this.scene.remove(this.animGroup);
       this.disposeGroupFull(this.animGroup);

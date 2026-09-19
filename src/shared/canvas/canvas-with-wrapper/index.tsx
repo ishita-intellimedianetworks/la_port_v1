@@ -8,11 +8,32 @@ import isLowPower from "@/shared/runtime";
 import { degradeGpuBudget } from "@/streaming/memory";
 import { filterCss, useGradeStore } from "@/shared/stores/grade-store";
 
+/**
+ * On Windows, ANGLE cross-compiles our GLSL to HLSL and the D3D compiler leaves
+ * X4122 constant-folding notes ("sum of 0.996094 and -2.98545e-017 cannot be
+ * represented accurately in double precision") in the info log of programs that
+ * linked *successfully* — three prints any non-empty log as a warning. 0.996094
+ * is `UnpackDownscale` (255/256) from three's own packing.glsl, pulled in by the
+ * shadow-map depth unpack, so there is nothing on our side to fix and no other
+ * platform reports it. Recognised only when EVERY line of the log is an X4122
+ * note, so a real driver complaint in the same log still gets through.
+ */
+const isBenignShaderLog = (log: unknown) =>
+  typeof log === "string" &&
+  log.trim().length > 0 &&
+  log
+    .trim()
+    .split("\n")
+    .every((line) => line.trim() === "" || /\bwarning X4122\b/.test(line));
+
 // three r183 deprecated THREE.Clock, but @react-three/fiber (≤ 9.x) still
 // constructs one internally — nothing to act on until R3F v10. Drop that one
-// notice; every other three log passes through.
+// notice and the X4122 logs above; every other three log passes through.
 THREE.setConsoleFunction((type: string, message: string, ...params: unknown[]) => {
-  if (type === "warn" && typeof message === "string" && message.startsWith("THREE.Clock: This module has been deprecated")) return;
+  if (type === "warn" && typeof message === "string") {
+    if (message.startsWith("THREE.Clock: This module has been deprecated")) return;
+    if (message.startsWith("THREE.WebGLProgram: Program Info Log") && isBenignShaderLog(params[0])) return;
+  }
   const fn = type === "error" ? console.error : type === "warn" ? console.warn : console.log;
   fn(message, ...params);
 });

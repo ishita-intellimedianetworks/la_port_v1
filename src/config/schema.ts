@@ -464,6 +464,10 @@ export type UiConfig = {
   panels: {
     /** Letters stacked down the edge tab. */
     hotspotsFlapLabel: string;
+    /** Heads the security anchors inside a layout's unfolded row in the
+     *  Resources tree. Optional: a model with no security layer never renders
+     *  the group, so it has nothing to name. */
+    securityGroupLabel?: string;
   };
   zones: Record<ZoneKey, { label: string; color: string }>;
   popup: {
@@ -552,7 +556,9 @@ export type HotspotIcon =
   | "kpi"
   | "safety"
   | "sustainability"
-  | "journey";
+  | "journey"
+  /** The Port Security demo layer (S01-S08), drawn only in Security Mode. */
+  | "security";
 
 export type HotspotConfig = {
   id: string;
@@ -568,6 +574,69 @@ export type HotspotConfig = {
   /** This hotspot's own viewpoint — the pose travelling to it lands on.
    *  Optional; an unauthored hotspot falls back to its layout's camera. */
   camera?: LayoutCamera;
+  /**
+   * A still shown BESIDE this hotspot's popup, flush against it — a URL under
+   * `public/`.
+   *
+   * For the security layer, where the card's subject is a thing happening at a
+   * place (a barrier lifting, a container under a reader) rather than a set of
+   * numbers about an area. The card's own contents are untouched by it: this
+   * adds a panel, it does not rearrange the one that was already there.
+   *
+   * Optional everywhere, and absent on all thirty operational hotspots, whose
+   * cards are area facts that a single frame cannot stand in for.
+   */
+  image?: string;
+  /**
+   * A standing alert on this hotspot, shown as a banner above its readings.
+   *
+   * It describes a STATE the system is in, not an event that fired - the layer
+   * has no triggers. A hotspot whose readings say something is wrong says so
+   * once, at the top, in words, rather than leaving the operator to infer it
+   * from a red row halfway down a grid.
+   *
+   * `level` picks the colour and the icon; the tone words in `<site>.json`
+   * decide the colours of the READINGS, and these two have to agree - a danger
+   * banner over four green rows would be the card contradicting itself.
+   */
+  /**
+   * Whether this hotspot can be reached at all. Absent means yes.
+   *
+   * A row authored `false` is LISTED but inert: dimmed in the Resources tree,
+   * not pressable, and never drawn as a marker. It is the honest state for a
+   * capability whose data and viewpoint exist but whose story is not finished -
+   * better than hiding it, which would make the layer look shorter than it is,
+   * and better than letting it be pressed into a half-built view.
+   */
+  enabled?: boolean;
+  /**
+   * A baked clip this hotspot fires, once, on arrival.
+   *
+   * `clip` is a name from `animated.glb`, as the manifest lists it - v9 carries
+   * GateSequence, ContainerIdle, CraneCycle, CraneCycle2, TruckHaul, SceneTour
+   * and WaterWaves. Matching ignores case, spaces, underscores and hyphens, so
+   * a rename in Blender does not silently stop the trigger.
+   *
+   * NAMING A CLIP HERE TAKES IT OUT OF THE AMBIENT LOOP. There is no second
+   * list of "clips that must not loop": a clip belongs to a hotspot or it is
+   * ambient, and deriving one from the other is what stops the two disagreeing.
+   *
+   * `delaySeconds` is the beat between arriving and the clip starting - the
+   * camera lands, the operator reads the card, and then the gate moves. Without
+   * it the event is over before the blackout has lifted.
+   */
+  animation?: {
+    clip: string;
+    /** Default 2. */
+    delaySeconds?: number;
+  };
+  alert?: {
+    level: "danger" | "caution";
+    /** One word, as the banner's heading: "Danger", "Caution". */
+    title: string;
+    /** What is wrong, in a sentence. */
+    detail?: string;
+  };
   journey?: JourneyStep[];
   fields: HotspotField[];
 };
@@ -609,6 +678,28 @@ export type SiteConfig = {
   };
   layouts: LayoutRow[];
   hotspots: HotspotConfig[];
+  /** Why the security rows read as they do: the rest/event split, and where
+   *  their positions came from. */
+  _securityNote?: string;
+  /**
+   * The Port Security demo layer (S01-S08): a SIBLING table, not more rows in
+   * `hotspots`.
+   *
+   * Same shape, separate list, because the two layers are switched
+   * independently: `layouts[].hotspots` is rebuilt by filtering `hotspots[]` on
+   * `layoutId`, so a security row living there would file itself into the
+   * Resources tree under its parent layout, the very panel Security Mode
+   * replaces. Kept apart, the operational layer cannot see it and the security
+   * layer can be drawn, or not, on its own.
+   *
+   * Optional: only the model that carries the layer authors it.
+   *
+   * Every value in it is SYNTHETIC. The handoff spec forbids encoding real
+   * camera positions, fields of view, credential rules, patrol schedules,
+   * response routes or sensor coverage. These are demo anchors on publicly
+   * documented areas of the terminal, with invented DEMO-named readings.
+   */
+  securityHotspots?: HotspotConfig[];
 };
 
 export type Phase = "loading" | "instructions" | "dollhouse" | "firstPerson";

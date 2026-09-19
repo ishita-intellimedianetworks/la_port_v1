@@ -35,6 +35,29 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: lanOrigins(),
 
   /**
+   * Remote images `next/image` is allowed to optimise.
+   *
+   * The security popups' stills are published alongside the baked assets rather
+   * than shipped in `public/`, so the optimiser has to be told the host is
+   * trusted - without this every remote `src` throws "hostname is not
+   * configured" and the card renders empty.
+   *
+   * SCOPED TO THE BUCKET PATH, not the S3 host. `/_next/image` will fetch and
+   * re-serve anything it is pointed at, so a pattern of `**` on a shared host
+   * like `s3.dualstack.us-east-1.amazonaws.com` turns this app into an open
+   * image proxy for every bucket on it.
+   */
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "s3.dualstack.us-east-1.amazonaws.com",
+        pathname: "/holotwin.mixie.co/**",
+      },
+    ],
+  },
+
+  /**
    * Let the browser keep the baked chunk set in DEV.
    *
    * `next start` already serves everything under `public/` as

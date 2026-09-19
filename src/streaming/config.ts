@@ -179,6 +179,7 @@ export interface StreamingConfig {
 const STREAM_BASE_V1 = process.env.NEXT_PUBLIC_STREAM_BASE;
 const STREAM_BASE_V2 = process.env.NEXT_PUBLIC_STREAM_BASE_V2;
 const STREAM_BASE_V3 = process.env.NEXT_PUBLIC_STREAM_BASE_V3;
+const STREAM_BASE_V4 = process.env.NEXT_PUBLIC_STREAM_BASE_V4;
 const ASSET_ROOT = (process.env.NEXT_PUBLIC_ASSET_BASE ?? "/assets").replace(/\/+$/, "");
 
 const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
@@ -187,7 +188,7 @@ const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
  * Where one bake is served from, ending in a slash. Three sources, most
  * specific first:
  *
- *   NEXT_PUBLIC_STREAM_BASE[_V2|_V3]  one variable per bake, the source of
+ *   NEXT_PUBLIC_STREAM_BASE[_V2|_V3|_V4]  one variable per bake, the source of
  *                                truth. None falls back to another model's —
  *                                an unset one drops to the local staging path
  *                                and 404s loudly rather than serving the wrong
@@ -200,7 +201,14 @@ const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
  * Whichever wins must allow cross-origin GET.
  */
 function assetBaseFor(id: StreamVariantId, block: { slug: string; assetBase?: string }): string {
-  const fromEnv = id === "v3" ? STREAM_BASE_V3 : id === "v2" ? STREAM_BASE_V2 : STREAM_BASE_V1;
+  const fromEnv =
+    id === "v4"
+      ? STREAM_BASE_V4
+      : id === "v3"
+        ? STREAM_BASE_V3
+        : id === "v2"
+          ? STREAM_BASE_V2
+          : STREAM_BASE_V1;
   if (fromEnv) return withSlash(fromEnv);
   if (block.assetBase) return withSlash(block.assetBase);
   return `${ASSET_ROOT}/${block.slug}/assets/`;
@@ -305,6 +313,7 @@ export const STREAM_VARIANTS: Record<StreamVariantId, StreamVariant> = {
   v1: buildVariant("v1", SITES.v1.scene.stream),
   v2: buildVariant("v2", SITES.v2.scene.stream),
   v3: buildVariant("v3", SITES.v3.scene.stream),
+  v4: buildVariant("v4", SITES.v4.scene.stream),
 };
 
 export function streamVariant(id: StreamVariantId): StreamVariant {

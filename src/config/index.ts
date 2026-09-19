@@ -2,14 +2,14 @@
  * The single entry point to the site configs. Nothing else in the app imports
  * a JSON directly, and nothing hardcodes a URL, a pose or a value.
  *
- * ONE FILE PER MODEL. `sites/v1.json`, `sites/v2.json` and `sites/v3.json` are
- * three COMPLETE, standalone documents — one per bake, one per route — with no
- * inheritance and no merge between them. There used to be a single `site.json`
- * with `stream` plus a `streamV2` partial layered over it at import, which
- * meant every route read the same cameras, hotspots, sky and world numbers and
- * a change for one bake was a change for all three. Now an edit can only ever
+ * ONE FILE PER MODEL. `sites/v1.json`, `sites/v2.json`, `sites/v3.json` and
+ * `sites/v4.json` are four COMPLETE, standalone documents — one per bake, one
+ * per route — with no inheritance and no merge between them. There used to be a
+ * single `site.json` with `stream` plus a `streamV2` partial layered over it at
+ * import, which meant every route read the same cameras, hotspots, sky and
+ * world numbers and a change for one bake was a change for all of them. Now an edit can only ever
  * reach the route whose file it is in; the price is that a change meant for
- * every model has to be made three times, on purpose.
+ * every model has to be made four times, on purpose.
  *
  * Each document is shaped as DB TABLES so it can be lifted into a database
  * without a rewrite: `layouts` and `hotspots` are sibling arrays joined by
@@ -24,7 +24,7 @@
  *
  * A route names its site once, at the top of the tree, with `<SiteProvider id>`
  * (see `./context`); everything below reads `useSite()`. Resolution is per id
- * and happens once at import, so the three are ordinary values that can all be
+ * and happens once at import, so the four are ordinary values that can all be
  * held at the same time — the same reason `STREAM_VARIANTS` is a record rather
  * than a set of module constants derived from an env var.
  */
@@ -32,6 +32,7 @@
 import v1Json from "./sites/v1.json";
 import v2Json from "./sites/v2.json";
 import v3Json from "./sites/v3.json";
+import v4Json from "./sites/v4.json";
 
 import type {
   CameraPose,
@@ -45,8 +46,8 @@ import type {
   Vec3,
 } from "./schema";
 
-/** Every model the app can serve, in route order: `/`, `/v2`, `/v3`. */
-export const SITE_IDS = ["v1", "v2", "v3"] as const;
+/** Every model the app can serve, in route order: `/`, `/v2`, `/v3`, `/v4`. */
+export const SITE_IDS = ["v1", "v2", "v3", "v4"] as const;
 export type SiteId = (typeof SITE_IDS)[number];
 
 /**
@@ -81,10 +82,16 @@ export interface Site {
   scene: SceneConfig;
   ui: UiConfig;
   hotspots: HotspotConfig[];
+  /** The security layer's own table (S01-S08), empty for a model without one.
+   *  Deliberately NOT merged into `hotspots` or into `layouts[].hotspots`.
+   *  See `securityHotspots` in the schema. */
+  securityHotspots: HotspotConfig[];
   /** The layouts table, each row given back its child-id list. */
   layouts: LayoutConfig[];
   layoutById: Record<string, LayoutConfig>;
   hotspotById: Record<string, HotspotConfig>;
+  /** Security rows by id, for the same reason `hotspotById` exists. */
+  securityHotspotById: Record<string, HotspotConfig>;
   startLayoutId: string;
   /** Where the experience begins. Every "default pose" — the Canvas camera, the
    *  first-person start, the fallback for an unauthored layout — reads THIS. */
@@ -130,6 +137,10 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
   };
 
   const hotspots: HotspotConfig[] = doc.hotspots;
+  // Resolved alongside, never folded in: `layouts[].hotspots` below is built by
+  // filtering `hotspots`, and a security row in that list would show up in the
+  // Resources tree under its parent layout.
+  const securityHotspots: HotspotConfig[] = doc.securityHotspots ?? [];
 
   /**
    * The layouts table, each row given back the child-id list the UI reads.
@@ -146,6 +157,9 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
 
   const layoutById: Record<string, LayoutConfig> = Object.fromEntries(layouts.map((l) => [l.id, l]));
   const hotspotById: Record<string, HotspotConfig> = Object.fromEntries(hotspots.map((h) => [h.id, h]));
+  const securityHotspotById: Record<string, HotspotConfig> = Object.fromEntries(
+    securityHotspots.map((h) => [h.id, h]),
+  );
 
   /**
    * True when a layout's camera is authored in the AIR rather than on the ground.
@@ -204,7 +218,12 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
    * hotspot's camera stands on the same ground its layout does.
    */
   const poseForHotspot = (hotspotId: string): CameraPose => {
-    const hotspot = hotspotById[hotspotId];
+    // Both tables. The two are kept apart so the operational layer cannot see
+    // the security one (see `securityHotspots`), but a POSE is a pose: a
+    // security anchor has a camera authored the same way and is travelled to
+    // the same way, so resolving it here costs nothing and keeps one answer to
+    // "where is this hotspot seen from".
+    const hotspot = hotspotById[hotspotId] ?? securityHotspotById[hotspotId];
     if (!hotspot) return startPose;
     const camera = hotspot.camera;
     if (!camera || isPlaceholder(camera.position)) return poseForLayout(hotspot.layoutId);
@@ -231,9 +250,11 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
     scene,
     ui,
     hotspots,
+    securityHotspots,
     layouts,
     layoutById,
     hotspotById,
+    securityHotspotById,
     startLayoutId,
     startPose,
     poseForLayout,
@@ -249,6 +270,7 @@ export const SITES: Record<SiteId, Site> = {
   v1: resolveSite("v1", v1Json as unknown as SiteConfig),
   v2: resolveSite("v2", v2Json as unknown as SiteConfig),
   v3: resolveSite("v3", v3Json as unknown as SiteConfig),
+  v4: resolveSite("v4", v4Json as unknown as SiteConfig),
 };
 
 export function getSite(id: SiteId): Site {
@@ -337,7 +359,7 @@ export function poseForCamera(camera: LayoutCamera, eyeOffset = 0): CameraPose {
 // The checks a database would enforce with constraints, run here for as long as
 // the tables live in files: primary-key format, primary-key uniqueness,
 // foreign-key integrity, and the demo's one cross-row invariant. Run per site,
-// because the three no longer share a row.
+// because the four no longer share a row.
 
 if (process.env.NODE_ENV !== "production") {
   const layoutIdRe = /^L(0[1-9]|10)$/;
