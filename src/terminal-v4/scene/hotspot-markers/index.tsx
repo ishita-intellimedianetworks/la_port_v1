@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useSite } from "@/config/context";
 import { useScene } from "../../context/scene-context";
@@ -41,6 +41,9 @@ interface HotspotMarkersProps {
  *                       the operator got down there
  *   a resource picked   that one disc, pulsing
  *   otherwise           the layout being stood at, and nothing if there is none
+ *
+ * The enabled security anchors are then added back on top of whichever of
+ * those won, so they are up in all of them — see `alwaysOn`.
  *
  * The dollhouse never reaches here: this component is mounted only in first
  * person (see `scene/index.tsx`), because from the air the beads are specks
@@ -126,17 +129,29 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
 
   // A marker whose card is open takes itself down — it would otherwise pulse
   // behind, or under, the panel it just opened. Restored on `setHotspotInfo(null)`.
-  const ids = openHotspotId ? picked.filter((id) => id !== openHotspotId) : picked;
+  const shown = openHotspotId ? picked.filter((id) => id !== openHotspotId) : picked;
+
+  // THE SECURITY ANCHORS ARE ALWAYS UP, whatever was clicked. Neither the
+  // narrowing above nor the open-card filter reaches them: the layer is the
+  // point of v4, and one of the pair going dark because the other was opened
+  // reads as the demo breaking rather than as a rule.
+  const alwaysOn = useMemo(
+    () =>
+      securityHotspots
+        .filter((h) => h.enabled !== false && isFieldHotspot(h.id))
+        .map((h) => h.id),
+    [securityHotspots],
+  );
+  const ids = useMemo(() => [...new Set([...shown, ...alwaysOn])], [shown, alwaysOn]);
 
   return (
     <>
       {ids.map((id) => {
-        // Either table. A security anchor reaches this branch by being PICKED
-        // in the Resources tree, which narrows `picked` to that one id — §8's
-        // "unless a user explicitly selects" read straight: the layer stays
-        // down with the shield off, except for the one anchor the operator
-        // asked for by name. Nothing else here can produce a security id, so
-        // the two layers still never draw together.
+        // Either table. Security ids arrive two ways: picked by name in the
+        // Resources tree, and `alwaysOn`, which keeps the enabled pair up
+        // unconditionally. The second is wider than §8's "unless a user
+        // explicitly selects" — the two layers DO draw together now — and is
+        // a deliberate demo choice: the security anchors are what v4 is for.
         const hotspot = site.hotspotById[id] ?? securityHotspotById[id];
         const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
         if (!hotspot || !layout) return null;

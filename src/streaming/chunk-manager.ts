@@ -1990,6 +1990,14 @@ export class ChunkManager {
     return true;
   }
 
+  /** How long a clip runs, in seconds, or null if this bake has no such clip.
+   *  Lets a caller schedule what happens AFTER one without listening for it. */
+  clipDuration(name: string): number | null {
+    const key = normaliseClip(name);
+    const action = this.onceActions.get(key) ?? this.loopActions.find((a) => normaliseClip(a.getClip().name) === key);
+    return action ? action.getClip().duration : null;
+  }
+
   /** Is a one-shot mid-flight? `isRunning()` cannot answer this: a clamped
    *  action that has already finished still reports true. */
   isClipPlaying(name: string): boolean {

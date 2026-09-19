@@ -76,8 +76,16 @@ catches a half-registration.
 
 `assetBaseFor` has a `v4` branch reading `NEXT_PUBLIC_STREAM_BASE_V4`. Without
 it, v4 would fall through to v1's base and stream the wrong bake silently,
-against the file's stated intent that an unset variable 404 loudly. v4 currently
-points at the same bake as v3.
+against the file's stated intent that an unset variable 404 loudly. v4 points at
+its own bake, v9 (see the streaming section below).
+
+The variable lives in `.env`, which is gitignored, so **a deploy needs it set
+in that host's own environment** - Vercel project settings, for instance. Next
+inlines `NEXT_PUBLIC_*` at build time, so it must be there before the build and
+a re-deploy is needed after adding it. Unset, `assetBaseFor` falls back to
+`/assets/<slug>/assets/` - the local staging copy under `public/`, itself
+gitignored - and `manifest.json`, `materials.json`, `tex.json`, `navmesh.glb`
+and every chunk 404.
 
 ---
 
@@ -172,16 +180,18 @@ the option.
 `viewingIncidentId` alone — set by View location, cleared on return — which is
 the honest condition and does not assume a mode that no longer exists.
 
-### A picked security anchor draws with nothing else
+### A picked security anchor, and the pair that is always up
 
 `goToHotspot` ends by selecting the hotspot, which narrows the scene to that one
 bead. `hotspot-markers` resolves the selected id against **both** tables, so a
 security anchor draws the same way an operational one does.
 
-This is §8's rule read straight rather than an exception to it: *"demo zones
-disappear ... **unless a user explicitly selects** an active incident."* Picking
-a row by name in the tree is that explicit selection, and it narrows the set to
-one, so the two layers still never draw together.
+That narrowing was once the whole story, and §8 read straight: *"demo zones
+disappear ... **unless a user explicitly selects** an active incident."*
+Picking a row by name in the tree is that explicit selection.
+
+It no longer is. The enabled pair (S01, S02) is added back after the narrowing,
+so the two layers DO draw together — see "What is on screen, and when".
 
 Its `index`/`total` count within the **six field capabilities** — the set the
 tree shows it in — rather than its parent layout's operational children.
@@ -483,6 +493,7 @@ One component decides it for both layers, `scene/hotspot-markers`. In order:
 | **A resource picked** | that one disc, pulsing. |
 | **At a layout's checkpoint** | every resource filed under it. |
 | **Otherwise** | nothing. |
+| **Then, always** | the enabled security anchors are added on top of whichever row won. |
 
 **The Security row unfolds the menu; it does not travel.** Its anchors sit at
 five different layouts, so there is no one pose the row could mean. It briefly
@@ -490,8 +501,17 @@ flew to L10's viewpoint and drew the whole set from there; that is gone, along
 with the store flag and the marker branch behind it, rather than left as a flag
 nothing sets and a branch nothing enters.
 
-So a security marker reaches the scene two ways only: **picked by name** from
-the unfolded list, or **walked past** on the navmesh.
+So a security marker reaches the scene three ways: **picked by name** from the
+unfolded list, **walked past** on the navmesh, or — for the enabled pair —
+**unconditionally**, via `alwaysOn`.
+
+**THE ENABLED PAIR IS ALWAYS UP.** S01 and S02 are the only anchors with
+`enabled` unset; every other row is `enabled: false`. Those two are unioned
+into the marker set after every rule above has run, so neither the narrowing
+to a picked disc nor the open-card filter can take them down. Before this,
+opening S01 hid its own marker AND S02 — the layer went dark on the click
+that was meant to demonstrate it. This is wider than §8 and is a deliberate
+demo choice: the security anchors are what v4 exists to show.
 
 **ON THE MESH WINS, and it is the second test for a reason.** However the
 operator got down there - a resource's ground standpoint, the First Person
@@ -579,7 +599,8 @@ clip a hotspot claims is a one-shot, and everything else in the bake is ambient.
 There is no second list of "clips that must not loop", because two lists are two
 things that can disagree.
 
-**S01 and S02 both carry `{ clip: "GateSequence", delaySeconds: 2 }`** - they
+**S01 and S02 both carry
+`{ clip: "GateSequence", delaySeconds: 2, repeatSeconds: 6 }`** - they
 are the two halves of the same gate, so they show the same sequence. Picking
 either one runs **stop, then the beat, then play from the start**:
 
@@ -590,7 +611,37 @@ either one runs **stop, then the beat, then play from the start**:
    to be the sequence rather than a jump-cut into the middle of it.
 2. **Two seconds.** The camera lands, the card opens, and then the gate moves.
    Without the beat the event is over before the blackout has lifted.
-3. **Once, from frame 0**, holding its last frame.
+3. **From frame 0**, holding its last frame.
+4. **Then again**, six seconds after it ends, for as long as the hotspot stays
+   selected. GateSequence runs 39.5s, so the cycle is about 45s - a slow
+   heartbeat rather than a loop.
+
+**The trigger is the SELECTION, not the card.** Travelling to a hotspot
+deliberately leaves its card closed - arriving should leave the operator looking
+at the thing - so an event keyed on the popup would never fire for someone
+standing at the viewpoint watching the terminal. It is keyed on being parked at
+that hotspot's CP, which is what `selectedHotspotId` means, and it survives the
+card being opened and closed.
+
+**The repeat is scheduled from the clip's own duration**, not by listening for
+the end of it. The length is baked and fixed, and a timer is one thing to cancel
+instead of two. `clipDuration()` reads it off the action.
+
+**It does not run in the dollhouse.** A selection made in first person survives
+the view swap, so without that check a repeat timer would fire the gate over an
+overview that is supposed to be still.
+
+**Walking ends it.** `selectedHotspotId` means *parked at that resource's
+viewpoint*, and taking one step makes that false - so the movement poll in
+`overlays.tsx` now drops the selection alongside the open card, the open panel
+and `atGroundView`. It was already tearing down everything else that means "I am
+standing here looking at this"; the selection was the one it missed, and the
+repeat is where it showed - the gate kept re-firing behind an operator who had
+walked half the terminal away from it.
+
+That also corrects two quieter wrongs: a card's "2 of 8" counted against a
+resource nobody was at any more, and the debug panel treated it as the live
+camera target long after the camera had left.
 
 Two consequences worth naming:
 
@@ -1035,7 +1086,8 @@ capability is now an explicit pick in the Resources tree, and a marker that
 vanished while its system was quiet would make the quiet case — the resting
 readings, which is most of what these popups are for — unreachable.
 
-So exactly one security marker is on screen at a time: the one just picked.
+A pick still narrows the operational layer to one bead, but it no longer
+narrows the security one: S01 and S02 stay up through any click.
 
 ### S07 is the incident centre
 

@@ -274,39 +274,67 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
     m.setLoopsRunning(viewMode !== "dollhouse");
   }, [claimed, viewMode, managerBorn]);
 
-  // STOP FIRST, THEN THE BEAT, THEN PLAY FROM THE START.
+  // STOP FIRST, THEN THE BEAT, THEN PLAY FROM THE START - AND AGAIN WHILE HELD.
+  //
+  // The trigger is the SELECTION, not the card. Travelling to a hotspot
+  // deliberately leaves its card closed - arriving should leave the operator
+  // looking at the thing - so an event keyed on the popup would never fire for
+  // someone standing at the viewpoint watching the terminal. It is keyed on
+  // being parked at that hotspot's CP instead, which is what `selectedHotspotId`
+  // means, and it survives the card being opened and closed.
   //
   // The stop is immediate and unconditional: picking a hotspot that owns a clip
   // ends whatever that clip was doing, so a gate caught half-open shuts at the
-  // moment of the click rather than carrying on through the pause. Then the
-  // beat - the camera lands, the operator reads the card - and only then does
-  // the sequence run, once, from frame 0.
+  // moment of the click rather than carrying on through the pause. Two hotspots
+  // share GateSequence, so picking S02 while S01's gate runs restarts it rather
+  // than stacking a second playback on one rig.
   //
-  // Two hotspots share GateSequence, so picking S02 while S01's gate is running
-  // restarts it rather than stacking a second playback on the same rig.
+  // With `repeatSeconds` it then keeps going: clip, gap, clip, for as long as
+  // the hotspot stays selected. Scheduled from the clip's own duration rather
+  // than by listening for the end of it - the length is baked and fixed, and a
+  // timer is one thing to cancel instead of two.
   //
-  // The timer is cleared on any change of selection, so moving on before it
-  // fires cancels it rather than playing the clip at whatever is being looked
-  // at next.
+  // NOT IN THE DOLLHOUSE. A selection made in first person survives the view
+  // swap, and without this check a repeat timer would fire the gate over an
+  // overview that is supposed to be still.
   useEffect(() => {
-    if (!selectedHotspotId) return;
+    if (!selectedHotspotId || viewMode === "dollhouse") return;
     const hotspot =
       site.hotspotById[selectedHotspotId] ?? site.securityHotspotById[selectedHotspotId];
-    const clip = hotspot?.animation?.clip;
-    if (!clip) return;
+    const anim = hotspot?.animation;
+    if (!anim?.clip) return;
 
-    // `mgr.current` rather than a captured manager: `animated.glb` lands on its
-    // own schedule and the manager can be rebuilt under a config swap.
-    mgr.current?.stopClip(clip);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
 
-    const delay = Math.max(0, (hotspot.animation?.delaySeconds ?? 4) * 1000);
-    const timer = setTimeout(() => {
-      if (mgr.current?.playClipOnce(clip) === false) {
-        console.warn(`[stream] animation: ${selectedHotspotId} asks for "${clip}", which this bake does not carry`);
-      }
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [selectedHotspotId, selectionSeq, site]);
+    const cycle = (wait: number) => {
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        // `mgr.current` rather than a captured manager: `animated.glb` lands on
+        // its own schedule and the manager is rebuilt under a config swap.
+        const m = mgr.current;
+        if (m?.playClipOnce(anim.clip) === false) {
+          console.warn(
+            `[stream] animation: ${selectedHotspotId} asks for "${anim.clip}", which this bake does not carry`,
+          );
+          return;
+        }
+        if (anim.repeatSeconds == null) return;
+        const duration = m?.clipDuration(anim.clip) ?? 0;
+        cycle((duration + anim.repeatSeconds) * 1000);
+      }, wait);
+    };
+
+    mgr.current?.stopClip(anim.clip);
+    cycle(Math.max(0, (anim.delaySeconds ?? 2) * 1000));
+
+    // Leaving cancels the whole chain rather than letting one more cycle land
+    // on whatever is being looked at next.
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [selectedHotspotId, selectionSeq, site, viewMode]);
 
   const step = useMemo(() => 1 / config.updateHz, [config.updateHz]);
 

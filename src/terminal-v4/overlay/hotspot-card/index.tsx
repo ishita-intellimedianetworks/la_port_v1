@@ -500,7 +500,12 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                   Hidden below `sm`: turned and shrunk to phone width it stops
                   being legible, and the readings are what the card is for. */}
               {still && (
-                <div className="hidden shrink-0 [perspective:1100px] sm:block">
+                <div
+                  // Top-aligned while the card is small: the readings column
+                  // runs taller there and a centred still drifts off the card's
+                  // first line. Centred once there is room beside it.
+                  className="hidden shrink-0 [perspective:1100px] max-md:self-start sm:block short:self-start"
+                >
                   <figure
                     // A SQUARE-ISH box, not the render's own ratio: the two
                     // stills no longer share one - S02 is the scanner alone at

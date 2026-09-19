@@ -13,12 +13,12 @@
   },
   "stream": {
     "_note": [
-      "THE THIRD BAKE, streamed at /v3 - today NEXT_PUBLIC_STREAM_BASE_V3, the",
-      "v8w-inst-mo set. This block is COMPLETE and is read by /v3 alone; it opens",
-      "as a copy of v2's numbers, which is the tuning this bake was cut against,",
+      "THE FOURTH BAKE, streamed at /v4 - today NEXT_PUBLIC_STREAM_BASE_V4, the",
+      "v9w-inst-mo set. This block is COMPLETE and is read by /v4 alone; it opens",
+      "as a copy of v3's numbers, which is the tuning this bake was cut against,",
       "and every one of them is now this route's own.",
       "",
-      "WHAT TO CHECK FIRST AGAINST THE REAL v8 MANIFEST, since these numbers were",
+      "WHAT TO CHECK FIRST AGAINST THE REAL v9 MANIFEST, since these numbers were",
       "measured on v6wo and carried over unverified:",
       "  - `dollhouse.hide` names NODES and MATERIALS inside the manifest. A rename",
       "    in the bake makes a rule match nothing, silently.",
@@ -240,7 +240,7 @@
       "adaptiveDpr": true,
       "maxDpr": 1.5
     },
-    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V3, the COMPLETE published prefix, used verbatim. There is NO fallback to another model's variable - an unset V3 drops to NEXT_PUBLIC_ASSET_BASE + `slug`, the local staging copy, so this route 404s loudly rather than quietly streaming /v2's chunks. StreamConfig.assetBase would let a URL be authored here instead, but is left unset: two places holding the same URL is two places to drift.",
+    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V4, the COMPLETE published prefix, used verbatim. There is NO fallback to another model's variable - an unset V4 drops to NEXT_PUBLIC_ASSET_BASE + `slug`, the local staging copy, so this route 404s loudly rather than quietly streaming /v3's chunks. StreamConfig.assetBase would let a URL be authored here instead, but is left unset: two places holding the same URL is two places to drift.",
     "pick": [
       {
         "_note": "THE GROUND STAYS PICKABLE. Chunks matched here keep their JS-heap vertex arrays under streaming.freeCpuArrays, so they can still build a MeshBVH; everything else is freed and stops raycasting. On this bake that is 3 of 345 geometry chunks and 0.3% of the near tier's bytes. The ground is the right scope because everything that picks the world resolves to it. Re-run the count if the bake changes - a rule matching a building would quietly hand back the memory this exists to save.",
@@ -3333,7 +3333,8 @@
       },
       "animation": {
         "clip": "GateSequence",
-        "delaySeconds": 2
+        "delaySeconds": 2,
+        "repeatSeconds": 6
       },
       "image": "https://s3.dualstack.us-east-1.amazonaws.com/holotwin.mixie.co/adaptive-loading/la-port/v9w-inst-mo/assets/security-thumbails/scanner-red-v3.png",
       "fields": [
@@ -3396,7 +3397,8 @@
       },
       "animation": {
         "clip": "GateSequence",
-        "delaySeconds": 2
+        "delaySeconds": 2,
+        "repeatSeconds": 6
       },
       "image": "https://s3.dualstack.us-east-1.amazonaws.com/holotwin.mixie.co/adaptive-loading/la-port/v9w-inst-mo/assets/security-thumbails/scanner-green-v3.png",
       "fields": [

@@ -195,7 +195,20 @@ export default function Overlays() {
       // A walk that just started closes the open panel; the highlight comes
       // back from position once stopped. Walking off the ground standpoint
       // ends it, so the markers return as soon as the player leaves.
-      if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); store.setAtGroundView(false); }
+      //
+      // IT ALSO DROPS THE SELECTION. "Selected" means parked at that resource's
+      // viewpoint - it is what the card's index counts against, what the debug
+      // panel treats as the live camera target, and what a hotspot's authored
+      // animation repeats for. Taking one step makes all three wrong, and the
+      // repeat is where it showed: the gate kept re-firing behind an operator
+      // who had walked half the terminal away from it.
+      if (moving && !wasMovingRef.current) {
+        store.setOpenLabel(null);
+        store.setEventsOpen(false);
+        store.setHotspotInfo(null);
+        store.setAtGroundView(false);
+        store.setSelectedHotspotId(null);
+      }
       wasMovingRef.current = moving;
 
       const hp = homeRef.current;

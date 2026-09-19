@@ -629,6 +629,19 @@ export type HotspotConfig = {
     clip: string;
     /** Default 2. */
     delaySeconds?: number;
+    /**
+     * Seconds of quiet AFTER the clip ends before it runs again, for as long as
+     * this hotspot stays selected. Absent means it plays once and stops.
+     *
+     * Selected, not "card open": travelling to a hotspot does not open its
+     * card, so the event has to keep running for an operator who is standing at
+     * the viewpoint watching the terminal rather than reading the panel.
+     *
+     * The gap is measured from the END of the clip, so the cycle is
+     * `clip duration + repeatSeconds`. GateSequence runs 39.5s, which makes
+     * this a slow heartbeat rather than a loop.
+     */
+    repeatSeconds?: number;
   };
   alert?: {
     level: "danger" | "caution";
