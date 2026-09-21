@@ -1,21 +1,5 @@
 "use client";
 
-/**
- * TerminalExperienceV3 — the Everport digital twin, rendered at /v3.
- *
- * A full fork of `src/terminal`, byte-identical when it was made. Edits here
- * cannot reach `/` or `/v2`. Do not re-export one tree from the other — that
- * restores the coupling this fork exists to remove.
- *
- * Three layers, one provider:
- *   provider.tsx    owns the phase machine, the load gates and the shared state
- *   scene-graph.tsx everything inside the WebGL canvas
- *   overlays.tsx    everything on top of it
- *
- * It runs the `v3` model: `config/sites/v3.json` — its own document, its own
- * cameras, its own bake. Nothing it holds is read by `/` or `/v2`.
- */
-
 import "./styles.css";
 import CanvasWithWrapper from "@/shared/canvas/canvas-with-wrapper";
 import { getSite, type SiteId } from "@/config";
@@ -30,9 +14,6 @@ interface TerminalExperienceProps {
   /** The engine's node id. Optional — one site projects to one node. */
   nodeId?: string;
   onReady?: () => void;
-  /** WHICH MODEL to run — the site file read and the bake streamed. `v3` is
-   *  this route's own document; the prop exists so the tree cannot silently
-   *  read someone else's. */
   site?: SiteId;
 }
 

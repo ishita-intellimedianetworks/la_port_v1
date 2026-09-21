@@ -18,11 +18,6 @@ interface Opts {
   onRoomChange: (id: string | null) => void;
 }
 
-/**
- * Per-frame room zone detection using the navmesh's named meshes.
- * Each named mesh in the navmesh GLB = one room zone (name matches LayoutsConfig.id).
- * Fires onRoomChange whenever the player crosses into a different zone.
- */
 export function useRoomZoneDetection({
   pos, currentZone, enabled, roomZonesMap, onRoomChange,
 }: Opts) {

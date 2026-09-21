@@ -9,10 +9,6 @@ export function createSharedUniforms(): SharedUniforms {
   return { uGlobalAlpha: { value: 0 } };
 }
 
-// One global uniform object reused across every mount of TerminalExperience.
-// resetSharedUniforms() is called on mount to force value back to 0 so
-// cached GLTF materials (which reference this same object) immediately
-// see uGlobalAlpha=0 — no flash before the recompile happens.
 let _singleton: SharedUniforms | null = null;
 
 export function getSharedUniforms(): SharedUniforms {
@@ -24,18 +20,6 @@ export function resetSharedUniforms(): void {
   if (_singleton) _singleton.uGlobalAlpha.value = 0;
 }
 
-/**
- * HoloTwinPreview — V2.4 point cloud loader scene.
- *
- * Renders the GLB's baked point-cloud preview as a recognizable silhouette
- * from the very first frame (no scattered particles). Density grows with
- * download progress, then smoothly fades out as the textured mesh fades in
- * (driven by the SAME sharedUniforms.uGlobalAlpha that the patched mesh
- * materials read from — so the crossfade is perfectly synchronized).
- *
- * Add this to YOUR scene, viewed by YOUR camera. Co-located with the GLB
- * because the points were sampled from it at bake time.
- */
 export class HoloTwinPreview {
   geometry: THREE.BufferGeometry | null = null;
   material: THREE.ShaderMaterial | null = null;
@@ -62,12 +46,6 @@ export class HoloTwinPreview {
     this.ingest(data);
   }
 
-  /**
-   * Fetch + decode several preview.bin parts in parallel, merge them, then
-   * create ONE Points object covering the whole scene. Use this for
-   * multi-floor units so the silhouette reveals as a single unified model
-   * (one material → one uTime / uReveal driving every point in lockstep).
-   */
   async loadPreviews(urls: string[]): Promise<void> {
     if (urls.length === 0) return;
     if (urls.length === 1) return this.loadPreview(urls[0]);
@@ -113,11 +91,6 @@ export class HoloTwinPreview {
     }
   }
 
-  /**
-   * Helper: compute a recommended camera distance to frame the cloud
-   * (== model bounds, since the points were sampled from the GLB).
-   * Use it for `camera.position.copy(center).addScaledVector(dir, dist)`.
-   */
   getRecommendedCameraDistance(camera: THREE.PerspectiveCamera, padding = 1.4): number {
     if (!this.bounds) return 10;
     const aspect = camera.aspect;

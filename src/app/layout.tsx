@@ -2,10 +2,6 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-// The HoloTwin overlay type system, self-hosted exactly as the reference does
-// it: Saira drives the display/UI text (titles, labels, numbers, buttons),
-// Barlow carries body copy. Self-hosted rather than next/font/google so a
-// compile never waits on the network.
 const saira = localFont({
   src: "./fonts/saira-latin.woff2",
   weight: "300 700",

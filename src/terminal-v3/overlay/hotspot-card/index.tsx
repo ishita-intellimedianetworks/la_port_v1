@@ -28,10 +28,6 @@ function formatValue(field: HotspotField): string {
   return unit ? `${text} ${unit}` : text;
 }
 
-/**
- * One data row — the admin app's treatment: a small label above a larger value,
- * closed by a hairline.
- */
 function Field({ field }: { field: HotspotField }) {
   const tone = useSite().toneFor(field.value, field.tone);
   const meter =
@@ -53,10 +49,6 @@ function Field({ field }: { field: HotspotField }) {
       <h2
         className="nav-display truncate text-[15px] font-semibold leading-snug short:text-[13px]"
         style={{
-          // A pending topic is one the handoff requires but neither source
-          // document gives a value for — shown as absent, never as a reading.
-          // Only STATUS words carry a tone. Colouring every value that happened
-          // to match a keyword turned the card into a paint chart.
           color: field.pending
             ? "var(--nav-text-faint)"
             : field.type === "enum" && tone
@@ -89,19 +81,6 @@ interface HotspotDataCardProps {
   onClose: () => void;
 }
 
-/**
- * The hotspot readout: all 30 hotspots render through this one component,
- * driven purely by their `fields` dictionary in `<site>.json` › `hotspots[]` — the
- * handoff's consistency requirement, and the reason a new hotspot needs no new
- * UI code.
- *
- * The engine identifies a clicked marker as (destination, marker index). Since
- * a destination IS a layout and its markers are that layout's `hotspots[]` in
- * order, that pair resolves straight back to a hotspot id.
- *
- * The card is the reference's panel; only the row treatment — a small label
- * above a larger value, closed by a line — comes from the admin app.
- */
 export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps) {
   const site = useSite();
   const layout = site.layoutById[destId];
@@ -140,12 +119,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
           subtitle={layout.name}
           onClose={onClose}
         />
-
-        {/* The handoff's Expected Interaction line is deliberately NOT shown.
-            It is a build instruction — "Click → vessel-traffic popup" — written
-            for whoever implements the hotspot, and printing it to the operator
-            told them to do the thing they had just done. It stays in the config
-            as spec provenance. */}
 
         {/* Body scrolls if the card would outgrow the viewport — the width does
             the spreading, the height stays capped. */}

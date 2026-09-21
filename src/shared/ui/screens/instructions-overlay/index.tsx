@@ -2,24 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 
-/**
- * InstructionsOverlay — full-screen welcome / instructions panel.
- *
- * Shared by interior (dollhouse) and exterior. Renders a centred title, the
- * instruction tiles (each pairing an icon with a short line), and a single CTA
- * button.
- *
- * Tiles arrive either as one flat list — the dollhouse card, which teaches two
- * gestures — or as labelled GROUPS. The first-person card documents every icon
- * and every bar on screen, and a dozen unlabelled tiles in one slab is a wall:
- * the headings ("Looking around", "While walking", "Bottom bar") are what let a
- * viewer find the one control they are looking at.
- *
- * The overlay fades its opacity 1 → 0 over `FADE_MS` when `visible` flips
- * false, then unmounts. The on-screen fade is what masks the moment the
- * exterior environment (sky/clouds/fog) pops in, and gives the interior
- * dollhouse a clean handoff into first-person.
- */
 export interface InstructionItem {
   icon: React.ReactNode;
   text: string;
@@ -42,29 +24,8 @@ export interface InstructionsOverlayProps {
   columns?: number;
   actionLabel: string;
   onAction: () => void;
-  /**
-   * Backdrop Tailwind class applied to the full-screen container behind the
-   * cards. Defaults to `bg-black/30` — same as the original dollhouse
-   * overlay, so the model behind shows through as a soft dim wash.
-   */
   backdropClassName?: string;
-  /**
-   * Card surface variant.
-   *   "light" (default) → `ui-white-glass` — translucent white tint, used by
-   *                       the interior dollhouse where the white cards read
-   *                       cleanly over the dollhouse silhouette.
-   *   "dark"            → `ui-glass` — translucent black tint with the same
-   *                       blur stack. Used by the exterior intro so the
-   *                       cards match the rest of the dark exterior UI
-   *                       (navbar pill, NodeInfoHud, side panel).
-   */
   cardVariant?: "light" | "dark";
-  /**
-   * When true the title + cards + button are grouped inside ONE compact,
-   * padded, blurred black panel (with a slow panning glow behind the cards)
-   * that floats over a barely-dimmed scene — instead of the cards sitting
-   * loose on a full-screen dim. Used by the exterior intro.
-   */
   contained?: boolean;
 }
 
@@ -145,26 +106,9 @@ export function InstructionsOverlay({
     </div>
   );
 
-  // THE BODY IS THE ONLY PART THAT SCROLLS — title and button stay put, so the
-  // CTA is reachable however little height there is.
-  //
-  // This used to be true of the GROUPED body alone, and every card that ships
-  // today is a flat `items` list (v3's first-person card is 7 tiles at
-  // `columns: 3`), so in practice nothing scrolled. On a phone in landscape the
-  // `short:` breakpoint is in force (max-height 540) and the grid resolves to
-  // two columns below `lg`, which is four rows — taller than the viewport once
-  // the title, subtitle, button and the panel's own padding are counted. The
-  // panel is centred inside a container that does not scroll, so the overflow
-  // went off BOTH edges and the button went with it.
-  //
-  // Both branches are now bounded the same way and the panel is capped to the
-  // viewport, so the overflow has somewhere to go.
   const bodyScroll =
     "ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain [touch-action:pan-y]";
   const body = groups?.length ? (
-    // Width budget: the panel caps at 100vw-48px and adds px-10 (short: px-5)
-    // of its own padding, so the body must stay inside 100vw-128px (short:
-    // 100vw-88px) or the panel's overflow-hidden clips the right-hand column.
     <div className={`${bodyScroll} flex w-[min(920px,calc(100vw-128px))] short:w-[min(760px,calc(100vw-88px))] flex-col gap-4 short:gap-2 px-1`}>
       {groups.map((group) => (
         <div key={group.label} className="flex flex-col gap-2 short:gap-1.5">

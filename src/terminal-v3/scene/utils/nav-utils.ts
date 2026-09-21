@@ -12,29 +12,11 @@ export interface FloorMatch {
 }
 
 export interface FindFloorOptions {
-  /**
-   * If provided, applies hysteresis: stay on currentFloorIndex unless another
-   * floor is at least `hysteresisM` closer in combined XZ+Y distance. Prevents
-   * single-step flicker when the player is near a staircase boundary.
-   */
   currentFloorIndex?: number;
   /** Minimum improvement (in metres) required to switch floors. Default 0.6m. */
   hysteresisM?: number;
 }
 
-// Find the floor the probe point belongs to.
-// Algorithm: for each floor zone, find the closest navmesh node in XZ across
-// all groups. Score = full 3D distance from probe to that node. The floor with
-// the smallest score wins — i.e. the floor whose nearest walkable surface is
-// physically closest to the probe.
-// IMPORTANT: callers must pass FEET Y, not camera Y. Camera Y biases detection
-// toward the floor above (cameraHeight matters less than the typical inter-floor
-// gap, but for short floors or non-standard cameraHeight the bias flips the
-// answer). The double-click path passes the raycast hit Y, which is also at
-// surface level.
-// Hysteresis: when called from the per-frame poll, pass currentFloorIndex so
-// the function only swaps floors when there's a clear winner. This eliminates
-// flicker on stairs where two floors' nearest nodes are roughly equidistant.
 export function findBestFloorForPoint(
   point: THREE.Vector3,
   floors: FloorConfig[],

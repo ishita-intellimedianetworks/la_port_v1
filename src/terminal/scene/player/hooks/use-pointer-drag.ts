@@ -1,12 +1,3 @@
-/**
- * usePointerDrag
- * ─────────────────────────────────────────────────────────────────────────────
- * Attaches pointer listeners to the R3F canvas for first-person look control:
- *   - Left-button drag while NOT walking → yaw (horizontal) + pitch (vertical)
- *   - Pointer-down cancels any active idle drift rotation
- * Drag threshold (5 px) prevents micro-movements registering as a camera turn.
- * Pitch is clamped to [PITCH_MIN, PITCH_MAX] so the player can't flip upside-down.
- */
 import { useEffect } from "react";
 import { PITCH_MIN, PITCH_MAX } from "../utils/constants";
 import type { PlayerState } from "../types";
@@ -16,19 +7,9 @@ interface UsePointerDragOptions {
   state: PlayerState;
 }
 
-/**
- * Listens for pointer drag on the canvas to rotate the camera.
- * - Left-button drag while NOT walking → yaw + pitch
- * - Cancels idle rotation on pointer-down
- */
 export function usePointerDrag({ gl, state }: UsePointerDragOptions) {
   useEffect(() => {
     const dom     = gl.domElement;
-    // `armed` is set ONLY by a press that lands on the scene canvas. onMove
-    // rotates only while armed, so a drag begun elsewhere (the map window's
-    // resize / pan, a UI button) can never rotate the player even if the pointer
-    // strays over the exposed scene — while a drag begun on the scene still works
-    // normally, even with the map open.
     let armed     = false;
     let dragging  = false;
     let lastMX    = 0;

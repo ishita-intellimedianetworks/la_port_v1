@@ -33,46 +33,19 @@ export interface CategoryMeta {
   icon: LucideIcon;
   /** Subtitle noun, e.g. "12 {unit} · sorted by nearest". */
   unit: string;
-  /**
-   * Optional segment control above the list. "kind" = fixed Campus Dining /
-   * Restaurants split (by `dest.kind`); "sport" = a chip per distinct
-   * `dest.sports` entry (multi-select); "option" = single-select tabs, one per
-   * distinct `dest.option` (the stadium sub-categories, e.g. Gates / Main
-   * Entrance).
-   */
   segmentBy?: "kind" | "sport" | "option";
-  /**
-   * "option" category whose values are NOT real sub-categories, just item types
-   * (e.g. Seat View: Lower/Upper/Peristyle). Suppresses the sub-category dropdown
-   * and shows every destination in one flat list, while keeping the option-category
-   * behaviours (inline "Already here" on arrival).
-   */
   flatOptions?: boolean;
-  /** Live status notices shown under the sub-category control in the panel's
-   *  list view (e.g. Safety & Guidance emergency updates). Tone drives the
-   *  status dot: ok = green, warn = amber, alert = red. */
   notices?: { text: string; tone?: "ok" | "warn" | "alert" }[];
 }
 
 /** Canonical order + presentation for the three destination labels. */
 export const DEST_CATEGORIES: CategoryMeta[] = [
-  // HoloTwin LA Port
-  // The terminal's operating areas, in the order the demo walks them:
-  // waterside → yard → landside → rail → executive overview. Categories with
-  // no entries on the active floor are filtered out of the rail, so these stay
-  // invisible on the LA2028 venues and vice versa.
   { key: "waterside", label: "Waterside",      short: "Waterside", icon: Ship,       unit: "layouts" },
   { key: "yard",      label: "Container Yard", short: "Yard",      icon: Warehouse,  unit: "layouts" },
   { key: "landside",  label: "Landside",       short: "Landside",  icon: Truck,      unit: "layouts" },
   { key: "rail",      label: "Rail",           short: "Rail",      icon: TrainFront, unit: "layouts" },
   { key: "executive", label: "Executive",      short: "Executive", icon: Gauge,      unit: "layouts" },
 
-  // LA2028 HoloTwin demo categories (memorial / stadium)
-  // Lead the rail on those venues; each renders a distinct panel with option
-  // sub-category chips. "seating" (Seat View), "accessibility" and "services"
-  // (Nearby Services) below are reused as the remaining three demo categories.
-  // Order matches the demo spec: Layouts → Crowd Flow → Seat View →
-  // Accessibility → Event Updates → Nearby Services → Infra.
   { key: "layouts",      label: "Layouts & Wayfinding",   short: "Layouts",       icon: LayoutGrid,    unit: "points",  segmentBy: "option" },
   { key: "crowdflow",    label: "Crowd Flow",             short: "Crowd",         icon: Users,         unit: "zones",   segmentBy: "option" },
   { key: "seating",      label: "Seat Views",             short: "Seat Views",    icon: Eye,           unit: "views",   segmentBy: "option", flatOptions: true },

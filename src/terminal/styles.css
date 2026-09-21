@@ -1,36 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ──────────────────────────────────────────────────────────────────────────
- * v5 UI styles
- *
- * Stylesheet for the interior app. Kept separate from the shared
- * src/app/globals.css so the v5 UI can evolve independently. Imported from the
- * terminal experience root.
- *
- * Plain (non-module) CSS: selectors are global, but only loaded with the scene.
- * Design tokens from globals.css (e.g. --ui-glass-backdrop) are available here.
- * ────────────────────────────────────────────────────────────────────────── */
-
 :root {
-  /* Full-screen tint for the load-time blur overlay (LoadBlurOverlay). Neutral
-     dark — NOT the loader's blue — so the blue HoloTwin loader HUD stays clearly
-     separated and legible on top. Tune the wash here. */
   --ui-loadblur-tint: rgba(0, 0, 0, 0.7);
 
   /* ── v5 typography — Inter everywhere (matches 20hatsfira.com). Overriding the
      font tokens flips every component that reads them; body text inherits. ── */
-  /* !important so these beat the next/font `--font-geist-*` that layout.tsx sets
-     ON <body> (a closer scope than :root) — otherwise Tailwind font-sans/-mono
-     utilities and inline var() usages would still resolve to Geist. */
   --font-geist-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
   --font-geist-mono: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
   --font-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
 
-  /* ── v5 "liquid glass" (Apple-inspired) ──────────────────────────────────
-     Dark / black tint (not white), a stronger backdrop blur, a faint inner
-     sheen ("tint inside"), and a top-lit hairline border (bright from above,
-     fading toward the corners). Every v5 glass surface reads these tokens, so
-     exterior, interior, instructions and the minimize tabs all match. */
   --ui-glass-bg: rgba(9, 11, 15, 0.52);
   --ui-glass-bg-hover: rgba(16, 19, 25, 0.64);
   --ui-border: rgba(255, 255, 255, 0.30);
@@ -43,17 +21,6 @@
   --ui-glass-brightness: 1.05;
   --ui-glass-backdrop: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
 
-  /* Apple "Liquid Glass" specular edge, baked into the box-shadow (no pseudo-
-     element — that would force position:relative and break the many fixed/
-     absolute glass elements). Layers, top → bottom:
-       1. crisp top hairline      — the edge is brightest from above
-       2. faint full ring         — defines the whole rounded edge
-       3. bottom-right light-catch — the soft "lensed" specular Apple uses
-       4. bottom edge glow        — completes the light-catch
-       5. long soft drop          — depth/elevation
-     (Derived from Apple's reverse-engineered recipe: blur+saturate(180%) plus
-     these inset highlights; refraction via SVG feDisplacementMap is skipped as
-     it's unreliable over a live WebGL canvas.) */
   --ui-glass-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.40),
     inset 0 0 0 1px rgba(255, 255, 255, 0.07),
@@ -68,10 +35,6 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* Liquid-glass surface — layer a faint top-down sheen over the dark tint so the
-   interior carries subtle vibrancy, and apply the token border/shadow. Refines
-   the shared .ui-glass on v5 routes; token-only inline glass picks up the tint,
-   blur and shadow via the variables above. */
 .ui-glass {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%),
@@ -96,9 +59,6 @@ body {
   :root { --ui-glass-blur: 13px; }
 }
 
-/* Intro brand image — diagonal fade-in reveal (IntroBrand). A soft diagonal
- * gradient mask sweeps across so the image appears from one corner, through the
- * centre, to the opposite corner (no slide). ~1s. Tune duration / gradient here. */
 @keyframes brand-diagonal-reveal {
   from {
     opacity: 0;
@@ -122,10 +82,6 @@ body {
   animation: brand-diagonal-reveal 2000ms ease-out both;
 }
 
-/* Load-time blur overlay (LoadBlurOverlay). A single full-screen layer between
- * the canvas and the loader HUD. The canvas backdrop blur reuses the SAME
- * recipe as the v4 glass (--ui-glass-backdrop) — no separate/heavier load blur.
- * Layout/opacity come from the component; surface lives here. */
 .ui-load-blur {
   background: var(--ui-loadblur-tint);
   backdrop-filter: var(--ui-glass-backdrop);
@@ -135,9 +91,6 @@ body {
   will-change: opacity, backdrop-filter;
 }
 
-/* Stronger blur variant — used by the exterior load overlay (requireWarm), which
- * covers the whole site model during the long first load and reads better with a
- * deeper frost than the standard glass recipe. */
 .ui-load-blur--strong {
   backdrop-filter: blur(56px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
   -webkit-backdrop-filter: blur(56px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));

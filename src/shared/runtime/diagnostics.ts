@@ -1,15 +1,3 @@
-/**
- * Dev-only render / store-write counters.
- *
- * A frozen page is almost always one of two things: a render storm (something
- * re-rendering thousands of times a second) or a blocked main thread. These
- * counters tell the two apart — they print once a second to the console, which
- * `next dev` mirrors into .next/dev/logs, so the answer is readable without a
- * debugger attached.
- *
- * Enabled by `?diag=true`. Compiled out of production by the NODE_ENV check.
- */
-
 const counts = new Map<string, number>();
 let started = false;
 

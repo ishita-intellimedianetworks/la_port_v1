@@ -1,9 +1,5 @@
 "use client";
 
-/**
- * SceneGraph — R3F children for the interior phase.
- */
-
 import { SceneContent } from "./scene";
 import { useTerminalUi } from "./context/ui-context";
 

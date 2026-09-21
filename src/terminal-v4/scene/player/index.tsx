@@ -1,24 +1,5 @@
 "use client";
 
-/**
- * PlayerController
- * ─────────────────────────────────────────────────────────────────────────────
- * First-person player controller for the interior walkthrough. Exposes an
- * imperative handle (PlayerControllerHandle) via forwardRef so the parent
- * TerminalExperience shell can drive navigation without causing re-renders.
- *
- *   usePlayerState      : creates all mutable refs (position, rotation, path,
- *                         transition, idle flags) grouped as PlayerState
- *   usePathfinding      : navigateToPoint / stopNavigation via three-pathfinding
- *   buildTeleportFn     : instant snap or GSAP-driven smooth floor transition
- *   useNavmeshSnap      : one-shot Y-snap to navmesh surface on mount
- *   usePointerDrag      : left-drag → yaw/pitch look around
- *   useWalkFrame        : per-frame walk along path, floor Y lerp, camera sync
- *
- * eslint-disable react-hooks/immutability: intentional — this component's job
- * is to mutate shared state refs in callbacks and the animation loop.
- */
-
 import { useCallback, useEffect, useLayoutEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -147,9 +128,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const z = (pathfinding as any).zones?.[zone];
           if (!z) return null;
-          // Every group, not just getGroup's: an off-mesh point (a fly camera
-          // hundreds of metres up and outside the terminal) does not belong to
-          // one, and getGroup returns null for exactly the case this exists for.
           const groups: number = z.groups?.length ?? 0;
           let best = null as null | { x: number; y: number; z: number; dist: number };
           for (let g = 0; g < groups; g++) {
@@ -169,10 +147,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       getPath3D:   () => state.path.current.slice(state.pathI.current).map(p => ({ x: p.x, y: p.y, z: p.z })),
       getFootPosition: () => ({ x: state.pos.current.x, y: state.pos.current.y - cameraHeight, z: state.pos.current.z }),
       getSpeed:    () => speed * state.speedMult.current,
-      // Avatar eye height (cameraHeight, world units) maps to a real ~1.6 m, so
-      // 1 world unit ≈ realEyeHeightM / cameraHeight metres. Lets the HUD/minimap
-      // show a realistic walking time instead of the (much faster) camera fly
-      // time. Tune realEyeHeightM in nav-config.ts.
       getMetersPerUnit: () => navConfig.logic.realEyeHeightM / cameraHeight,
       getCurrentZone: () => state.currentZone.current,
       setCurrentZone: (z: string) => { state.currentZone.current = z; onZoneChange?.(z); },
@@ -197,22 +171,10 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
         state.idleOn.current = false;
       },
       lookAtPoint: (target) => {
-        // Yaw-only rotation. Y is intentionally ignored: the camera stays
-        // level and just turns horizontally toward the target's XZ.
-        // Implementation: a GSAP tween animates rot.y over a fixed wall-clock
-        // duration with an ease-out curve. This is frame-rate independent —
-        // settles in the same real time on both PC and phones (the previous
-        // per-frame exponential lerp dragged out + stuttered visibly on
-        // mobile where the dt clamp produced chunky per-frame jumps).
-        // yawT is kept in lockstep via onUpdate so the walk-frame's idle
-        // yaw lerp does nothing while the tween is active.
         const dx = target.x - state.pos.current.x;
         const dz = target.z - state.pos.current.z;
         const targetYaw = Math.atan2(dx, dz) + Math.PI;
 
-        // Pick the shortest signed arc to the target so the tween rotates the
-        // smart way around (otherwise a 359° turn instead of -1° would happen
-        // whenever the angles straddle the ±π wrap).
         const TAU = Math.PI * 2;
         let arc = targetYaw - state.rot.current.y;
         arc = ((arc + Math.PI * 3) % TAU) - Math.PI;
@@ -233,9 +195,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
         state.idleOn.current = false;
       },
       captureScreenshot: (download = false) => {
-        // Render once into the backbuffer immediately before reading it —
-        // works without preserveDrawingBuffer because toDataURL runs in the
-        // same tick as the render, before the buffer is cleared on present.
         gl.render(scene, camera);
         const url = gl.domElement.toDataURL("image/png");
         if (download) {
@@ -248,12 +207,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
       },
     }));
 
-    // ── Seat the player at startPosition on mount AND whenever the start pose
-    // changes (a venue swap passes the NEW floor's start). The controller
-    // persists across floor swaps, so setting only the camera here left the
-    // player state at the OLD venue's position — the next frame snapped the
-    // camera right back. Reset the full pose (pos/rot/targets) so every venue
-    // change lands at its authored start.
     useEffect(() => {
       const y = startPosition[1] + cameraHeight;
       stopNavigation();

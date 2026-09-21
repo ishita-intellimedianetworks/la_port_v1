@@ -1,10 +1,3 @@
-/**
- * The shapes of the baked asset set: manifest.json, materials.json, tex.json.
- *
- * Ported verbatim from LA_PORT_ADAPTIVE's `src/runtime/types.ts` — this is the
- * wire contract between that repo's bake and this repo's runtime, so it must
- * not drift on one side only.
- */
 import type { Tier } from "./config";
 
 export interface ChunkLod {
@@ -20,11 +13,6 @@ export interface ChunkEntry {
   radius: number;
   materials: number[];
   lods: ChunkLod[];
-  /** Instanced placements owned by this chunk: [paletteEntry, firstInstance,
-   *  count] indexing instances.bin. Present only on models baked by
-   *  the instanced bake — absent everywhere else, which is what keeps
-   *  the instancing path inert for the existing bakes. A fully-instanced chunk
-   *  has no `lods` at all: it contributes placements and nothing else. */
   inst?: [number, number, number][];
   instCount?: number;
 }
@@ -36,9 +24,6 @@ export interface Manifest {
   worldMin: [number, number, number];
   worldMax: [number, number, number];
   chunks: ChunkEntry[];
-  /** Animated subtrees lifted out of the chunks, with the clips that drive them.
-   *  Only models baked by the instanced bake with `animation.enabled`
-   *  have this; absent everywhere else. */
   animated?: { url: string; clips: string[] };
 }
 

@@ -1,10 +1,6 @@
 import type { CrowdLevel, DestinationCategory, FloorTransition } from "@/shared/types";
 import { createStore } from "@/shared/stores/create-store";
 
-/**
- * One crowd-flow zone, so the map can draw the same shapes the 3D layer would.
- * `tris` are the zone mesh's world-XZ triangles.
- */
 export interface CrowdFlowZoneRect {
   level: CrowdLevel;
   tris: [number, number][][];
@@ -41,14 +37,6 @@ export interface HotspotInfo {
 
 type OptionByCat = Partial<Record<DestinationCategory, string | null>>;
 
-/**
- * The single source of truth for wayfinding UI — which panel is open, what is
- * selected, and where the player is standing. The rail, panel, map and 3D
- * markers all read it.
- *
- * `currentDest` and `atHome` are position-driven: one poll in Overlays writes
- * them from the player's live XZ, and nothing else recomputes them.
- */
 export interface NavUiState {
   /** Open category (null = none) — drives the panel AND the map's pin set. */
   openLabel: DestinationCategory | null;
@@ -73,15 +61,6 @@ export interface NavUiState {
   /** The hotspot picked from the list (H01-H30), or null. When set, the scene
    *  shows that marker alone rather than every disc in the layout. */
   selectedHotspotId: string | null;
-  /**
-   * True while standing at the bottom bar's ground standpoint
-   * (`FIRST_PERSON_VIEW`), which takes every marker out of the scene.
-   *
-   * A flag rather than a camera-height test: the per-hotspot ground views in
-   * `ground-views.ts` are also at standing height and must keep their marker.
-   * Cleared by `setSelectedHotspotId` — every travel path calls it — and by the
-   * position poll once the player walks away.
-   */
   atGroundView: boolean;
   crowdFlowZones: CrowdFlowZoneRect[];
 
@@ -136,11 +115,6 @@ const INITIAL = {
   crowdFlowZones: NO_ZONES,
 } satisfies Partial<NavUiState>;
 
-/**
- * Replace a category's remembered option, returning the same object when the
- * value is already correct — the map subscribes to `optionByCat`, so a fresh
- * identity on every `setCurrentDest` re-rendered it on every move.
- */
 function withOption(
   current: OptionByCat,
   category: DestinationCategory,

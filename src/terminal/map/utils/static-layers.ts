@@ -1,38 +1,5 @@
 import type { ImageRect } from "./draw";
 
-/**
- * The map's two STATIC layers (context aerial + terminal plan), pre-composited
- * at the exact device scale they are shown at, so the frame loop blits instead
- * of rescaling.
- *
- * WHY THIS EXISTS
- * ---------------
- * The loop used to call `drawImage` on both sources every frame with
- * `imageSmoothingQuality = "high"`. The plan is 3514×4080 — 14.3 megapixels —
- * and lands in roughly 1 megapixel of backing store, so every single frame paid
- * for a 13× area downscale with the expensive filter, and the aerial added
- * another 3.7 Mpx source on top. That ran at 60 fps for the whole first-person
- * session, and it is what made dragging the map, and everything else sharing
- * the main thread with it, feel heavy.
- *
- * Nothing about the RESULT changes. The cache is built at `dpr × zoom`, which
- * is precisely the scale the blit consumes it at, so the composited pixels are
- * the same ones the old path produced — see `exact` below, which is what keeps
- * that promise honest rather than assumed.
- *
- * WHAT INVALIDATES IT
- * -------------------
- *   pan   nothing, while the view stays inside the cached margin. This is the
- *         common case and the one that mattered most: a drag is now a blit.
- *   zoom  a rebuild, but only once the scale has drifted past ~20%, so a pinch
- *         costs a handful of rebuilds rather than one per frame.
- *   rest  one rebuild at the exact scale, the frame after the view stops, so
- *         what you are left looking at is never the approximate version.
- *
- * A rebuild costs about what ONE old frame cost, and now happens a few times a
- * gesture instead of sixty times a second.
- */
-
 export interface StaticLayerInput {
   plan: HTMLImageElement | null;
   /** Where the plan goes, in logical canvas px (the letterbox rect). */
@@ -52,19 +19,8 @@ export interface StaticLayerView {
   oy: number;
 }
 
-/**
- * How much beyond the visible rect to cache, as a fraction of it. Every pan
- * shorter than this is free; the cost of a larger one is a single rebuild.
- * Squared, it is also the memory multiplier over the canvas, which is why it is
- * modest rather than generous.
- */
 const MARGIN = 0.18;
 
-/**
- * Ceiling on cache pixels. Reached only at high zoom on a large canvas; past it
- * the cache scale is reduced rather than the allocation growing, so the worst
- * case is a slightly soft frame, never a memory spike. 8 Mpx ≈ 32 MB RGBA.
- */
 const MAX_PX = 8_000_000;
 const MAX_PX_LOW_POWER = 4_000_000;
 
@@ -128,11 +84,6 @@ export function createStaticLayers(lowPower = false) {
   }
 
   return {
-    /**
-     * Paint the static layers for this frame. Call INSIDE the loop's pan/zoom
-     * transform — the rect handed to `drawImage` is in the same logical pixels
-     * every other overlay uses.
-     */
     draw(ctx: CanvasRenderingContext2D, src: StaticLayerInput, v: StaticLayerView) {
       if (!src.plan || !src.planRect) return;
 

@@ -10,20 +10,6 @@ interface PanelSearchProps {
   label?: string;
 }
 
-/**
- * The search field that sits above a panel's list, carried over from the admin
- * tool's Resources drawer: one plain text box at the top, filtering the tree
- * live as it is typed.
- *
- * Pointer events STOP HERE. The 3D canvas underneath binds pointerdown for
- * look-drag and dblclick for walk-here, and both fire through an overlay that
- * does not swallow them — so without this, dragging to select the text you just
- * typed spun the camera, and double-clicking a word walked the player away from
- * whatever they were searching for.
- *
- * The flap's root sets `user-select: none` (it is chrome, not copy), which also
- * kills selection inside a nested input — so text selection is re-enabled here.
- */
 export function PanelSearch({
   value,
   onChange,

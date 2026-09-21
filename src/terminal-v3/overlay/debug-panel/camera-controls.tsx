@@ -1,42 +1,5 @@
 "use client";
 
-/**
- * The `?debug=true` panel's VIEW and CAMERA folders — everything that is not a
- * light.
- *
- * `view` is two knobs the lighting folders cannot stand in for: the field of
- * view, which decides how much of the terminal a framing actually holds, and
- * the navmesh overlay, which used to come on with `?debug=true` itself and made
- * the whole site green while you were trying to judge a sun angle.
- *
- * `camera` is a live two-way binding to the camera on screen. Drag `x`, `y`, `z`
- * or one of the three angles and the view moves as you drag; walk away from the
- * pose and the numbers follow. That is the loop the framing work needs — the
- * alternative was editing the site file, reloading, travelling back to the
- * resource, and judging the change against a memory of the last one.
- *
- * HOW THE TWO-WAY BINDING AVOIDS FIGHTING ITSELF
- * ----------------------------------------------
- *  - Every `onChange` is guarded on `ctx.fromPanel`. Leva fires them for a
- *    programmatic `set()` too, so without the guard the readback would look
- *    like an edit and teleport the player once per poll.
- *  - Readback is polled, not per-frame: `set()` re-renders inputs, and doing
- *    that 60 times a second to show a number nobody is reading is waste.
- *  - Readback pauses for a moment after any edit. A drag applies instantly, so
- *    the poll would usually push the identical value back — but `y` does not
- *    round-trip exactly on walkable ground (the controller re-seats it on the
- *    navmesh), and pushing the seated value back mid-drag drags against you.
- *
- * WHY WRITES GO THROUGH `teleportTo` AND NOT `camera.position.set`
- * ---------------------------------------------------------------
- * The player controller owns the camera and rewrites it every frame from its
- * own `pos` / `rot` refs, so a direct write to the three.js object survives
- * exactly one frame. `teleportTo` sets both, which is why it is also what
- * `goToLayout` uses. It takes a FOOT position and adds the eye height back, so
- * the y here — an EYE height, because that is what a the site file camera stores
- * — has the controller's own camera height taken off first.
- */
-
 import { useCallback, useEffect, useRef } from "react";
 import { button, folder, useControls } from "leva";
 import { useSite } from "@/config/context";
@@ -62,9 +25,6 @@ const POLL_MS = 120;
  *  drag's pointer-move cadence, short enough that letting go feels immediate. */
 const EDIT_QUIET_MS = 400;
 
-/** Leva's setter, addressed by flat leaf key — same shape the lighting folder
- *  uses, and for the same reason (`folder()` namespaces the store path, not the
- *  key you address). */
 type Setter = (patch: Record<string, unknown>) => void;
 
 const round = (n: number, d = 3) => Number(n.toFixed(d));
@@ -88,23 +48,12 @@ export default function DebugCameraControls() {
   /** Timestamp of the last panel-originated edit — see the quiet window above. */
   const lastEditRef = useRef(0);
 
-  /** The controller's own eye height: the gap between where the camera is and
-   *  where the feet are. Read live rather than from config, because each floor
-   *  can carry its own. */
   const eyeHeight = useCallback(() => {
     const ctrl = playerControllerRef.current;
     if (!ctrl) return 0;
     return ctrl.getPosition().y - ctrl.getFootPosition().y;
   }, [playerControllerRef]);
 
-  /**
-   * Apply a full pose from the panel's current numbers, patching in the one
-   * field that just changed.
-   *
-   * Reads the OTHER five off the live camera rather than off leva state: leva
-   * hands a callback only its own value, and the camera is the one place all
-   * six are guaranteed to be the values on screen right now.
-   */
   const applyEdit = useCallback(
     (patch: Partial<{ x: number; y: number; z: number; pitch: number; yaw: number; roll: number }>) => {
       const ctrl = playerControllerRef.current;
@@ -135,9 +84,6 @@ export default function DebugCameraControls() {
       applyEdit({ [key]: v });
     };
 
-  /** Send the camera back to the pose the site file authored for wherever it is.
-   *  The seating rule matches `goToLayout` exactly: an aerial pose keeps its
-   *  authored Y, a ground one is probed onto the navmesh at that XZ. */
   const resetToAuthored = useCallback(() => {
     const ctrl = playerControllerRef.current;
     const target = activeCameraTarget(site);
@@ -190,10 +136,6 @@ export default function DebugCameraControls() {
           if (ctx?.fromPanel) setShowNavmesh(v);
         },
       },
-      // See `navmeshDepth` in the debug store: the navmesh sits within
-      // centimetres of the apron across a kilometre of site, so depth-tested it
-      // mostly loses the z-fight and the toggle above looks broken. Drawn
-      // through by default; turn this on to see where it floats or sinks.
       "occlude navmesh": {
         value: false,
         hint: "let the world hide the overlay — off, it draws through walls",
@@ -207,9 +149,6 @@ export default function DebugCameraControls() {
     }),
 
     camera: folder({
-      // Which authored block an edit here belongs in. Null while the player is
-      // somewhere nobody authored a camera for, and the copy still works then —
-      // that is how a new one gets found.
       editing: { value: "—", editable: false },
       "edit camera": {
         value: false,
@@ -218,9 +157,6 @@ export default function DebugCameraControls() {
           if (ctx?.fromPanel) setCameraEdit(v);
         },
       },
-      // Plain numbers, not sliders: the terminal spans X -1500..-662, and a
-      // slider across that range moves ~4 m per pixel. Drag the LABEL for fine
-      // control, or type a value.
       x: { value: 0, step: 0.25, onChange: edit("x") },
       y: { value: 0, step: 0.25, hint: "EYE height, as the site file stores it", onChange: edit("y") },
       z: { value: 0, step: 0.25, onChange: edit("z") },
@@ -230,10 +166,6 @@ export default function DebugCameraControls() {
       yaw: { value: 0, min: -180, max: 180, step: 0.5, onChange: edit("yaw") },
       roll: { value: 0, min: -180, max: 180, step: 0.5, onChange: edit("roll") },
       "reset to authored": button(() => resetToAuthored()),
-      // Clipboard AND console, so a declined clipboard permission still leaves
-      // the numbers somewhere they can be read off. Saving is NOT here: it
-      // rewrites a source file and needs a confirmation, which belongs on the
-      // camera card where the row being overwritten is named.
       "copy position + rotation": button(() => copyPose()),
     }),
   }));

@@ -494,6 +494,7 @@ One component decides it for both layers, `scene/hotspot-markers`. In order:
 | **At a layout's checkpoint** | every resource filed under it. |
 | **Otherwise** | nothing. |
 | **Then, always** | the enabled security anchors are added on top of whichever row won. |
+| **Last of all** | the one marker whose card is open comes down, from either table. |
 
 **The Security row unfolds the menu; it does not travel.** Its anchors sit at
 five different layouts, so there is no one pose the row could mean. It briefly
@@ -507,11 +508,25 @@ unfolded list, **walked past** on the navmesh, or — for the enabled pair —
 
 **THE ENABLED PAIR IS ALWAYS UP.** S01 and S02 are the only anchors with
 `enabled` unset; every other row is `enabled: false`. Those two are unioned
-into the marker set after every rule above has run, so neither the narrowing
-to a picked disc nor the open-card filter can take them down. Before this,
-opening S01 hid its own marker AND S02 — the layer went dark on the click
-that was meant to demonstrate it. This is wider than §8 and is a deliberate
-demo choice: the security anchors are what v4 exists to show.
+into the marker set after every rule above has run, so the narrowing to a
+picked disc cannot take them down. Before this, opening S01 hid its own marker
+AND S02 — the layer went dark on the click that was meant to demonstrate it.
+This is wider than §8 and is a deliberate demo choice: the security anchors are
+what v4 exists to show.
+
+**THE OPEN CARD'S OWN MARKER IS THE ONE EXCEPTION, AND IT IS THE LAST WORD.**
+A bead pulsing behind — or under — the panel it just opened is the marker
+arguing with its own card; S01's sits directly beneath it. So the id whose
+popup is open is removed **after** the union, not before it. Applied before, as
+it first was, the union on the next line put it straight back for exactly the
+two anchors it mattered most for, and opening S01 left S01's bead up through
+its own popup.
+
+One filter, one place, **both tables**: an operational hotspot's marker and a
+security anchor's come down by the same rule, for any popup. It takes down one
+id — the one whose card is open — so the other half of the pair, and every
+operational marker in reach, stay where they were. That is what `alwaysOn` was
+protecting, and it still does. Restored on `setHotspotInfo(null)`.
 
 **ON THE MESH WINS, and it is the second test for a reason.** However the
 operator got down there - a resource's ground standpoint, the First Person
@@ -566,7 +581,7 @@ Below `sm` the card comes in on every axis:
 | padding | 24 | 16 |
 | corner | 14 | 12 |
 | title / subtitle | 18 / 13 | 15 / 11 |
-| field label / value | 11.5 / 15 | 10.5 / 13 |
+| field label / value | 12.5 / 17 | 11.5 / 15 |
 | row padding | 7 | 5 |
 | alert title / detail | 12.5 / 12 | 11 / 11 |
 | column gap | 32 | 20 |
@@ -577,6 +592,41 @@ this card passes. The thumbnail stays hidden below `sm` - turned 13 degrees and
 shrunk to phone width it stops being legible, and the readings are what the card
 is for.
 
+### The readings carry their own legibility, not the panel
+
+`NAV_GLASS_PANEL` is 52% dark over a backdrop the shared recipe *brightens*
+(`brightness(1.05)`). At the truck gate S01 and S02 stand under a midday sky,
+and against it the card's rows sat on daylight: the 60%-white label tier
+vanished and the green status words lost their tone.
+
+The card keeps that shared glass. A darker, dimmed ground of its own was tried
+and reverted - it read as frost rather than glass, and made the one surface
+covered in readings the heaviest thing on the overlay. The legibility lives in
+the type instead:
+
+| | before | now |
+|---|---|---|
+| label colour | `--nav-text-faint` (60% white) | `--nav-text-2` (82%) |
+| label / value size | 11.5 / 15 | 12.5 / 17 |
+| shadow | none | `CARD_TEXT_SHADOW` |
+
+`CARD_TEXT_SHADOW` is `0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)` -
+a tight plate under each glyph and a wider halo around it. Set **once, on the
+card's root**, and inherited: `text-shadow` is an inherited property, so the
+header, the alert banner, the journey rows, the incident tables and the field
+grid all take it from one declaration and nothing has to remember to opt in.
+The nested incident-log dialog sets it on its own root the same way.
+
+**On a translucent panel the shadow is what carries contrast, not the colour.**
+The first attempt was a plain offset drop on the field rows only, and it was
+enough for the white values and not for the tone words: green `#30d158` over
+pale glass has no edge, and an offset shadow does not give it one. The halo
+does. This is also why the palette was left alone - over a backdrop that runs
+from dark water to a white sky there is no single colour that holds, so the
+edge has to come from somewhere other than the fill.
+
+Phone variants moved up with the sizes; see the table above.
+
 ### Animation: what runs, and when
 
 The terminal's baked clips live in `animated.glb`, lifted out of the chunk set at
@@ -586,8 +636,55 @@ rules decide when it moves, and they are all about WHEN rather than what:
 | | |
 |---|---|
 | **Dollhouse** | nothing runs. Cranes swinging and water rolling from 180 units up is motion nobody asked for. **Paused, not stopped**, so first person picks the water up mid-wave instead of snapping it to frame 0. |
-| **First person** | every ambient clip loops. |
+| **First person** | every ambient clip loops, except the three held set below. |
 | **A hotspot picked** | if its config names a clip, that clip plays **once**, after its own beat. |
+| **First Person pressed** | `ContainerIdle`, `TruckHaul` and `SceneTour` are released, 2.5s later. |
+
+**THREE AMBIENT CLIPS ARE HELD UNTIL SOMEONE STANDS ON THE GROUND.**
+`ContainerIdle`, `TruckHaul` and `SceneTour` are the terminal *working* - a
+container shifting, a truck crossing the apron, the scene touring itself - and
+the demo opens on a still yard. Running them from the first frame read as the
+scene playing without being asked, over an overview nobody had walked into yet.
+
+They stay in the loop set; `ChunkManager.setDeferredClips` only holds them
+paused. `setDeferredRunning(true)` releases them, and both switches - the view
+rule above and this one - are written in **one place**, `applyLoopPaused`, so
+neither can overwrite the other. Empty by default, so v1 and v3 are unchanged.
+
+| | |
+|---|---|
+| **armed by** | the bottom bar's **First Person** button, and only it. `armStandingAmbient` on `nav-ui-store` is called from `handleFirstPerson` - not from `enterGroundView`, which a resource's own ground standpoint also takes. |
+| **beat** | 2.5s, measured from the CLICK. The teleport it starts happens inside a blackout, so a delay measured from the landing would run under the black; from the click it lands just after the picture returns. |
+| **one-way** | leaving first person pauses them with every other ambient clip and coming back resumes them; it does not re-hold them. The terminal does not go back to being asleep once it has been woken. Only a store reset re-arms the hold, which is a fresh session. |
+
+**THE BLACKOUT IS BOUNDED, so that beat holds.** First Person is the one
+transition that passes `waitUntil: dressingSettled()` to `triggerFloorTransition`
+- it holds the black until the streamer has stopped re-tiering, so the ground
+does not sharpen in front of the operator. Two things kept that hold from ever
+being satisfied, and the fade ran to the 8s `MAX_BLACKOUT_WAIT_MS` emergency cap
+on every press:
+
+- `dressingSettled` clocked itself from the CLICK, a fade-in before the teleport
+  it is measuring. Its 350ms priming window was spent under the fade, so `peak`
+  latched on the leftover backlog of the view being left - a handful - and
+  `peak * 0.1` then demanded a near-total drain of the hundreds the teleport
+  raises. It now clocks from its first poll, and gives up at `SETTLE_MAX_MS`
+  (1.5s): the hold is a courtesy, not a load gate.
+- `ChunkManager.retierBudget` is 2 swaps/tick - deliberately small, because a
+  re-tier costs a decode against a live frame. Under a blackout there is no live
+  frame, so a camera jump over `JUMP_METRES` (50, further than any walk covers
+  in one tick) now raises `retierBurst` and the backlog drains at
+  `maxLoadsPerTick` for 30 ticks.
+
+Together the press is ~2s of black rather than ~10, which is what the 2.5s beat
+above was written against.
+
+**The list is NAMED, not derived**, which is the one place this document's own
+rule bends. The one-shot set is derived because a hotspot already declares its
+clip and a second list could disagree with it; there is nothing to derive this
+from. It is a demo choice about which three of the bake's clips are "the
+terminal working", and it lives as `STANDING_AMBIENT` beside the animation rules
+in `scene/model-loader/streamed-model`.
 
 **"Reached home" is the first-person landing.** Home is where first person
 begins, so the ambient loop starting there falls out of the view rule rather
@@ -745,6 +842,29 @@ optimised output under `.next/dev/cache/images`, keyed by the source URL - so
 replacing a file in place and reloading serves the OLD picture. Three identical
 re-sends of the same render were spent on this. Changing the image means
 changing the path: bump the `-vN` suffix rather than overwriting.
+
+**THE READINGS WRAP UNDER IT AT ROW FIVE.** The still's box is 200px tall,
+which is four field rows. Beside a single column of readings that was fine for
+S01, which authors exactly four - and wrong for S02's seven, which ran the
+column down past the picture and made the card half again as tall as its own
+image against an empty third of the image column. So **four go beside the still
+and the rest wrap underneath in two columns**. S02 is four rows and two, and the
+card is shorter than the picture in it rather than taller.
+
+**It is ONE grid, not two blocks.** The still is a grid item placed at
+`gridColumn: 1, gridRow: 1 / span FIELDS_BESIDE_STILL` and the readings simply
+auto-flow around it: column 1 is taken for four rows, so the first four land in
+column 2 beside the picture and the fifth starts a new row in column 1. Built as
+two stacked blocks it looked right and aligned wrong - the lower block's columns
+began at the card's edge and at its own midpoint, and neither lined up with the
+column beside the picture, so Security Exceptions sat 30px right of the four
+readings above it. One grid means one pair of column edges for every row.
+
+The span is a count, not a measurement, because the box's height is fixed and
+the row height is fixed with it - one number to change if either moves, and the
+constant says which. Below `sm` the still is `display: none`, which takes it out
+of the grid entirely, so the readings collapse to a plain column with no gap
+where it was.
 
 **S01's image and S01's readings disagree.** The card says GATE OPEN and STATUS
 CLEARED; the render shows the arm down. The rule that keeps `alert` honest

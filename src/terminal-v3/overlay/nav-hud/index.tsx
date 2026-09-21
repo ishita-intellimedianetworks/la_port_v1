@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * NavHud — a maps-style turn banner. ONE maneuver arrow shows the NEXT turn and
- * the distance to it ("50 m / Turn right"), with the destination + ETA alongside.
- * Stable (does not track the path). Distance-to-turn + maneuver come from
- * useNavInfo; the destination name is read from the route's end (nearest destination).
- * Visible only while walking.
- */
-
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { ArrowUp, CornerUpLeft, CornerUpRight } from "lucide-react";

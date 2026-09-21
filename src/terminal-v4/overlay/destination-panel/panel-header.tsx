@@ -11,9 +11,6 @@ interface PanelHeaderProps {
   onClose?: () => void;
   /** When set (directions mode), a back arrow returns to the options list. */
   onBack?: () => void;
-  /** Compact the header below `sm`. Opt-in, because only the hotspot card wants
-   *  it - the destination panels are the full width of the flap and have the
-   *  room. */
   dense?: boolean;
 }
 

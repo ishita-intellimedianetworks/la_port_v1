@@ -6,19 +6,6 @@ import { Billboard, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { useWorldStore } from '@/shared/stores/world-store';
 
-/**
- * Clouds — four drifting billboard clouds ported from the reference exterior.
- * The whole layer is parented under a group scaled + centred to the active
- * model's bounds (world-store), so the clouds authored for a ~hundreds-of-units
- * scene sit correctly in the sky of our very-large-unit models.
- *
- * Decoupled from the reference's reveal/progress gating — they're simply always
- * visible at their resting opacity.
- */
-
-// Preload the cloud texture at module load so the FIRST first-person entry
-// (where <Clouds> first mounts) doesn't suspend the canvas — that Suspense gap
-// blanked the whole scene to black for a frame on dollhouse → first-person.
 useTexture.preload('/cloud.png');
 
 const WIND_SPEED = 1;
@@ -27,11 +14,6 @@ const BASE_OPACITY = [0.6, 0.52, 0.48, 0.5] as const;
 // scale; we scale the whole layer by radius / REF_SCALE to match our model.
 const REF_SCALE = 300;
 
-// Clouds drift in +x and wrap from +WRAP_EDGE back to -WRAP_EDGE. The wrap is an
-// instant teleport across the sky, so we fade each cloud's opacity to 0 over the
-// last FADE_BAND units before the edge — the teleport then happens while the
-// cloud is invisible, and it fades back in after wrapping. Without this the
-// cloud visibly "disappears" the instant it hits the edge.
 const WRAP_EDGE = 550;
 const FADE_BAND = 200;
 

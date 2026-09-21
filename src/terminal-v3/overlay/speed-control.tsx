@@ -7,17 +7,6 @@ import { navConfig } from "../navigation-config";
 
 const SPEEDS = [1, 5, 10] as const;
 
-/** Walk-speed multiplier control (1× / 5× / 10×), shown while walking.
- *
- *  The choice STICKS: it applies to the current walk and to every walk after
- *  it, until the page reloads. It is a setting, not per-walk state — dropping
- *  to 1× to look at something and having the next click silently restore 5×
- *  is the behaviour this replaced.
- *
- *  The controller's `speedMult` is the single source of truth: this control can
- *  be mounted twice at once (the 3D dock + the full-screen map's walking banner),
- *  so it POLLS the live value rather than holding an independent copy — otherwise
- *  setting 5× on the map left the dock showing a stale 1× (and vice versa). */
 export function SpeedControl({ ctrlRef, vertical = false }: { ctrlRef: RefObject<PlayerControllerHandle | null>; vertical?: boolean }) {
   const [v, setV] = useState(navConfig.logic.defaultSpeedMult);
   useEffect(() => {

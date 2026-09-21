@@ -13,22 +13,7 @@ export interface LayoutEntry {
   category: DestinationCategory;
 }
 
-/**
- * Travel between layouts.
- *
- * A layout IS a destination in the engine, and its zone is the category it is
- * filed under — so finding one means scanning the active floor's categories.
- *
- * Travel is always a TELEPORT — a blackout swap. Ten layouts across a 205-acre
- * terminal made walking between them a very long trip, and half the cameras are
- * aerial with no navmesh under them, so the walk was unavailable exactly where
- * the distances were worst. Walking still exists in the SCENE (double-click the
- * floor); it is just not how you cross the terminal.
- */
 export function useLayoutNavigation() {
-  // The cameras and the two tables are the ACTIVE MODEL's — each route has its
-  // own site file, so travel can only ever aim at poses authored for the bake
-  // it is actually streaming.
   const site = useSite();
   const { playerControllerRef, triggerFloorTransition, activeFloor } = useScene();
   const currentDest = useNavUiStore((s) => s.currentDest);
@@ -50,23 +35,14 @@ export function useLayoutNavigation() {
     (layoutId: string, onArrive?: () => void) => {
       const controller = playerControllerRef.current;
       const entry = find(layoutId);
-      // Straight off the destination the engine built from `sites/v3.json`.
-      // A shot that has to be re-aimed for the v8 bake is re-aimed IN that file
-      // — see L02's camera note — so there is no override layer here any more.
       const camera = entry?.destination.camera;
       if (!controller || !entry || !camera) return;
 
-      // Travelling to a LAYOUT drops any resource selection: the request was
-      // for the place, so arriving must show every bead filed there rather than
-      // the one left over from a previous pick.
       useNavUiStore.getState().setHotspotInfo(null);
       useNavUiStore.getState().setSelectedHotspotId(null);
 
       triggerFloorTransition(() => {
         const [x, authoredY, z] = camera.position;
-        // Elevated layouts keep their authored eye height (teleportTo re-adds
-        // the camera height); ground ones snap to the navmesh probed AT that
-        // height, so both land where the pose was authored.
         const cameraHeight = controller.getPosition().y - controller.getFootPosition().y;
         const footGuess = authoredY ? authoredY - cameraHeight : 0;
         const y =
@@ -92,35 +68,14 @@ export function useLayoutNavigation() {
     [playerControllerRef, triggerFloorTransition, find],
   );
 
-  /**
-   * Travel to a resource's OWN camera and select it.
-   *
-   * A hotspot now frames itself rather than borrowing its layout's wide shot,
-   * so this does NOT route through `goToLayout` — that would land on the group
-   * pose and clear the very selection being made. The two differ on purpose:
-   *
-   *   layout   its camera frames the GROUP; arriving shows every bead in it.
-   *   hotspot  its camera frames ITSELF; arriving shows that one bead.
-   *
-   * `currentDest` is still latched to the PARENT layout, because that is where
-   * the player physically is — the tree, the map and the marker set all read it.
-   * The data card is not opened here: arriving should leave the operator looking
-   * at the bead in context, and clicking it is what opens the data.
-   */
   const goToHotspot = useCallback(
     (hotspotId: string, onArrive?: () => void) => {
       const controller = playerControllerRef.current;
-      // Either table. The Resources tree lists a layout's security anchors
-      // under its operational ones, and a row is a row: both travel to their
-      // own authored camera and select themselves on arrival.
       const hotspot = site.hotspotById[hotspotId] ?? site.securityHotspotById[hotspotId];
       const layout = hotspot ? site.layoutById[hotspot.layoutId] : null;
       if (!controller || !hotspot || !layout) return;
 
       const entry = find(layout.id);
-      // A hotspot with no camera of its own inherits its layout's, and that
-      // layout's camera is this model's own — so the Berth's raised eye carries
-      // to its resources without anything extra here.
       const pose = site.poseForHotspot(hotspotId);
 
       useNavUiStore.getState().setHotspotInfo(null);
@@ -150,40 +105,12 @@ export function useLayoutNavigation() {
         // its siblings already gone by the time the picture comes back.
         useNavUiStore.getState().setSelectedHotspotId(hotspotId);
 
-        // Also inside the blackout. `setHotspotInfo(null)` above clears any
-        // open card on the way out, so a caller that wants one OPEN on arrival
-        // has to set it after that — which is here. Same shape as
-        // `goToLayout`'s callback, and the same reason: a caller should never
-        // have to guess how long the swap takes.
         onArrive?.();
       });
     },
     [site, playerControllerRef, triggerFloorTransition, find],
   );
 
-  /**
-   * Travel to a resource's GROUND standpoint — the walk affordance in the
-   * Resources tree.
-   *
-   * The difference from `goToHotspot` is only where you land, and it is the
-   * whole point: that one keeps the layout's authored aerial height (every
-   * layout is `walkable: false`), this one puts the player's FEET on the
-   * navmesh and lets the controller supply the eye height. So the view arrives
-   * at exactly the height walking there would have given — no authored Y is
-   * trusted for the camera.
-   *
-   * The stored `position[1]` is the surface Y the pose was authored against,
-   * used here only as `probeFloorY`'s tie-breaker (it disambiguates stacked
-   * triangles) and as the fallback if the probe misses the mesh entirely. What
-   * actually seats the player is the LIVE navmesh, so a re-bake that shifts the
-   * ground moves the camera with it instead of leaving it hovering.
-   *
-   * Everything else matches `goToHotspot`: `currentDest` stays latched to the
-   * parent layout because that is where the player physically is, the bead is
-   * selected so the scene narrows to the one resource, and the data card is
-   * left closed — arriving should leave you looking at the thing, and clicking
-   * the bead is what opens the readings.
-   */
   const goToHotspotGround = useCallback(
     (hotspotId: string) => {
       const controller = playerControllerRef.current;
@@ -198,9 +125,6 @@ export function useLayoutNavigation() {
 
       triggerFloorTransition(() => {
         const [x, authoredSurfaceY, z] = view.position;
-        // Feet on the navmesh. `teleportTo` adds the controller's camera height
-        // on top, which is `world.eyeHeight` — the same figure the walking view
-        // uses, so this pose cannot drift from first-person height.
         const y = controller.probeFloorY(x, z, authoredSurfaceY) ?? authoredSurfaceY;
 
         controller.teleportTo([x, y, z], view.rotation);

@@ -1,39 +1,5 @@
 "use client";
 
-/**
- * The `?debug=true` camera card — the whole framing loop in one place.
- *
- *   land on a camera  →  Edit  →  drag it onto the shot  →  Copy or Save
- *
- * It appears only when there IS an authored camera in play (a resource you
- * travelled to, or the layout you are standing in) and names it, so the row
- * about to be edited is stated before anything moves. The numbers on it are the
- * numbers that get saved — position and an XYZ rotation, the form the site
- * file stores — rather than a second rendering of them, so what you read is
- * what lands in the file.
- *
- * WHY EDITING IS ARMED RATHER THAN ALWAYS ON. The card is up while you walk,
- * because its numbers are also the readout of where you are. Inputs that both
- * report and teleport are a trap: a stray drag on `y` in a panel you were
- * reading puts the camera underground. **Edit** is the deliberate act, and the
- * button stays lit while armed because leaving it on and forgetting is the
- * other half of the same trap.
- *
- * WHY SAVE ASKS. It rewrites a source file in the working tree, and because
- * every module imports the site config, the dev server reloads the page the
- * moment it lands. Both facts are on the confirm row: an edit that silently
- * discards an unsaved sibling edit, or that appears to crash the app, is worse
- * than one extra click. Saving a HOTSPOT camera is called out separately —
- * every hotspot ships without one and inherits its layout's, so the first save
- * on one is an ADD, and from then on that resource stops following its layout.
- *
- * IT WRITES THIS MODEL'S FILE AND ONLY THIS MODEL'S. Each route reads a
- * complete document of its own (`config/sites/<id>.json`), so a framing dialled
- * against this bake lands in this bake's file and the other routes do not move.
- * That used to be the opposite: one shared `site.json` meant every save here
- * re-aimed all three, which the confirm row had to warn about.
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSite } from "@/config/context";
 import { useCameraStore } from "@/shared/stores/camera-store";
@@ -61,9 +27,6 @@ type Stage = "idle" | "confirm" | "saving" | "done" | "error";
 const fmt = (n: number) => n.toFixed(4);
 
 export function DebugCameraEditor() {
-  // These two ids ARE the camera target — `cameraTargetFor` takes them rather
-  // than reading the store, so the subscription and the derivation are the same
-  // two values and cannot drift apart.
   const site = useSite();
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const currentDestId = useNavUiStore((s) => s.currentDest?.id ?? null);
@@ -82,10 +45,6 @@ export function DebugCameraEditor() {
   );
   const targetKey = target ? `${target.kind}:${target.id}` : null;
 
-  // Travelling somewhere else drops a half-finished save rather than leaving a
-  // confirm row pointing at a row you have since left. Adjusted DURING render
-  // against the previous key rather than in an effect: an effect would paint
-  // one frame of the old row's confirmation under the new row's name.
   const [prevKey, setPrevKey] = useState(targetKey);
   if (targetKey !== prevKey) {
     setPrevKey(targetKey);
@@ -94,13 +53,6 @@ export function DebugCameraEditor() {
     setCopied(false);
   }
 
-  // The live readout. Held while a save is in flight so the numbers on screen
-  // stay the numbers being written — the page is about to reload anyway, and a
-  // value ticking under a confirmation is the one thing that would make it
-  // unclear what was confirmed.
-  // Kept in a ref because the poll below is set up once and must not be torn
-  // down and rebuilt every time the stage changes — restarting the interval on
-  // each keystroke of state would make the readout stutter.
   const held = stage === "confirm" || stage === "saving";
   const heldRef = useRef(held);
   useEffect(() => {
@@ -165,9 +117,6 @@ export function DebugCameraEditor() {
               ? `Add a camera to ${target.id}? It stops following ${target.kind === "hotspot" ? "its layout" : "the default"}.`
               : `Overwrite ${target.path} in sites/${site.id}.json?`}
           </div>
-          {/* Which file, and that the page will reload — neither is guessable
-              from the button. The file is named because each model has its own
-              and the save reaches only that one; it used to reach all three. */}
           <div className="mb-2 opacity-60">
             Writes config/sites/{site.id}.json — the page will reload. No other route is touched.
           </div>

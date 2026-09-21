@@ -9,13 +9,6 @@ interface TeleportOptions {
   stopNavigation: () => void;
 }
 
-/**
- * Returns a `teleportTo` function bound to the given player state.
- *
- * - **smooth=false** (default): instant snap — moves camera immediately.
- * - **smooth=true**: GSAP-driven 0.55s ease — interpolates position and yaw
- *   via `state.transition` refs; `useWalkFrame` reads these each tick.
- */
 export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }: TeleportOptions) {
   return (
     p: [number, number, number],
@@ -40,18 +33,9 @@ export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }:
       const delta = ((raw % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
       state.transition.endYaw.current = state.rot.current.y + delta;
 
-      // Pitch/roll ride the SAME eased tween as yaw (via onUpdate below) —
-      // snapping rot.x here jolted the view vertically the instant a walk
-      // arrived at a destination with authored pitch (seat views look down,
-      // info desks look slightly up). Roll is virtually always 0 but is
-      // interpolated too for consistency.
       const startPitch = state.rot.current.x;
       const startRoll  = state.rot.current.z;
 
-      // Duration scales with how far there is to TURN (yaw and pitch), so a
-      // near-180° arrival turn sweeps at a comfortable rate instead of
-      // whipping around in the fixed 0.55s — the "final turn is jerky"
-      // arrival. Position-only settles keep the quick 0.55s.
       const duration = Math.min(
         1.6,
         Math.max(0.55, Math.abs(delta) / 2.2, Math.abs(r[0] - startPitch) / 1.8),
@@ -88,11 +72,6 @@ export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }:
       state.yawT.current = r[1];
       camera.position.set(p[0], y, p[2]);
       camera.rotation.set(r[0], r[1], r[2], "YXZ");
-      // Mark as snapped so useNavmeshSnap doesn't re-run on the next
-      // `enabled` flip (e.g. after a portal cinematic). The caller has
-      // already chosen the correct Y for this teleport (config Y for
-      // cinematic landings, probeFloorY-derived for layouts/home), so
-      // re-snapping to the nearest-centroid Y would only shift it again.
       state.snapped.current = true;
     }
   };

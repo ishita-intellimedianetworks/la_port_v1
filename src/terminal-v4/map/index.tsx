@@ -12,9 +12,6 @@ import { CROWD_DOT, CROWD_WORD } from "../overlay/destination-panel/destination-
 import { ArrowLeft, ListFilter, LocateFixed, Maximize2, Minimize2, X } from "lucide-react";
 import { NAV_GLASS_PANEL } from "../overlay/glass-theme";
 import { useShortViewport } from "@/shared/responsive";
-// Phone (landscape): the destination legend moves BESIDE the plan instead of
-// below it — vertical space is scarce, horizontal is plentiful. Shared with
-// use-minimap's sizing so the window (canvas + legend) fits the screen.
 import { SIDE_LEGEND_W } from "./utils/constants";
 
 export type { MinimapData };
@@ -48,26 +45,12 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
     onExpandedChange?.(expanded);
   }, [expanded, onExpandedChange]);
 
-  // Keep wheel scrolling contained to the map window. Without this, scrolling
-  // over the canvas/chrome (or past the end of the radio list) bubbles out and
-  // scrolls the page / underlying scene behind the overlay. A non-passive
-  // listener lets us preventDefault; the inner radio list still scrolls on its
-  // own (it's tagged data-map-scroll + overscroll-contain).
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!expanded) return;
-    // Catch wheel at the DOCUMENT in the CAPTURE phase — earliest possible point,
-    // before it can reach the page or the 3D scene behind the overlay. Any wheel
-    // whose target is inside the map window has its default cancelled (so nothing
-    // scrolls/zooms behind it). The floor-plan <canvas> keeps its own zoom: we
-    // only preventDefault, and we don't stopPropagation over the canvas, so its
-    // wheel-to-zoom listener still fires.
     const onWheel = (e: WheelEvent) => {
       const root = rootRef.current;
       if (!root || !(e.target instanceof Node) || !root.contains(e.target)) return;
-      // Let an inner scrollable list (the category column, which scrolls on small
-      // phones where it can't all fit) scroll natively — overscroll-contain stops
-      // it from chaining to the page behind.
       const scroller = e.target instanceof Element ? (e.target.closest("[data-map-scroll]") as HTMLElement | null) : null;
       if (scroller && scroller.scrollHeight > scroller.clientHeight + 1) return;
       e.preventDefault();
@@ -87,16 +70,9 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
     // the sidebar, using the same glass surface as the other overlays.
     <div
       ref={rootRef}
-      // Phone: the window may still be taller than the viewport (selector +
-      // plan + footer + legend) — let it scroll vertically so the destination
-      // options / directions footer are always reachable.
       className="fixed left-[88px] top-4 z-[260] flex max-h-[calc(100dvh-24px)] select-none flex-col overflow-hidden rounded-[14px] short:left-[54px] short:top-1 short:max-h-[calc(100dvh-8px)] short:overflow-y-auto short:overflow-x-hidden"
       style={{
         ...NAV_GLASS_PANEL,
-        // Pin the window to the floor-plan + radio-column width (+ the root's 2px
-        // border). Without this, a long hotspot name or the Start/Teleport row in
-        // the footer would stretch the whole map wider; now the footer wraps to
-        // fit instead.
         width: mapWidth + (destCats.length > 0 ? radioWidth : 0) + (sideLegend ? SIDE_LEGEND_W : 0) + 2,
         opacity: expanded ? 1 : 0,
         pointerEvents: expanded ? "auto" : "none",
@@ -150,10 +126,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
         </div>
       </div>
 
-      {/* List-mode (memorial): TWO selector dropdowns side by side above the
-          plan — Category and Sub-category (NO "All": the map always shows one
-          concrete sub-category) — each an icon-tile pill opening an opaque
-          popover list. */}
       {listMode && destCats.length > 0 && (
         <div
           className="relative z-20 flex shrink-0 items-start gap-2 px-3.5 pb-3 short:gap-1.5 short:px-2.5 short:pb-2"
@@ -161,11 +133,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
           // window width (labels show whole, not "L…").
           style={{ width: mapWidth + (sideLegend ? SIDE_LEGEND_W : 0) }}
         >
-          {/* Category pill sizes to its CONTENT (labels are short — a fixed
-              flex share squeezed "Layouts" into one letter per line); the
-              sub-category pill takes whatever width remains. Each pill gets a
-              tiny eyebrow heading so it's clear which dropdown is the category
-              and which the sub-category. */}
           <div className="max-w-[52%] flex-none">
             <div
               className="nav-body mb-1 pl-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] short:mb-0.5 short:text-[8.5px]"
@@ -228,9 +195,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
             style={{ width: "100%", height: "100%", cursor: listMode ? "default" : "crosshair", display: "block" }}
           />
 
-          {/* Back to the terminal framing. Offered only once the view has left
-              it, so it does not sit there implying the map is somewhere it
-              isn't. List-mode's plan does not pan or zoom, so it never appears. */}
           {!listMode && (
             <button
               onClick={recenter}
@@ -311,15 +275,8 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
           </div>
         )}
 
-        {/* The category radio column and the hotspot pins are intentionally
-            absent: this venue's layouts are aerial framings and its hotspots
-            are authored in a different coordinate frame, so neither placed
-            meaningfully on the plan. The map is the plan plus your position. */}
       </div>
 
-      {/* Action bar — selected destination + Start / Teleport / Stop. In
-          list-mode it sits directly UNDER the plan (design: summary + Go),
-          with the destination list below it. */}
       <MapDestinationControls
         isMoving={isMoving}
         onStop={stopNav}
@@ -331,13 +288,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
         listMode={listMode}
       />
 
-      {/* List-mode (memorial): destination legend — ties the plan's numbered
-          dots to names + distances. Tapping a row selects that destination
-          (map click-to-walk is disabled on this venue). The row of the destination the
-          player is standing at reads "Here" in green. */}
-      {/* Sub-category picked but nothing authored for it yet (no camera/hotspot
-          data delivered) → keep the dropdown entry, show a "no data" line where
-          the destination legend would be. */}
       {listMode && !sideLegend && destLabel && dests.length === 0 && (
         <div className="nav-body px-3.5 pb-3 pt-1 text-center text-[12px]" style={{ color: "var(--nav-text-dim)" }}>
           No data for this category yet

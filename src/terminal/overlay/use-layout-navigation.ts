@@ -12,22 +12,7 @@ export interface LayoutEntry {
   category: DestinationCategory;
 }
 
-/**
- * Travel between layouts.
- *
- * A layout IS a destination in the engine, and its zone is the category it is
- * filed under — so finding one means scanning the active floor's categories.
- *
- * Travel is always a TELEPORT — a blackout swap. Ten layouts across a 205-acre
- * terminal made walking between them a very long trip, and half the cameras are
- * aerial with no navmesh under them, so the walk was unavailable exactly where
- * the distances were worst. Walking still exists in the SCENE (double-click the
- * floor); it is just not how you cross the terminal.
- */
 export function useLayoutNavigation() {
-  // The cameras and the two tables are the ACTIVE MODEL's — each route has its
-  // own site file, so travel can only ever aim at poses authored for the bake
-  // it is actually streaming.
   const site = useSite();
   const { playerControllerRef, triggerFloorTransition, activeFloor } = useScene();
   const currentDest = useNavUiStore((s) => s.currentDest);
@@ -52,17 +37,11 @@ export function useLayoutNavigation() {
       const camera = entry?.destination.camera;
       if (!controller || !entry || !camera) return;
 
-      // Travelling to a LAYOUT drops any resource selection: the request was
-      // for the place, so arriving must show every bead filed there rather than
-      // the one left over from a previous pick.
       useNavUiStore.getState().setHotspotInfo(null);
       useNavUiStore.getState().setSelectedHotspotId(null);
 
       triggerFloorTransition(() => {
         const [x, authoredY, z] = camera.position;
-        // Elevated layouts keep their authored eye height (teleportTo re-adds
-        // the camera height); ground ones snap to the navmesh probed AT that
-        // height, so both land where the pose was authored.
         const cameraHeight = controller.getPosition().y - controller.getFootPosition().y;
         const footGuess = authoredY ? authoredY - cameraHeight : 0;
         const y =
@@ -88,21 +67,6 @@ export function useLayoutNavigation() {
     [playerControllerRef, triggerFloorTransition, find],
   );
 
-  /**
-   * Travel to a resource's OWN camera and select it.
-   *
-   * A hotspot now frames itself rather than borrowing its layout's wide shot,
-   * so this does NOT route through `goToLayout` — that would land on the group
-   * pose and clear the very selection being made. The two differ on purpose:
-   *
-   *   layout   its camera frames the GROUP; arriving shows every bead in it.
-   *   hotspot  its camera frames ITSELF; arriving shows that one bead.
-   *
-   * `currentDest` is still latched to the PARENT layout, because that is where
-   * the player physically is — the tree, the map and the marker set all read it.
-   * The data card is not opened here: arriving should leave the operator looking
-   * at the bead in context, and clicking it is what opens the data.
-   */
   const goToHotspot = useCallback(
     (hotspotId: string) => {
       const controller = playerControllerRef.current;

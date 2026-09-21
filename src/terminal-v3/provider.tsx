@@ -1,10 +1,5 @@
 "use client";
 
-/**
- * TerminalProvider — owns interior state + lifecycle effects. Provides
- * SceneContext (for SceneContent) and TerminalUiContext (for overlays).
- */
-
 import {
   useCallback,
   useEffect,
@@ -51,18 +46,7 @@ interface Props {
   /** Whether this interior is the currently-shown scene. Retained from the
    *  orchestrated flow; always true for the standalone interior. */
   active?: boolean;
-  /** /lighting flow (default off — / is unchanged): a venue switch lands in that
-   *  venue's dollhouse overview until it has been entered in first person once
-   *  (double-click fly-in); after that, switching to it goes straight to
-   *  first person. Interior floors always enter first person directly. */
   dollhouseFirstVisit?: boolean;
-  /** Per-venue floor overrides, keyed by floor id and merged field-by-field
-   *  over the floor the site file projects. For a route that needs to swap a
-   *  venue's model or camera WITHOUT it being a property of the model — the
-   *  /lighting route uses this for the SoFi stadium delivery. A difference that
-   *  belongs to the model belongs in that model's site file instead, which is
-   *  where /v3's spawn moved once it had one. Pass a module-level constant —
-   *  identity feeds the floors memo. Default: none. */
   floorPatches?: Record<string, Partial<FloorConfig>>;
   onReady?: () => void;
   children: ReactNode;
@@ -77,19 +61,10 @@ export default function TerminalProvider({
   onReady,
   children,
 }: Props) {
-  // Select ONLY the action. Calling useProgressStore() with no selector
-  // subscribes to the whole store, and zustand's set() always produces a new
-  // state object — so this component re-rendered on EVERY write, including the
-  // per-frame setProgress/setRevealProgress from the reveal smoother. Because
-  // the context value below is rebuilt on each render, that re-rendered the
-  // entire app 60x a second and made the scene unresponsive.
   const reset = useProgressStore((s) => s.reset);
   const instructionsSeen = useAppStore((s) => s.instructionsSeen);
   const playerControllerRef = useRef<PlayerControllerHandle | null>(null);
 
-  // The node tree is projected from the ACTIVE MODEL's file, so the floor's
-  // navmesh, lights, spawn and destinations all come from the same document
-  // this route streams its bake out of.
   const { nodes } = sceneDataFor(useSite());
   const node = useMemo(() => findNode(nodes as NodeData[], nodeId), [nodes, nodeId]);
   const floors        = useMemo<FloorConfig[]>(() => {
@@ -124,10 +99,6 @@ export default function TerminalProvider({
   const [cinematicActive, setCinematicActive] = useState(false);
   const [showFurniture,   setShowFurniture]   = useState(false);
 
-  // After the single loader, show the dollhouse instructions overlay first (the
-  // "overlay" phase) so the user sees how to rotate / double-click into first
-  // person. Once those instructions have been seen (persisted flag), skip the
-  // card and land straight in the dollhouse preview.
   const [phase, setPhase] = useState<Phase>(
     (!inlineMode && hasDollHouse)
       ? (instructionsSeen ? "dollhouse" : "overlay")
@@ -137,9 +108,6 @@ export default function TerminalProvider({
   const [uiEntered,  setUiEntered]  = useState(false);
   const [mapEntered, setMapEntered] = useState(false);
 
-  // True once the OTHER model(s) + navmesh bytes are in the HTTP cache. The
-  // loading HUD holds until BOTH models are downloaded AND the initial (UCLA)
-  // model is mounted — so the toggle later swaps from cache, not the network.
   const [othersCached, setOthersCached] = useState(false);
 
   const isReady    = isModelLoaded && loadingDone;
@@ -173,9 +141,6 @@ export default function TerminalProvider({
     loadedModelKeyRef.current = key;
   }, []);
 
-  // Live ref to the minimap data so a transition's blackout can hold until the
-  // NEW floor's minimap (floor-plan + bounds) is ready — otherwise the old map
-  // lingers for a beat after the fade clears.
   const minimapDataRef = useRef(minimapData);
   minimapDataRef.current = minimapData;
 
@@ -199,16 +164,7 @@ export default function TerminalProvider({
       if (opts?.expectedKey) {
         const key = opts.expectedKey;
         const plan = opts.expectedFloorPlanUrl;
-        // Reset readiness so the blackout waits for THIS fresh mount. When
-        // swapping back to a previously-loaded model the ref still holds that
-        // key, so the wait would pass instantly and the blackout would lower
-        // before the model re-mounts — flashing the swap through (the
-        // stadium→UCLA flicker). Cleared by the new mount's onModelLoaded.
         loadedModelKeyRef.current = null;
-        // Also hold until the NEW floor's minimap has updated (its floor-plan is
-        // set), so the fade-out reveals the new map — not the old one for a beat.
-        // ANDed with a caller's own predicate rather than replacing it, so a
-        // transition can wait for both the mount and the fill.
         const caller = opts.waitUntil;
         waitUntil = () =>
           loadedModelKeyRef.current === key &&
@@ -220,41 +176,14 @@ export default function TerminalProvider({
     [fade],
   );
 
-  // Venues the user has entered in first person at least once — drives the
-  // dollhouseFirstVisit flow (unused when the flag is off). Ref-tracked id of
-  // the active floor so the stable handleEnterFirstPerson callback can record
-  // WHICH venue was entered without re-creating on floor changes.
   const exploredFloorsRef = useRef<Set<string>>(new Set());
   const activeFloorIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     activeFloorIdRef.current = activeFloor?.id;
   }, [activeFloor?.id]);
 
-  /**
-   * Fired by DollhouseCamera during the last ~240 ms of its fly-in, so the
-   * blackout finishes going opaque exactly as the camera lands. The swap
-   * itself happens in handleEnterFirstPerson below, behind it.
-   */
   const handleTransitionCue = useCallback(() => { fade.raise(); }, [fade]);
 
-  /**
-   * Dollhouse -> first person.
-   *
-   * This used to be a bare `setPhase`, and could be: both views drew the SAME
-   * GLB, so the fly-in landed on the player's eye pose and the handoff was
-   * seamless. They no longer do. The dollhouse draws one decimated GLB and the
-   * walking view streams chunks, so the swap tears the whole model down and
-   * builds a different one — which has to happen behind black, and the black
-   * has to stay up until the streamer has actually filled in around the
-   * landing point. Otherwise the fade lifts onto an empty zone.
-   *
-   * The blackout is already opaque here (raised by the fly-in's cue); the fade
-   * hook re-asserts it, runs the swap at peak, then polls `waitUntil` before
-   * lowering — capped internally at MAX_BLACKOUT_WAIT_MS, so a cold or broken
-   * load lands the user in a half-built scene rather than trapping them in the
-   * dark. `streamProgress` is reset by StreamedModel on mount, so every entry
-   * waits for its own fill.
-   */
   const handleEnterFirstPerson = useCallback(
     (position: [number, number, number], rotation: [number, number, number]) => {
       if (activeFloorIdRef.current) exploredFloorsRef.current.add(activeFloorIdRef.current);
@@ -281,28 +210,14 @@ export default function TerminalProvider({
           setActiveFloorIndex(i);
           setFirstPersonStart(null);
           if (dollhouseFirstVisit && !target?.interior) {
-            // /lighting flow: a venue not yet explored in first person opens in its
-            // dollhouse overview (double-click flies in and marks it explored);
-            // explored venues go straight to first person. Dollhouse-only
-            // floors (the stadium) always stay in the overview.
             setPhase(
               target?.dollhouseOnly || !exploredFloorsRef.current.has(target?.id ?? "")
                 ? "dollhouse"
                 : "firstPerson",
             );
           } else if (target?.dollHouseCamera || target?.dollhouseOnly) {
-            // Floors with their own dollhouse camera (e.g. the stadium) re-enter
-            // the dollhouse overview on arrival — the swap happens under the
-            // blackout, so the fade clears onto the aerial view; a double-click
-            // then flies down to the floor's startPosition. Clearing
-            // firstPersonStart makes that fly-in / fallback use the NEW floor's
-            // start pose, not the one we just left. Floors without it (village)
-            // stay straight in first-person — unchanged.
             setPhase("dollhouse");
           } else {
-            // No dollhouse pose → land straight in first-person. Set it
-            // explicitly so switching FROM a dollhouse-only floor (e.g. the
-            // memorial) back to a walkable one doesn't stay stuck in dollhouse.
             setPhase("firstPerson");
           }
         },
@@ -316,19 +231,6 @@ export default function TerminalProvider({
 
   useEffect(() => { reset(); }, [reset]);
 
-  // Inline (MainScene) only: when this interior stops being the active scene
-  // (the user returned to the exterior), reset its per-visit state so the NEXT
-  // entry always starts at floor[0] in first-person — regardless of which
-  // floor / view they exited from. We key off `active` (not the app-store
-  // sceneMode) because `active` flips at the swap, i.e. UNDER the full
-  // blackout — so the floor swap + UI change happen out of sight. Keying off
-  // sceneMode reset too early, while the interior was still visible.
-  // The provider is NO LONGER keyed by nodeId (keying remounted the shared
-  // Canvas/WebGL context and crashed on apartment→apartment switches), so this
-  // effect is the ONLY thing that returns interior state to a clean slate
-  // between visits — it therefore resets EVERYTHING the old remount used to,
-  // not just the floor/phase. Node-DERIVED initials (e.g. furniture-toggle
-  // readiness) are reset on nodeId-change instead — see the effect below.
   useEffect(() => {
     if (!inlineMode || active) return;
     setActiveFloorIndex(0);
@@ -352,13 +254,6 @@ export default function TerminalProvider({
     reset();
   }, [inlineMode, active, hasFurnitureTextureSwaps, reset]);
 
-  // Reset node-DERIVED state whenever the rendered apartment changes. Without
-  // the provider remount, `useState(() => …)` initialisers don't re-run, so
-  // any initial value that depends on the node (here: furniture-toggle
-  // readiness, which is true only when the unit has no texture swaps) would
-  // otherwise carry over stale from the previously-visited apartment. Skip the
-  // very first run (prevNodeIdRef seeded to the initial nodeId) so we don't
-  // clobber the freshly-computed mount state.
   const prevNodeIdRef = useRef(nodeId);
   useEffect(() => {
     if (!inlineMode) return;
@@ -394,10 +289,6 @@ export default function TerminalProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inlineMode, isModelLoaded]);
 
-  // Start the idle camera auto-rotation only AFTER the UI has finished sliding
-  // in — gate on `mapEntered` (the UI entrance flag) and wait out the slide
-  // duration, so the panels settle on-screen BEFORE the camera begins to drift,
-  // rather than the auto-rotation kicking in while/before the UI animates.
   useEffect(() => {
     if (!isReady || phase !== "firstPerson" || !mapEntered) return;
     const t = setTimeout(
@@ -407,11 +298,6 @@ export default function TerminalProvider({
     return () => clearTimeout(t);
   }, [isReady, phase, mapEntered]);
 
-  // Gate the UI entrance on the scene-swap blackout having FULLY cleared
-  // (sceneRevealed) — not merely on the model being loaded. On the ext→int
-  // enter the model finishes loading while the blackout is still up / fading,
-  // so keying off `isReady` alone slid the panels in behind/under the blackout.
-  // Waiting for sceneRevealed means they slide in after the scene is visible.
   const sceneRevealed = useAppStore((s) => s.sceneRevealed);
 
   useEffect(() => {
@@ -441,17 +327,6 @@ export default function TerminalProvider({
   const searchParams = useSearchParams();
   const debug = searchParams.get("debug") === "true";
 
-  // Download the OTHER model(s) + navmesh bytes into the HTTP cache during the
-  // initial loading screen, and report when done via `othersCached`. The loader
-  // gates on this so it only completes once BOTH models are downloaded. The
-  // initial model itself is loaded (parsed + mounted) by <SingleModel>.
-  // Progress is BYTE-accurate (streamed reads + content-length) and written to
-  // the store's `prefetchProgress` — ProgressSmoother blends it 50/50 with the
-  // active model's drei progress (ARCHVIZ ProgressBridge style), so the loader
-  // bar and the point-cloud density rise smoothly through the whole download
-  // instead of sitting near 0 until files complete. `assetsWarmed` mirrors
-  // othersCached into the store so use-scene-loading can hold the reveal until
-  // everything is down (the user then actually SEES the crossfade).
   useEffect(() => {
     const others = floors.slice(1);
     const urls = others
@@ -510,18 +385,6 @@ export default function TerminalProvider({
     return () => { cancelled = true; };
   }, [floors]);
 
-  // Idle PRE-PARSE of the inactive venues' GLBs (the warm effect above only
-  // gets the BYTES into the HTTP cache — the expensive part of a venue swap is
-  // GLTFLoader parse + scene-graph build, which otherwise runs entirely under
-  // the swap blackout, holding it for seconds). Two moments need this:
-  //   • right after the initial load — every venue's FIRST swap-in;
-  //   • after every swap — the outgoing venue's parsed GLTF is evicted by
-  //     releaseGLTF (deliberate memory policy), so RETURNING to it re-parses.
-  // Re-running on every activeFloorIndex change re-fills whichever entries
-  // were just evicted. useGLTF.preload with an already-cached URL is a no-op,
-  // and idle callbacks run after release's microtask-deferred eviction, so
-  // this never races the dispose. Skipped on low-power devices — holding all
-  // venues parsed is a real memory cost that only desktops should pay.
   useEffect(() => {
     if (!isReady || !othersCached || isLowPower()) return;
     const urls = floors
@@ -588,11 +451,6 @@ export default function TerminalProvider({
     ],
   );
 
-  // MEMOISED, deliberately. Both objects go through context, so a fresh
-  // identity re-renders every consumer — which is the whole overlay tree AND
-  // the entire scene graph. Rebuilt each render (as this was) that turns any
-  // provider state change into a full-app re-render, and turns a per-frame
-  // store write into a 60fps re-render of everything.
   const sceneContent = useMemo<SceneGraphData>(
     () => ({
       floors, furniture, speed, cameraHeight, startPosition, startRotation,

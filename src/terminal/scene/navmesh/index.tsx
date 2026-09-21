@@ -5,27 +5,10 @@ import * as THREE from "three";
 import { Pathfinding } from "three-pathfinding";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-/**
- * Single-zone navmesh manager.
- *
- * Only ONE floor's navmesh is mounted at any time — the active floor's.
- * On floor switch, the previous navmesh GLB unloads and this manager
- * registers a fresh Pathfinding zone named `zone_<floorId>` for the new
- * floor. There is no cross-floor merged zone; inter-floor travel happens
- * exclusively through the FloorTransitionPortal cinematic.
- */
-
 export function zoneNameForFloor(floorId: string): string {
   return `zone_${floorId}`;
 }
 
-// Weld tolerance (m) — TIGHT, and no longer escalated. The old progressive
-// 0.05→0.5 escalation kept widening until the zone became ONE group; on the
-// memorial mesh (genuine islands metres apart) it always ended at 0.5, and a
-// half-unit weld on sub-unit-wide walkable strips collapses them and invents
-// cross-strip links — the "paths not on the navmesh". Multiple groups are
-// FINE: routing stays within the player's group, and genuinely disconnected
-// areas correctly read as teleport-only.
 const WELD_TOLERANCES = [0.05];
 
 function weldToSingleGroup(geometry: THREE.BufferGeometry): {
@@ -33,10 +16,6 @@ function weldToSingleGroup(geometry: THREE.BufferGeometry): {
   tolerance: number;
   groups: number;
 } {
-  // Weld by POSITION ONLY: mergeVertices hashes every attribute, so vertices
-  // split by hard-normal seams (the glTF exporter duplicates them) would never
-  // merge and every shading seam would become a fake walkability break.
-  // Pathfinding only needs positions anyway.
   const posOnly = geometry.clone();
   for (const name of Object.keys(posOnly.attributes)) {
     if (name !== "position") posOnly.deleteAttribute(name);
@@ -64,16 +43,6 @@ interface NavmeshManagerProps {
   onReady: (floorId: string) => void;
 }
 
-/**
- * Headless hook. `registerFloor(floorId, geometry)` welds the geometry,
- * creates a Pathfinding zone for that floor, and fires `onReady`.
- *
- * Only one zone is kept alive at a time — when a different floor is
- * registered the previous zone is deleted from the Pathfinding instance.
- * Stale zones lying around would confuse cross-floor heuristics like
- * `findBestFloorForPoint` and waste memory; the active floor is the only
- * walkable surface anyway.
- */
 export function useNavmeshManager({ pathfinding, onReady }: NavmeshManagerProps) {
   const lastFloorIdRef = useRef<string | null>(null);
 

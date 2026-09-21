@@ -1,16 +1,5 @@
 import * as THREE from "three";
 
-/**
- * disposeGLTFScene
- * ─────────────────────────────────────────────────────────────────────────────
- * Walks a GLTF scene tree and disposes every GPU-backed resource exactly once:
- * geometries, materials, and every texture slot found on those materials.
- * Shared resources are deduped via Sets so we don't double-dispose.
- *
- * Most callers should use `releaseGLTF` instead — it handles React Strict
- * Mode's double-mount safely. Call this directly only when you know you have
- * a single owner of the scene.
- */
 export function disposeGLTFScene(scene: THREE.Object3D): void {
   const seenGeo = new Set<THREE.BufferGeometry>();
   const seenMat = new Set<THREE.Material>();
@@ -43,25 +32,6 @@ export function disposeGLTFScene(scene: THREE.Object3D): void {
   });
 }
 
-/**
- * Ref-counted, microtask-deferred GLTF lifecycle.
- * ─────────────────────────────────────────────────────────────────────────────
- * React Strict Mode (and React 19's effect double-invoke in dev) runs
- * mount → cleanup → remount synchronously. A naïve "dispose on unmount"
- * effect therefore disposes the GLTF the user is about to see, forcing drei
- * to re-fetch/re-parse and producing a visible load → unload → load flash.
- *
- * Solution: count active mounts per URL. On release, drop the count and
- * schedule disposal via `queueMicrotask`. If a re-mount lands first (count
- * climbs back above zero before the microtask fires), skip the dispose.
- *
- * Usage in a component:
- *
- *   useEffect(() => {
- *     acquireGLTF(url);
- *     return () => releaseGLTF(url, scene, useGLTF.clear);
- *   }, [scene, url]);
- */
 const activeMounts = new Map<string, number>();
 
 export function acquireGLTF(url: string): void {

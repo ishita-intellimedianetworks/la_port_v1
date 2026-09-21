@@ -19,19 +19,9 @@ interface MapDestinationControlsProps {
   listMode?: boolean;
 }
 
-/**
- * The map window's action footer — a sleek bar BELOW the floor plan (in-flow, so
- * it never overlaps the canvas). It reserves a fixed strip of space and shows:
- *  - walking: just a small Stop button.
- *  - a selected hotspot: its name + distance/ETA + Start / Teleport.
- *  - otherwise: a faint hint.
- */
 export function MapDestinationControls({
   isMoving, onStop, selected, onStart, onTeleport, ctrlRef, listMode = false,
 }: MapDestinationControlsProps) {
-  // List-mode (memorial): the plan isn't clickable and destinations come from
-  // the list below, so the idle bar shows nothing (no "select a hotspot" hint)
-  // and there are no hairline separators in that design.
   return (
     <div
       className="flex min-h-[52px] shrink-0 items-center gap-2.5 px-3 py-2 short:min-h-[42px] short:gap-2 short:px-2 short:py-1.5"

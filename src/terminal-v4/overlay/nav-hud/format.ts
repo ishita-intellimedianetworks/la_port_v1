@@ -1,12 +1,3 @@
-/**
- * Shared navigation formatting — used by the turn HUD and the minimap route
- * label so both read the same as a maps app.
- *
- * ETA is computed from REAL distance ÷ a real walking pace, NOT the in-app
- * camera speed (which flies far faster than a person walks). That's why the
- * displayed minutes are realistic and don't "pass like seconds".
- */
-
 import { navConfig } from "../../navigation-config";
 
 /** World-unit path length → real ETA seconds, given metres-per-world-unit. */

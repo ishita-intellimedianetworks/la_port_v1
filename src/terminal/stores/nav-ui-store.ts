@@ -1,10 +1,6 @@
 import type { CrowdLevel, DestinationCategory, FloorTransition } from "@/shared/types";
 import { createStore } from "@/shared/stores/create-store";
 
-/**
- * One crowd-flow zone, so the map can draw the same shapes the 3D layer would.
- * `tris` are the zone mesh's world-XZ triangles.
- */
 export interface CrowdFlowZoneRect {
   level: CrowdLevel;
   tris: [number, number][][];
@@ -24,11 +20,6 @@ export interface CurrentDest {
 /** A clicked 3D marker — drives the centred hotspot card. */
 export interface HotspotInfo {
   destId: string;
-  /** The hotspot this card is about (H01-H30).
-   *
-   *  Carried as an ID, not just a label: the 3D marker set has to know which
-   *  disc the open card belongs to so it can take that one down, and matching
-   *  on display text would break the moment a name is reworded. */
   hotspotId: string;
   destLabel: string;
   category: DestinationCategory;
@@ -44,19 +35,6 @@ export interface HotspotInfo {
 
 type OptionByCat = Partial<Record<DestinationCategory, string | null>>;
 
-/**
- * The single source of truth for wayfinding UI — which panel is open, what is
- * selected, and where the player is standing. The left rail, the destination
- * panel, the map and the 3D markers all read it, so one update reaches all of
- * them and they cannot drift apart.
- *
- * `currentDest` and `atHome` are POSITION-driven: one poll in Overlays writes
- * them from the player's live XZ, and nothing else recomputes them.
- *
- * Built on `createStore`, which requires a selector and drops writes that
- * change nothing — see the note in `shared/stores/create-store.ts` for why
- * that matters here.
- */
 export interface NavUiState {
   /** Open category (null = none) — drives the panel AND the map's pin set. */
   openLabel: DestinationCategory | null;
@@ -78,13 +56,6 @@ export interface NavUiState {
    *  can undo it without ever clearing a manual pick. */
   autoOptionCat: DestinationCategory | null;
   hotspotInfo: HotspotInfo | null;
-  /**
-   * The hotspot the operator has picked from the list (H01-H30), or null.
-   *
-   * This is what puts a marker in the 3D scene: markers appear only for the
-   * selected hotspot, so the view shows the one point being discussed rather
-   * than every disc in the layout at once.
-   */
   selectedHotspotId: string | null;
   crowdFlowZones: CrowdFlowZoneRect[];
 
@@ -133,15 +104,6 @@ const INITIAL = {
   crowdFlowZones: NO_ZONES,
 } satisfies Partial<NavUiState>;
 
-/**
- * Replace a category's remembered option, returning the SAME object when the
- * value is already what it should be.
- *
- * The map subscribes to `optionByCat`. Spreading a fresh object on every write
- * — as the previous version did on every `setCurrentDest` — re-rendered the map
- * whenever the player moved between destinations, for a value that had not
- * changed.
- */
 function withOption(
   current: OptionByCat,
   category: DestinationCategory,
@@ -174,9 +136,6 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
 
   setOpenLabel: (category) => {
     const { selectedId, currentDest } = get();
-    // Opening a category while standing AT its selected destination drops that
-    // selection, so the panel shows the list rather than a stale "You're here".
-    // An explicit pick re-selects immediately afterwards.
     const standingOnSelection = !!category && !!selectedId && currentDest?.id === selectedId;
     set({ openLabel: category, selectedId: standingOnSelection ? null : selectedId });
   },
@@ -208,9 +167,6 @@ export const useNavUiStore = createStore<NavUiState>((set, get) => ({
       autoOptionCat = null;
     }
 
-    // Only a REACHED destination — one that was selected and navigated to —
-    // auto-selects its sub-category. Merely standing near a place never flips
-    // the panel or map tabs.
     if (dest && state.selectedId === dest.id) {
       optionByCat = withOption(optionByCat, dest.category, dest.option ?? null);
       autoOptionCat = dest.category;

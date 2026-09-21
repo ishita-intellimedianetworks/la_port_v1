@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * Site-image calibration maths.
- *
- * The aerial has no world coordinates of its own; the render does, exactly,
- * because it came from a known ortho frustum. So align the two PICTURES and the
- * aerial's world rect falls out arithmetically.
- *
- * Both use the flipped convention (pixel 0 maps to the world MAXIMUM).
- */
-
 import type { Bbox } from "./render-floor";
 
 /** Where the model render sits on the site image, in site-image pixels. */
@@ -137,13 +127,6 @@ export function toJson(
   );
 }
 
-/**
- * The `map.plan` block: the render's URL plus the rect it was framed to.
- *
- * PLAIN on both axes, because renderTopDown turns the PNG half a turn on export.
- * The rotation and this rect are one unit — changing either alone puts the map
- * 180 degrees out.
- */
 export function planJson(bbox: Bbox, imageUrl: string, pixelW: number, pixelH: number): string {
   return JSON.stringify(
     {

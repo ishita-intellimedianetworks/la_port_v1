@@ -21,10 +21,6 @@ export interface FloorBounds {
   zMin: number; zMax: number;
 }
 
-// Extract all meshes from a GLTF scene
-//   geo       — all submeshes merged (used for pathfinding zones)
-//   firstBBox — bounding box of the FIRST mesh only (used for minimap bounds)
-//   roomZones — per-named-mesh zone data for room detection
 function extractGeo(scene: THREE.Group): {
   geo: THREE.BufferGeometry;
   firstBBox: THREE.Box3;
@@ -64,10 +60,6 @@ function extractGeo(scene: THREE.Group): {
   return { geo: merged, firstBBox, roomZones };
 }
 
-// Single-floor navmesh loader
-// Mirrors SingleModel: one GLB at a time, loaded for the active floor only.
-// When the active floor changes the parent re-keys this component, the old
-// GLB is released, and the new floor's navmesh is fetched and registered.
 interface SingleNavmeshProps {
   floorId: string;
   url: string;
@@ -79,12 +71,6 @@ interface SingleNavmeshProps {
   onRoomZones?: (floorId: string, zones: RoomZone[]) => void;
   /** Fired after geometry has been delivered to the parent. */
   onLoaded?: () => void;
-  /**
-   * `?debug=true`. Keeps a reference to the merged geometry so the overlay
-   * below CAN be drawn — separate from `show`, because the merge happens once
-   * in a layout effect that has already run by the time anyone reaches for the
-   * toggle. Capturing is a reference, not a copy; it costs nothing.
-   */
   debug?: boolean;
   /** Actually draw the overlay. The debug panel's "show navmesh" switch. */
   show?: boolean;
@@ -93,11 +79,6 @@ interface SingleNavmeshProps {
   depthTest?: boolean;
 }
 
-// The navmesh ships inside the baked asset set, where it is Draco-compressed
-// (8 KB against the 305 KB raw export). Point drei at the decoder committed
-// under public/draco/ — its default is a gstatic CDN path, which would make an
-// otherwise self-contained app fetch a decoder from the internet to be able to
-// walk, and fail offline.
 const DRACO_PATH = "/draco/";
 
 function SingleNavmeshContent({
@@ -109,12 +90,6 @@ function SingleNavmeshContent({
 
   useLayoutEffect(() => {
     if (done.current || !scene?.children?.length) return;
-    // Force matrices to current. Without this, a freshly-mounted navmesh (e.g.
-    // after a floor swap) can still have stale matrixWorld values when this
-    // effect fires, and `applyMatrix4(mesh.matrixWorld)` inside extractGeo
-    // leaves the welded geometry in LOCAL coords. Floors authored at non-zero
-    // Y then end up at Y=0 in the Pathfinding zone — player sits above the
-    // navmesh and findPath returns no walkable path.
     scene.updateWorldMatrix(true, true);
     const result = extractGeo(scene);
     if (!result) return;
@@ -137,9 +112,6 @@ function SingleNavmeshContent({
 
     if (debug) {
       setDebugGeo(result.geo);
-      // Reported to the panel as a readout. Without it, "the toggle is off" and
-      // "the toggle is on but you are looking through an overlay that never
-      // captured a mesh" are the same blank screen.
       const position = result.geo.getAttribute("position");
       useDebugStore.getState().setNavmeshTriangles(position ? position.count / 3 : 0);
     }
@@ -153,27 +125,11 @@ function SingleNavmeshContent({
 
   return (
     <>
-      {/* Invisible, but raycasters still traverse it (three tests meshes
-          regardless of visibility) — BVH keeps those wasted tests cheap on
-          dense navmeshes (the stadium's has 44k triangles). */}
       <Bvh firstHitOnly={false}>
         <primitive object={scene} visible={false} />
       </Bvh>
       {debugGeo && show && (
         <>
-          {/* Walkable surface — bright green fill. `depthTest` decides which
-              question it answers, and the default is the FIRST one:
-
-                off  painted over everything, so you always see the mesh. The
-                     navmesh lies within centimetres of the apron it describes
-                     over a kilometre of site, and depth-tested most of it
-                     loses that z-fight — which reads as the toggle doing
-                     nothing at all.
-                on   drawn at its ACTUAL depth, so a patch floating above or
-                     sunk below the floor reads as such.
-
-              Double-sided either way, so it stays readable from any viewpoint,
-              and polygonOffset still helps the depth-tested case. */}
           <mesh geometry={debugGeo} renderOrder={999}>
             <meshBasicMaterial
               color="#00ff88"
@@ -187,9 +143,6 @@ function SingleNavmeshContent({
               polygonOffsetUnits={-4}
             />
           </mesh>
-          {/* Triangle edges — shows the actual mesh structure (where corridors
-              end, what the coverage really is). Follows the fill's depth mode
-              so the edges sit on the same surface the fill is drawn at. */}
           <mesh geometry={debugGeo} renderOrder={1000}>
             <meshBasicMaterial
               color="#006644"

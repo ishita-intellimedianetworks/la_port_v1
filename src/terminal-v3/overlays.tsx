@@ -1,9 +1,5 @@
 "use client";
 
-/**
- * Overlays — HTML overlays for the interior phase.
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Home, Square } from "lucide-react";
 
@@ -37,40 +33,30 @@ import { edgeFeather } from "./scene/model-loader/edge-feather";
 // ignored. Tight, so any real step away clears them.
 const HOME_REACH_UNITS = 0.8;
 
-/**
- * How long a teleport's blackout must watch the streamer before it is allowed
- * to believe the backlog. `useCameraAloft` flips a frame after the teleport and
- * `StreamedModel` republishes `dressing` on the streaming tick, so for the
- * first ~100 ms the number still describes the view being LEFT — which reads as
- * "nothing to do". Three ticks at the authored 10 Hz covers the flip, the tick
- * that sees it and one more to be sure.
- */
 const SETTLE_MIN_MS = 350;
-/** Lower once the backlog is down to a tenth of its peak — the tail is the far
- *  band, which the fog is already swallowing, and waiting it out only makes the
- *  black screen longer for something nobody can see. */
+/** The hold is a courtesy, not a load gate. Past this the fade lifts and the
+ *  tail of the backlog resolves in front of the user — otherwise the poll runs
+ *  to `MAX_BLACKOUT_WAIT_MS` (8 s) and the teleport reads as a hang. */
+const SETTLE_MAX_MS = 1500;
 const SETTLE_FRACTION = 0.1;
 /** ...but never insist on better than this in absolute terms, so a small jump
  *  with a peak of 30 is not held to 3. */
 const SETTLE_FLOOR = 8;
 
-/**
- * A `waitUntil` predicate for `triggerFloorTransition` that holds the blackout
- * until the streamer has finished re-dressing the view for where the camera
- * landed.
- *
- * Stateful ON PURPOSE, and one per transition: "settled" is relative to how
- * much this particular jump disturbed, which is not known until after the swap.
- * The peak is learned by watching rather than predicted, so the same predicate
- * works for a jump across the district and for one that barely moves.
- */
 function dressingSettled(): () => boolean {
-  const start = performance.now();
+  // Clocked from the first poll, not from the click: the swap that creates the
+  // backlog only lands a fade-in later, so a click-time clock spends itself
+  // before the streamer has seen the new camera, and `peak` latches on the
+  // leftover of the view being left — against which nothing ever looks settled.
+  let start = -1;
   let peak = 0;
   return () => {
+    if (start < 0) start = performance.now();
     const n = useProgressStore.getState().streamDressing;
     if (n > peak) peak = n;
-    if (performance.now() - start < SETTLE_MIN_MS) return false;
+    const elapsed = performance.now() - start;
+    if (elapsed < SETTLE_MIN_MS) return false;
+    if (elapsed >= SETTLE_MAX_MS) return true;
     // Nothing ever went outstanding — a re-entry onto a view already dressed.
     if (peak === 0) return true;
     return n <= Math.max(SETTLE_FLOOR, peak * SETTLE_FRACTION);
@@ -123,9 +109,6 @@ export default function Overlays() {
   const hotspotInfo = useNavUiStore((s) => s.hotspotInfo);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
 
-  // `isMoving` jitters for a frame or two around arrivals, teleports and path
-  // corners. `stillUi` hides panels immediately on a walk but restores them
-  // only after ~300ms of continuous stillness, so a settle never flashes one.
   const [stillUi, setStillUi] = useState(!isMoving);
   useEffect(() => {
     if (isMoving) { setStillUi(false); return; }
@@ -155,11 +138,6 @@ export default function Overlays() {
       phase === "dollhouse" ? (activeFloor?.dollhouseOnly ? 0.4 : 1) : 0;
   }, [phase, activeFloor?.dollhouseOnly]);
 
-  // One poll writes both position-driven highlights into the store:
-  //   • atHome      → stopped within HOME_REACH_UNITS of the start position.
-  //   • currentDest → stopped within CURRENT_REACH_UNITS of a destination.
-  // Refs feed the interval so its deps stay stable — otherwise it is torn down
-  // every render and never fires. Setters are read via getState().
   const homeRef = useRef<[number, number, number]>([0, 0, 0]);
   const destsRef = useRef<DestinationsByCategory | undefined>(undefined);
   const wasMovingRef = useRef(false);
@@ -176,9 +154,6 @@ export default function Overlays() {
       const p = ctrl.getPosition();
       const moving = ctrl.isMoving();
 
-      // A walk that just started closes the open panel; the highlight comes
-      // back from position once stopped. Walking off the ground standpoint
-      // ends it, so the markers return as soon as the player leaves.
       if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); store.setAtGroundView(false); }
       wasMovingRef.current = moving;
 
@@ -189,9 +164,6 @@ export default function Overlays() {
       // last value avoids mid-walk churn.
       if (!moving) {
         const dests = destsRef.current;
-        // Keep the latched destination while still standing at its camera:
-        // several destinations can share one pose, and re-picking the nearest
-        // every tick would steal the latch from the one actually travelled to.
         const prev = store.currentDest;
         if (prev && dests) {
           const pd = dests[prev.category]?.find((x) => x.id === prev.id);
@@ -231,9 +203,6 @@ export default function Overlays() {
   useEffect(() => {
     if (!atHostel) setHostelCardDismissed(false);
   }, [atHostel]);
-  // The home card shows on arrival, not whenever its conditions re-qualify:
-  // opening any overlay while at home counts as dismissing it. It re-arms on
-  // leaving home, and explicitly in handleHome.
   useEffect(() => {
     if (!atHome) setHomeCardDismissed(false);
   }, [atHome]);
@@ -258,12 +227,6 @@ export default function Overlays() {
     }
   }, [currentDest?.id]);
 
-  /**
-   * Exactly one overlay at a time — Resources, the map, the instructions card
-   * and a hotspot's data card each own the screen. Callers name what they are
-   * KEEPING, so a new overlay is one line here rather than an edit to every
-   * other button.
-   */
   const closeOverlays = useCallback(
     (keep?: "resources" | "map" | "instructions" | "data") => {
       if (keep !== "resources") setHotspotsFlapOpen(false);
@@ -326,18 +289,6 @@ export default function Overlays() {
     setAtHome(true);
   }, [goHome, playerControllerRef, activeFloor, startPosition, startRotation, setAtHome, closeOverlays, triggerFloorTransition]);
 
-  /**
-   * "First Person" — stand at the authored pose that is on the navmesh.
-   *
-   * Not handleHome with a different constant: Home is an arrival (re-arms the
-   * at-home card, asserts `atHome`), this is a relocation that says nothing
-   * about where it lands. The poll above recomputes `currentDest`/`atHome`
-   * from live position, so writing either here would only fight it.
-   *
-   * /v3 overrides the config pose with `first-person-view.ts`; the fallback is
-   * what makes deleting that file enough to restore the config behaviour. Read
-   * unconditionally, not behind the `??` — `useSite` is a hook.
-   */
   const configFirstPerson = useSite().scene.cameras.firstPerson;
   const firstPersonPose = FIRST_PERSON_VIEW ?? configFirstPerson;
   const handleFirstPerson = useCallback(() => {
@@ -357,47 +308,20 @@ export default function Overlays() {
       () => {
         ctrl.teleportTo([p[0], surfaceY, p[2]], r);
       },
-      // HOLD THE BLACK UNTIL THE VIEW HAS RE-DRESSED ITSELF.
-      //
-      // This is the only transition that used to pass no predicate, so its hold
-      // was BLACKOUT_VISIBLE_MS — zero — and the fade started lifting on the
-      // same tick as the teleport. Everything the jump sets off then happened
-      // in full view: the camera drops from a `layouts[]` framing shot to
-      // standing height, `useCameraAloft` flips on the NEXT frame, and that one
-      // flip swaps the streaming bands (near 150 -> 50, mid 800 -> 250, far
-      // 6000 -> 900), snaps the fog from 6000/6174 to 900/970, and moves the
-      // sun's shadow square from the frozen whole-model framing to the
-      // following one. Behind it the streamer then re-dresses a few hundred
-      // chunks at `texUpgradesPerTick` — 8 a tick on a phone, so ~3.4 s of
-      // geometry and textures visibly sharpening. That is the flicker.
-      //
-      // None of it is made faster here; it is made INVISIBLE, which is what the
-      // blackout is for. `dressing` is the backlog, so the wait is "most of it
-      // has landed" rather than a duration — a warm cache lifts almost at once
-      // and a cold one takes as long as it takes. Bounded twice over: the last
-      // tenth is not waited for (it is the far band, which fog is swallowing
-      // anyway), and `useFadeTransition` caps any hold at MAX_BLACKOUT_WAIT_MS.
       { waitUntil: dressingSettled() },
     );
   }, [firstPersonPose, playerControllerRef, closeOverlays, triggerFloorTransition]);
-
 
   /** The First Person circle, or nothing. Hoisted so the dock and the
    *  instructions card are gated by the same value. */
   const firstPersonAction = !uiFrozen && firstPersonPose ? handleFirstPerson : undefined;
 
-  // The map and the label panel share the open category, so the label is kept
-  // and the map opens on the list the panel showed. Only the selection and
-  // preview route are dropped.
   const handleMapExpanded = useCallback((open: boolean) => {
     if (!open) return;
     useNavUiStore.getState().setSelectedId(null);
     playerControllerRef.current?.clearPreview();
   }, [playerControllerRef]);
 
-  // Crowd Flow fly-over: opening the category lifts the player to the authored
-  // aerial pose, closing it returns to the pre-fly spot. The return fires only
-  // if still at the aerial pose, so a destination teleport out of it wins.
   const crowdFly = activeFloor?.crowdFlowGlb?.flyCamera;
   const crowdOpen = openLabel === "crowdflow";
   const preCrowdPose = useRef<{ pos: [number, number, number]; yaw: number } | null>(null);
@@ -486,20 +410,6 @@ export default function Overlays() {
           Hidden inside apartment interiors. */}
       <NavHud ctrlRef={playerControllerRef} visible={phase === "firstPerson" && isMoving && !inInterior && navHud} dests={activeFloor?.dests} />
 
-      {/* Top-center "You're currently at {place}" pill — shown whenever the
-          player is standing at a label destination (any label), independent of
-          whether its panel is open. Tap to open that label's list. Clears by
-          position when they move away / start walking elsewhere.
-          COMMENTED OUT for now (memorial demo) — do not delete.
-      {isReady && phase === "firstPerson" && !inInterior && currentDest && (
-        <ReachedBanner
-          name={currentDest.label}
-          show={mapEntered && stillUi && !mapExpanded && !fadeVisible}
-          onDismiss={() => setOpenLabel(currentDest.category)}
-        />
-      )}
-      */}
-
       {/* Hotspot readout — opened by clicking a 3D marker. The click arrives as
           (destination, marker index), which resolves back to a hotspot id. */}
       {isReady && hotspotInfo && !fadeVisible && (
@@ -510,10 +420,6 @@ export default function Overlays() {
         />
       )}
 
-      {/* Accommodation overlay — shown at home when the floor has an interior
-          to step into, with a "view the rooms" action that swaps into it.
-          Currently dead on the village, which authors no `transitions`; its
-          interior-entry UI lives on the hostel card below. */}
       {isReady && phase === "firstPerson" && !inInterior && homeCardBase && exploreT && !homeCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -531,9 +437,6 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Memorial venue card — shown at home on the coliseum. Gated on
-          homeCardBase, not homeActive: the memorial's home pose IS the Main
-          Entrance destination, so homeActive would never turn on. */}
       {isReady && phase === "firstPerson" && !inInterior && homeCardBase && activeFloor?.id === "memorial" && !homeCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -621,9 +524,6 @@ export default function Overlays() {
         </button>
       )}
 
-      {/* Left edge: the "Resources" panel — layouts, each expandable to its
-          hotspots. Tucks away behind any overlay that owns the screen and
-          slides back when it closes, keeping whatever was unfolded. */}
       {phase === "firstPerson" && (
         <HotspotsFlap
           open={hotspotsFlapOpen}
@@ -642,9 +542,6 @@ export default function Overlays() {
         <BottomBar
           // Fades out under the same overlays the left flap tucks behind.
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen && !dataCardOpen}
-          // Resources or the map open: drop the dock off the bottom edge. On a
-          // landscape phone either ends within a thumb's width of these
-          // circles. Tucked, not hidden, so the Map circle stays reachable.
           tucked={hotspotsFlapOpen || mapExpanded}
           mapOpen={mapExpanded}
           onOpenMap={() => {
@@ -656,10 +553,6 @@ export default function Overlays() {
           }}
           onDollhouse={() => {
             closeOverlays();
-            // The walking view streams chunks and the dollhouse draws a single
-            // GLB, so this tears one model down and builds another.
-            // `expectedKey` holds the blackout until that GLB is mounted —
-            // it was released on the way in, so it has to re-parse first.
             triggerFloorTransition(() => setPhase("dollhouse"), {
               expectedKey: activeFloor?.id,
             });
@@ -669,10 +562,6 @@ export default function Overlays() {
             setInstructionsOpen(true);
           }}
           onHome={handleHome}
-          // Map stays in the dock, greyed and out of the tab order — removing
-          // it would reflow the row and move where Home and Dollhouse land.
-          // First Person is omitted outright: it has never shipped, and
-          // `undefined` is what a site with no authored pose passes anyway.
           mapDisabled={uiFrozen}
           onFirstPerson={firstPersonAction}
         />
@@ -730,10 +619,6 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Hostel overlay — shown standing at the village's Athletes' Hostel.
-          "Explore the room" blacks out and swaps straight into the hotel
-          interior and its navmesh; handleFloorSelect owns the blackout and
-          waits for the model before fading back. */}
       {isReady && phase === "firstPerson" && !inInterior && activeFloor?.id === "village" && atHostel && openLabel === null && hotelIndex >= 0 && !hostelCardDismissed && stillUi && !mapExpanded && !venuesOpen && (
         <div
           style={{ ...NAV_GLASS_PANEL, opacity: mapEntered && !fadeVisible ? 1 : 0 }}
@@ -766,9 +651,6 @@ export default function Overlays() {
 
       <FadeScreen visible={fadeVisible} />
 
-      {/* ?debug=true only — look and framing in one panel: sun, lights, grade,
-          FOV, the navmesh overlay and a live camera binding, plus the JSON to
-          paste back into the site file. */}
       {ui.sceneContent.debug && (
         <>
           <DebugPanel />

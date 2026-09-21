@@ -1,21 +1,5 @@
 "use client";
 
-/**
- * useNavInfo
- * ─────────────────────────────────────────────────────────────────────────────
- * Derives Google-Maps-style turn-by-turn info from the live player path, the
- * way a maps app shows "Turn left in 40 m · 2 min".
- *
- * Polls the PlayerController handle each frame (cheap reads, no re-render) and
- * only pushes React state when a *rounded* value actually changes — so the HUD
- * re-renders a handful of times per second, not every frame.
- *
- * Distance / time are REAL-WORLD values: the world-unit path length is scaled
- * to metres (getMetersPerUnit) and the ETA uses a human walking pace, NOT the
- * fast in-app camera speed. That's why the minutes are realistic instead of
- * elapsing in seconds.
- */
-
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { PlayerControllerHandle } from "../../scene/player/types";
@@ -43,9 +27,6 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
   const lastKey = useRef("");
 
   useEffect(() => {
-    // Don't setState synchronously here — the consumer (NavHud) gates display
-    // on `visible`, so stale info while disabled is never shown. Resetting the
-    // throttle key makes the first frame after re-enabling push fresh state.
     if (!enabled) {
       lastKey.current = "";
       return;
@@ -55,9 +36,6 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
     let frame = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      // The banner only shows whole metres/seconds — recomputing every frame is
-      // wasted work (and GC churn). ~6 Hz is plenty and lighter on the main
-      // thread, which keeps the walk loop smooth.
       if (frame++ % 10 !== 0) return;
       const ctrl = ctrlRef.current;
       const path = ctrl?.isMoving() ? ctrl.getPath() : [];

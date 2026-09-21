@@ -7,15 +7,6 @@ export interface CrossfadeOptions {
   easing?: (k: number) => number;
 }
 
-/**
- * Animate sharedUniforms.uGlobalAlpha from 0 → 1, driving:
- *   - The patched mesh materials to dither-fill in (more pixels pass the
- *     per-pixel discard test)
- *   - The HoloTwinPreview point cloud to fade out
- *
- * Both happen in lockstep because they read the SAME uniform. Resolves
- * once the animation completes.
- */
 export function crossfadeReveal(
   sharedUniforms: SharedUniforms,
   options: CrossfadeOptions = {}

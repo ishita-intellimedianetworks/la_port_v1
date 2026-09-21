@@ -3,31 +3,10 @@ import { useEffect } from "react";
 import { useOrientation } from "@/shared/stores/use-orientation";
 import { usePortrait } from "@/shared/responsive";
 
-/**
- * The rotate-your-device guard. THE APP IS LANDSCAPE ONLY.
- *
- * The question is just "is this viewport taller than it is wide?", and it is
- * asked of every device — matching ARCHVIZ_WITH_EXTERIOR, whose guard is a
- * bare `innerWidth > innerHeight`. A portrait window gets the rotate screen
- * whatever it is running on.
- *
- * That is a deliberate widening. This used to gate on portrait AND phone-width
- * AND a coarse pointer, so that a tablet held upright — which has room for the
- * whole UI — and a desktop browser in a tall window, which cannot rotate
- * anything, both got the app instead of a dead end. Landscape-only is the
- * product decision, so those cases now see the prompt too; a desktop user
- * widens the window rather than turning anything.
- *
- * `isLandscape` is published to the shared store for anything that wants the
- * raw orientation.
- */
 const ForceLandscape = () => {
   // A selector, not the whole store: a no-selector subscription re-renders on
   // every write because zustand's set() always makes a new state object.
   const setLandscape = useOrientation((s) => s.setLandscape);
-  // Asked as PORTRAIT so SSR's "false for everything" means "don't show the
-  // guard" — see PORTRAIT_MEDIA_QUERY. Negating a landscape query instead
-  // would put the rotate screen in the server HTML.
   const portrait = usePortrait();
 
   useEffect(() => {
@@ -36,11 +15,6 @@ const ForceLandscape = () => {
 
   if (!portrait) return null;
   return (
-    // `inset-0` + `100dvh`, not `h-screen w-screen`: `100vh` on a mobile
-    // browser is the tall viewport WITH the address bar rolled away, so the
-    // prompt's own copy ends up under the browser chrome on the exact devices
-    // this screen exists for. `w-screen` is the same trap on the other axis
-    // when a scrollbar is showing.
     <div className="fixed inset-0 z-[2147483645] flex h-[100dvh] w-full items-center justify-center bg-white text-[#14142B]">
       <div className="flex w-3/4 max-w-sm flex-col items-center justify-center text-center">
         <div className="flex w-full items-center justify-center">

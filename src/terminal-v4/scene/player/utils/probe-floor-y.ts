@@ -1,19 +1,6 @@
 import type * as THREE from "three";
 import type { Pathfinding } from "three-pathfinding";
 
-/**
- * Probes the navmesh of `zone` for the surface Y under (x, z).
- *
- * - Walks every triangle, runs the standard 2D barycentric containment check on
- *   the XZ projection, and when the point is inside returns the Y interpolated
- *   from the three vertex Ys via the same barycentric weights — i.e. the exact
- *   surface Y, not a centroid average.
- * - When `expectedY` is provided and several triangles contain the point (e.g.
- *   stacked floors in a merged-zone navmesh), the candidate whose Y is closest
- *   to `expectedY` wins.
- *
- * Returns null when the (x, z) lies outside the navmesh.
- */
 export function probeFloorY(
   pathfinding: Pathfinding,
   zone: string,
@@ -66,30 +53,14 @@ export function probeFloorY(
   return best;
 }
 
-/**
- * Nearest point ON the zone's navmesh to an arbitrary world point — a full
- * closest-point-on-triangle sweep (Ericson), not just the nearest vertex.
- * Used to SNAP off-mesh clicks onto the walkable surface (memorial: the mesh
- * covers only the authored corridors, so most of the visible ground is
- * off-mesh and a strict on-mesh check rejects nearly every click).
- *
- * Returns null when the zone has no triangles.
- */
 export function closestNavmeshPoint(
   pathfinding: Pathfinding,
   zone: string,
   px: number,
   py: number,
   pz: number,
-  /** Optional height band — only surface points with yMin ≤ y ≤ yMax are
-   *  considered (used to clamp a click on another level to the nearest
-   *  walkable point on the PLAYER'S level). */
   yMin = -Infinity,
   yMax = Infinity,
-  /** Optional pathfinding group (navmesh island). When provided, only that
-   *  group's triangles are swept — so the returned point is guaranteed
-   *  REACHABLE from anywhere on the same island. Without it the sweep can
-   *  return a point on a disconnected island that no route can reach. */
   onlyGroup?: number,
 ): { x: number; y: number; z: number; dist: number } | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

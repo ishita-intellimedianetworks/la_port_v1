@@ -1,20 +1,5 @@
 "use client";
 
-/**
- * MapSelect — the compact-map design's selector control: a pill with a neutral
- * glass icon tile, the current label and a rotating caret, opening an OPAQUE
- * dark popover list below it. Rows carry the app's shared icons; blue appears
- * ONLY on the selected row. Used twice, side by side, on the list-mode
- * (memorial) map: Category and Sub-category. The village map keeps its radio
- * column instead.
- *
- * The popover is PORTALED to <body> and positioned fixed under the pill: the
- * map window clips its children (overflow + the glass backdrop-filter makes it
- * the containing block even for position:fixed), which on phones cut the list
- * to ~2 visible rows behind a second nested scroll. The portal escapes the
- * window entirely and sizes to the real viewport space below the pill.
- */
-
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, type LucideIcon } from "lucide-react";
@@ -43,14 +28,8 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
   const place = () => {
     const r = rootRef.current?.getBoundingClientRect();
     if (!r) return;
-    // Phone (landscape): open the list BESIDE the pill, using the full screen
-    // height — below-the-pill placement stacked a popover scroll on top of the
-    // window/legend scrolls, and clipped the list to a couple of rows.
     const short = window.matchMedia(SHORT_MEDIA_QUERY).matches;
     if (short) {
-      // Width = the longest label, MEASURED (CSS max-content collapses here —
-      // the rows are w-full, which is circular inside a max-content box and
-      // squeezed the list to one letter + ellipsis).
       let maxText = 0;
       const cx = document.createElement("canvas").getContext("2d");
       if (cx) {
@@ -84,9 +63,6 @@ export function MapSelect({ icon: Icon, items, value, onSelect }: MapSelectProps
       if (rootRef.current?.contains(t) || popRef.current?.contains(t)) return;
       setOpen(false);
     };
-    // Keep the popover glued to the pill if the window resizes/rotates or any
-    // ancestor scrolls (the map window scrolls on phones) — capture phase
-    // catches scrolls of inner containers too.
     const onMove = () => place();
     document.addEventListener("pointerdown", onDoc);
     window.addEventListener("resize", onMove);

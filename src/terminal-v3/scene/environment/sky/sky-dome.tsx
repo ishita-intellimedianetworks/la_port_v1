@@ -7,46 +7,8 @@ import isLowPower from "@/shared/runtime";
 import { useSkyStore } from "@/terminal-v3/stores/sky-store";
 import { sampleSky, SKY_HORIZON } from "./palette";
 
-/**
- * SkyDome — the `open-sea` study's analytic sky, running here as the backdrop.
- *
- * WHAT CHANGED IN THE PORT
- * The study is WebGPU + TSL + a bloom pass. This app is WebGL2, and the brief
- * was: no post-processing, no extra memory, nothing that costs frames. So:
- *
- *  • TSL → hand-written GLSL in ONE `ShaderMaterial`. Same maths, same
- *    constants — compare `main()` below with the study's `skyColor()`.
- *  • The sun disk is re-tuned. The study drew a 30× pinprick and let BLOOM turn
- *    it into a glowing orb. With no bloom that is a clipped white dot with a
- *    hard edge, so the disk is dimmed and softened and a tight `pow(s, 220)`
- *    inner glow stands in for the bloom halo. The wide `pow(s, 10) * 0.18`
- *    halo is the study's, untouched.
- *  • Geometry is a unit BOX (24 verts), not the study's 4000-unit sphere: it is
- *    parked on the camera every frame and drawn first with depth test AND depth
- *    write off, so it can never be clipped by the far plane and never occludes
- *    anything. Cost is 12 triangles and no depth traffic.
- *
- * MEMORY: one geometry, one material, one program, ZERO textures — the whole
- * sky is arithmetic. Nothing here allocates per frame.
- *
- * COST: one full-screen fragment pass of ~30 ALU ops. The cloud band is the
- * only expensive part (3-octave gradient noise) and is branch-guarded to the
- * thin strip of sky it actually occupies; on low-power devices it drops to
- * 2 octaves. It can be turned off entirely — `<site>.json › sky.clouds`, or the
- * `?debug=true` panel's checkbox.
- *
- * It also owns `scene.background`, easing it black → horizon colour on the same
- * curve as the dome's own fade. The dome hides the background completely, but
- * StreamFog reads it every frame to keep distance fog the same colour as the
- * sky it dissolves into — that rule is the reason the fog colour is not
- * authored, and it now tracks a real horizon instead of a flat blue.
- */
-
 const FADE_SEC = 1.6;
 
-// Half-extent of the box in world units. It only has to sit between the
-// camera's near (0.1) and far (10000) planes; it follows the camera, so it
-// never interacts with the scene's own (very large) units.
 const DOME_SCALE = 100;
 
 const BLACK = new THREE.Color(0x000000);
@@ -155,13 +117,6 @@ export default function SkyDome({
   // panel can drive them; the site file only seeds them.
   const t = useSkyStore((s) => s.t);
   const clouds = useSkyStore((s) => s.clouds);
-  // The unlinked sun, when the debug panel is driving it. It replaces where the
-  // sun is DRAWN and nothing else — every colour uniform below is still `t`'s
-  // (see `sampleSky`) — and `lightingForT` is handed the very same angles, so
-  // the disk and the shadows are one ray.
-  // Selected as primitives, not as an object: a selector returning a fresh
-  // object would make every unrelated store write look like a change, and the
-  // uniform effect below is keyed on this.
   const aimed = useSkyStore((s) => s.sunUnlinked);
   const aimAz = useSkyStore((s) => s.sunAzimuth);
   const aimEl = useSkyStore((s) => s.sunElevation);
@@ -173,10 +128,6 @@ export default function SkyDome({
     [aimed, aimAz, aimEl],
   );
 
-  // Rebuilt only when the cloud band is toggled, because that is a `#define`
-  // and so a recompile. Moving the SUN is not: `t` writes uniform values
-  // below, which is the discipline the study kept — "uniforms only, nothing is
-  // ever rebuilt" — and is what makes the slider free to drag.
   const material = useMemo(() => {
     const defines: Record<string, string> = {};
     if (clouds) {
@@ -197,9 +148,6 @@ export default function SkyDome({
         uFade: { value: 0 },
       },
       side: THREE.BackSide,
-      // Drawn first, writes no depth and tests none: the sky can never occlude
-      // the scene and the scene always paints over it. That is also why the box
-      // never has to be big enough to enclose the world.
       depthWrite: false,
       depthTest: false,
       fog: false,
@@ -249,10 +197,6 @@ export default function SkyDome({
     mesh.position.copy(camera.position);
     mesh.parent?.worldToLocal(mesh.position);
 
-    // The dome covers the background entirely; this is purely so StreamFog,
-    // which samples `scene.background` every frame, fogs distant chunks to the
-    // colour of the sky they dissolve into. Returning from an interior leaves a
-    // texture there — swap a Color back in before writing.
     if (!(scene.background instanceof THREE.Color)) {
       scene.background = new THREE.Color(0x000000);
     }

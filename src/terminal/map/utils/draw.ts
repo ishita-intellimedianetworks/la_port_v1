@@ -28,16 +28,6 @@ export function clipRoundedRect(
 
 export interface ImageRect { dx: number; dy: number; dw: number; dh: number; }
 
-// Where the floor plan lands — CONTAIN mode, inside the inner rect
-// The canvas (W × H) reserves `marginX` / `marginY` pixels on each side for
-// sticker labels. The floor plan + click-mapping live inside that inner
-// rect; everything outside is dead space (clicks naturally fall outside the
-// returned letterbox rect and are dropped by use-minimap.ts).
-// With marginX = marginY = 0 this collapses to the original full-canvas
-// behaviour so callers that don't need stickers keep working unchanged.
-// Rect only — the caller draws. It used to fit and draw in one call, which
-// stopped working once a layer had to go UNDERNEATH the plan: the rect is what
-// places that layer, so it has to exist before anything is painted.
 export function containRect(
   img: HTMLImageElement,
   W: number,
@@ -61,25 +51,6 @@ export function containRect(
   return { dx: marginX + (innerW - dw) / 2, dy: marginY + (innerH - dh) / 2, dw, dh };
 }
 
-// Context layer — the surroundings, drawn UNDER the plan
-// Placed by running its own world rect through the PLAN's world→pixel
-// transform, which is the whole trick: the two images are registered because
-// they are both expressed in world metres and only one transform exists, not
-// because anything was lined up by eye at runtime. The plan's letterbox stays
-// the single source of truth for clicks and overlays; this layer is allowed to
-// spill past the canvas, where it is clipped by the element itself.
-// It is NOT letterboxed on its own. Doing that would fit it to the canvas
-// independently and it would slide off the plan the moment the canvas aspect
-// changed — the bug this arrangement exists to make impossible.
-// Returns WHERE it drew, in the same logical canvas pixels as `lb`, so the
-// caller can bound the pan clamp and the zoomed-out limit by it. Null when
-// nothing was drawn.
-// Returns WHERE it goes, in the same logical canvas pixels as `lb`, so the
-// caller can bound the pan clamp and the zoomed-out limit by it — and so the
-// static-layer cache can lay it out without painting. Null when it cannot be
-// placed.
-// Rect only, like `containRect`: painting moved into `static-layers.ts` once
-// both layers stopped being drawn from source on every frame.
 export function contextRect(
   baseBounds: MinimapData["bounds"],
   planBounds: MinimapData["bounds"],
@@ -89,24 +60,10 @@ export function contextRect(
   const b = worldToPixel(baseBounds.maxX, baseBounds.maxZ, planBounds, lb.dw, lb.dh);
   const dw = b.px - a.px;
   const dh = b.py - a.py;
-  // A non-positive extent means the two rects disagree about which way the
-  // axes run — drawImage cannot mirror, and a layer exported against a mirrored
-  // plan needs re-exporting, not flipping here. Report nothing and leave the
-  // plan alone rather than painting it somewhere wrong.
   if (!(dw > 0) || !(dh > 0)) return null;
   return { dx: lb.dx + a.px, dy: lb.dy + a.py, dw, dh };
 }
 
-// Sticker labels in the margin
-// Each sticker tags a world XZ point (already visualised as a dot baked into
-// the floor-plan PNG). We project the world point into image-pixel space,
-// pick the nearest canvas edge, and draw a rounded-rect label there with a
-// leader line back to the anchor. Stickers are drawn under the same pan+zoom
-// transform as the floor plan so they track when the user zooms — they will
-// slide off-canvas at high zoom, but the relevant ones near the player stay
-// visible, which matches how the floor plan itself behaves.
-// Coordinates here are in canvas-local space (the caller has already applied
-// pan+zoom + the image-area translate is NOT applied — we work in raw W×H).
 export function drawStickers(
   ctx: CanvasRenderingContext2D,
   stickers: MinimapSticker[],
@@ -117,14 +74,7 @@ export function drawStickers(
 ) {
   if (!stickers.length) return;
 
-  // Scale all sticker dimensions with the canvas size so the box reads the
-  // same RELATIVE weight on phone and desktop. Without this, fixed pixel
-  // dimensions look ~75% larger on the 170 px mobile canvas than on the
-  // 300 px desktop one — same pattern `drawPlayerFOV` uses below.
   const scale = W / DEFAULT_MAP_SIZE;
-  // Sized to read as a smaller sibling of the floor PillBtns above the map.
-  // Floor pills run ~12 px / py-2 / px-3 on desktop; stickers are ~70% of
-  // that so they don't compete with the pill row visually.
   const fontPx   = Math.max(8, Math.round(8 * scale));
   const padInner = Math.max(4, Math.round(7  * scale));
   const boxH     = Math.max(11, Math.round(15 * scale));
@@ -151,15 +101,8 @@ export function drawStickers(
     const boxW  = Math.ceil(textW + padInner * 2);
 
     let sx: number, sy: number;
-    // Manual placement: `angle` (deg cw from up) + `length` (px) place the
-    // sticker centre at a specific point relative to the anchor. Used by the
-    // admin/floor-stickers tool to give authors pixel-precise control.
-    // Auto-placement (when either is missing) snaps to the nearest edge.
     if (typeof s.angle === "number" && typeof s.length === "number") {
       const rad = (s.angle * Math.PI) / 180;
-      // Leader length scales with canvas size too — authored on the desktop
-      // map, so mobile gets a proportionally shorter leader to keep the same
-      // "distance from anchor" feel.
       const lenScaled = s.length * scale;
       const cxS = anchorX + lenScaled * Math.sin(rad);
       const cyS = anchorY - lenScaled * Math.cos(rad);
@@ -178,9 +121,6 @@ export function drawStickers(
       sx = W - boxW - edgeGap;
       sy = anchorY - boxH / 2;
     }
-    // Clamp so the box stays fully inside the canvas even when the anchor
-    // is near a perpendicular edge (e.g. a top-margin sticker tracking a
-    // far-left anchor would otherwise spill off the left).
     sx = Math.max(edgeGap, Math.min(W - boxW - edgeGap, sx));
     sy = Math.max(edgeGap, Math.min(H - boxH - edgeGap, sy));
 
@@ -216,10 +156,6 @@ export function drawStickers(
   ctx.restore();
 }
 
-// Navigation path + destination marker
-// Drawn like a Google-Maps route: a darker-blue casing under a brighter-blue
-// core (rounded caps/joins), an ETA pill sitting on the line, and a blue
-// destination dot. `label` (e.g. "3 min") is the maps-style time-to-arrive.
 export function drawPath(
   ctx: CanvasRenderingContext2D,
   pathPts: { x: number; z: number }[],
@@ -232,9 +168,6 @@ export function drawPath(
 ) {
   if (!pathPts.length) return;
 
-  // `markerScale` (when given) keeps the route a small, fixed thickness
-  // regardless of the (now full-screen) canvas — Google-Maps style — instead
-  // of scaling up with the map.
   const scale = markerScale ?? W / DEFAULT_MAP_SIZE;
 
   const px: number[] = [];
@@ -271,9 +204,6 @@ export function drawPath(
   if (label) drawRoutePill(ctx, px, py, label, scale);
 }
 
-// Destination "stop" marker — mirrors the 3D pin (a sphere head floating over a
-// downward cone whose tip rests on the point), instead of the old flat teardrop,
-// so the map and the 3D scene read as the same marker.
 function drawDestPin(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
   const red = navConfig.color.destRed;
   const headR = Math.max(2.5, navConfig.minimap.destPinHeadPx * scale);
@@ -370,9 +300,6 @@ function drawRoutePill(
   ctx.restore();
 }
 
-// destination hotspots (label destinations)
-// Drawn in image-relative space (same as the player/path), each as a dot + a
-// small pill showing the name and live distance. The selected hotspot is cyan.
 export interface MapHotspot {
   id: string;
   name: string;
@@ -403,9 +330,6 @@ export function drawHotspots(
   /** List-mode (memorial): NUMBERED dots only — no leader lines / name pills
    *  (names live in the destination list under the plan instead). */
   numbered = false,
-  /** Current map zoom. Everything here is drawn under the pan+zoom transform,
-   *  so sizes are divided by this to keep markers a CONSTANT screen size —
-   *  zooming in then spreads the dots apart instead of magnifying the pile-up. */
   zoom = 1,
 ) {
   if (!hotspots.length) return;
@@ -420,11 +344,6 @@ export function drawHotspots(
     const ordered = [...hotspots].sort((a, b) =>
       (a.id === selectedId ? 1 : 0) - (b.id === selectedId ? 1 : 0));
 
-    // Declutter: relax overlapping dots apart so a tight cluster (e.g. a row
-    // of restrooms) renders as distinct tangent dots instead of a blob. The
-    // plan is non-interactive in list-mode, so the small positional nudge
-    // never has to match a click hit-test. Nudges shrink as the user zooms in
-    // (distances grow in screen space while the dots stay fixed-size).
     const pts = ordered.map((h) => {
       const { px, py } = worldToPixel(h.x, h.z, bounds, W, H);
       return { h, px, py };
@@ -463,9 +382,6 @@ export function drawHotspots(
       }
       ctx.beginPath();
       ctx.arc(px, py, rad, 0, Math.PI * 2);
-      // Selected = blue; standing AT = green "You're here"; the rest dark.
-      // Crowd tier is NOT a pin tint — it's the small badge dot below, so the
-      // numbered pins stay uniform and the digits always read white-on-dark.
       ctx.fillStyle = sel ? "#0a84ff" : h.here ? "#30d158" : "rgba(22,22,24,0.9)";
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = Math.max(1.2, 1.6 * scale) / zoom;
@@ -478,18 +394,12 @@ export function drawHotspots(
         ctx.fillStyle = "#ffffff";
         ctx.fillText(String(h.num), px, py + 0.5);
       }
-      // NOTE: no crowd badge on the map pins — the tier reads as dot + word
-      // ("Moderate" / "Heavy") beside each item in the "N on map" list instead,
-      // matching the overlay lists.
     }
     ctx.restore();
     return;
   }
 
   ctx.save();
-  // Same constant-screen-size treatment as the numbered branch: divide every
-  // pixel dimension by `zoom` so zooming in separates the dots/pills instead
-  // of magnifying the overlap.
   const fontPx = Math.max(8, Math.round(9 * scale)) / zoom;
   ctx.font = `600 ${fontPx}px system-ui, -apple-system, sans-serif`;
   ctx.textBaseline = "middle";
@@ -517,11 +427,6 @@ export function drawHotspots(
     ctx.stroke();
   }
 
-  // ── Pass 2: leader line + dark name pill (design: dot — thin vertical dash
-  //    up — rounded dark pill with the white name; no number badge). Labels
-  //    that would OVERLAP an already-placed pill get a progressively LONGER
-  //    leader, so nearby names stack at different heights instead of colliding.
-  // Selected pill drawn last so it sits on top.
   type Rect = { x: number; y: number; w: number; h: number };
   const placed: Rect[] = [];
   const hits = (x: number, y: number, w: number, hh: number) =>
@@ -604,11 +509,6 @@ export function drawPlayerFOV(
 
   ctx.save();
   ctx.translate(px, py);
-  // The cone is drawn pointing up in local space. The plan is rotated 180 on
-  // export and its bounds are plain to match, so screen X runs WITH world X and
-  // screen Y with world Z, and a yaw of `rotY` (forward `(-sin, -cos)`) lands at
-  // `-rotY`. It was `PI - rotY` under the un-rotated pair; leaving it there
-  // points the cone backwards.
   ctx.rotate(-rotY);
 
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledFovLen);

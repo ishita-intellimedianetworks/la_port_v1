@@ -18,11 +18,6 @@ interface EdgeFlapProps {
   onOpenChange: (open: boolean) => void;
   /** Set while a detail view is showing — renders the header's back arrow. */
   onBack?: () => void;
-  /**
-   * Pinned above the scrolling body — a search field, a filter row. It stays
-   * put while the list scrolls under it, which is the whole point: a search box
-   * that scrolls away is one you have to hunt for after every result.
-   */
   toolbar?: ReactNode;
   disabled?: boolean;
   /** Tuck the whole flap off its edge — while walking, and while a
@@ -31,25 +26,6 @@ interface EdgeFlapProps {
   children: ReactNode;
 }
 
-/**
- * A vertical tab pinned to one screen edge that slides a panel out beside it.
- *
- * Drawn the way the reference draws its venue tab: the fill is clipped to a
- * shape that is SQUARE on the screen edge and rounded on the inner side, with a
- * crisp stroke on three sides only — so the tab reads as part of the screen
- * border rather than a floating button. `left` and `right` are mirrors of the
- * same geometry.
- *
- * The panel is a FIXED height with its body scrolling inside. Letting it grow
- * with its content meant a thirty-row list ran off the top and bottom of a
- * laptop screen; a fixed frame keeps the header and the list reachable no
- * matter how long the list is.
- *
- * There is no close button: the flap's own tab toggles it, a click anywhere
- * outside dismisses it, and Escape closes it. A dedicated X on top of those
- * three was a fourth way to do the same thing, eating header room the panel
- * needs for its back arrow.
- */
 export function EdgeFlap({
   side,
   label,
@@ -134,18 +110,7 @@ export function EdgeFlap({
           ...NAV_GLASS_PANEL,
           border: "1.5px solid var(--nav-border)",
           [side]: dim.w + (short ? 6 : 10),
-          // Never wider than the space left beside the flap on a phone. Capped
-          // narrower on a landscape phone: 340px is nearly half of a 740px-wide
-          // screen, and the rows are two short strings, not paragraphs.
           width: `min(${short ? 290 : 340}px, calc(100vw - ${dim.w + (short ? 18 : 26)}px))`,
-          // A FIXED frame — the body below scrolls inside it.
-          // The 128px of breathing room is what the bottom dock and the top
-          // chrome need on a laptop. A landscape phone has ~360px of height in
-          // total, and giving 128 of it away left room for barely three rows.
-          // 96px there instead, and the panel is centred, so it clears the
-          // top-left Exit tab (8px in, 36px tall) by a hair at the top and the
-          // interior Home button at the bottom — the dock proper tucks itself
-          // away while this is open, which is what buys the rest.
           height: short ? `calc(100dvh - 96px)` : `min(560px, calc(100dvh - 128px))`,
         }}
       >

@@ -1,19 +1,5 @@
 "use client";
 
-/**
- * TerminalExperience — the Everport digital twin, rendered at /.
- *
- * Three layers, one provider:
- *   provider.tsx    owns the phase machine, the load gates and the shared state
- *   scene-graph.tsx everything inside the WebGL canvas
- *   overlays.tsx    everything on top of it
- *
- * WHICH MODEL it runs comes in as `site`, and that one id decides everything:
- * the document read (`config/sites/<id>.json`), the bake streamed, the stores'
- * seeds. `/` mounts it as v1 and `/v2` as v2 — two complete configs, one
- * component tree.
- */
-
 import "./styles.css";
 import CanvasWithWrapper from "@/shared/canvas/canvas-with-wrapper";
 import { getSite, type SiteId } from "@/config";
@@ -28,20 +14,6 @@ interface TerminalExperienceProps {
   /** The engine's node id. Optional — one site projects to one node. */
   nodeId?: string;
   onReady?: () => void;
-  /**
-   * WHICH MODEL to run: the site file read AND the bake streamed, which are one
-   * choice.
-   *
-   * `v1` is `config/sites/v1.json`, frozen at the behaviour this route had
-   * before the streaming work: the object-chunked v5-obj set, the transmission
-   * pass unconditional, no progressive textures, a fixed pixel ratio. `v2` is
-   * `config/sites/v2.json` — the instanced, animated-water bake plus the lag
-   * work, in a document of its own. The two files still describe the same zone,
-   * which is what makes the routes comparable; they just cannot edit each other
-   * any more.
-   *
-   * Defaults to `v1` so a caller that says nothing gets the known-good route.
-   */
   site?: SiteId;
 }
 

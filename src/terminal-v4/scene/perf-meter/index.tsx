@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * PerfMeter — minimal in-canvas FPS / frame-time overlay for debug runs.
- *
- * Renders nothing in the 3D scene; uses useFrame to sample frame deltas and
- * writes the rolling stats into a fixed-position DOM div via a portal-free
- * imperative ref update. One read per second to keep DOM thrash off the
- * critical path.
- *
- * Mount this only when `debug={true}` from SceneContent.
- */
-
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 

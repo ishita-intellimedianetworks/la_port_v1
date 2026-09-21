@@ -2,15 +2,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Short, wide viewports — i.e. phones, which this app forces into landscape.
-   Use `short:` to scale UI down on limited-height screens (matches the
-   existing `@media (max-height: 480px)` HUD rule below). */
 @custom-variant short (@media (max-height: 540px));
 
-/* Geist / Geist Mono / Bodoni Moda are no longer loaded (they were Google-Fonts
-   downloads that terminal/styles.css overrode to system fonts anyway).
-   Keep their variables defined as system stacks so --font-sans/--font-mono and
-   any straggler var() references still resolve. */
 :root {
   --font-geist-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-geist-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -64,10 +57,6 @@
   --radius: 0.5rem;
   /* base radius for Tailwind rounded-* scale (rounded-xl = 0.7rem ≈ 11px) */
 
-  /* Interior scene UI design tokens — dark glass with HIG-style blur stack.
-     Background tint is the original dark/black look; the readability win
-     comes entirely from a stronger backdrop blur + saturation + brightness
-     stack rather than from changing the colour. */
   --ui-white-glass-bg: rgba(255, 255, 255, 0.12);
   --ui-glass-bg: rgba(0, 0, 0, 0.4);
   --ui-glass-bg-hover: rgba(0, 0, 0, 0.65);
@@ -81,12 +70,6 @@
   --ui-text-faint: rgba(255, 255, 255, 0.6);
   --ui-accent-cyan: rgba(34, 211, 238, 0.75);
 
-  /* ── LA2028 Wayfinding-overlay design system ──────────────────────────────
-     Ported 1:1 from the "HoloTwin LA2028 Overlays" design. Minimal monochrome
-     glass with a SINGLE blue highlight for selection / active states, brand
-     poppy reserved for the LA28 lockup only. Every overlay surface (toggle,
-     map-view brand, label panel, bottom dock, nav banner) reads these so the
-     palette stays in lockstep. */
   --nav-accent: #0071e3;          /* solid blue — active fills (pills, CTAs) */
   --nav-accent-bright: #2997ff;   /* bright blue — text, underline, ring */
   --nav-brand: #fb5b2d;           /* poppy — LA28 lockup accent only */
@@ -95,38 +78,15 @@
   --nav-glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%);
   --nav-glass: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);       /* chips / dock / toggle */
   --nav-glass-strong: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);/* label panel + nav banner */
-  /* Quiet hairline border — the lit edge comes from the specular box-shadow
-     below, so the actual border stays subtle (a hard bright line reads as an
-     "extra" double border on top of the shading). */
   --nav-border: rgba(255, 255, 255, 0.14);
   --nav-divider: rgba(255, 255, 255, 0.08);
   --nav-text: #f4f6f8;            /* primary */
-  /* Every "extra" overlay label is the SAME colour now — plain white, just
-     dialled down in opacity (no grey, no blue). Titles keep --nav-text; all
-     secondary/meta text shares one soft-white value, with a fainter tier for
-     truly muted micro-text. */
   --nav-text-2: rgba(255, 255, 255, 0.82);   /* strong secondary — soft white */
   --nav-text-dim: rgba(255, 255, 255, 0.82); /* secondary / meta — same soft white */
   --nav-text-faint: rgba(255, 255, 255, 0.6); /* tertiary / muted — fainter white */
-  /* Frosted blur stack. Reuse the app's PROVEN Apple-"Liquid Glass" backdrop
-     (`--ui-glass-backdrop` = blur 10px / saturate 180% / brightness 1.06,
-     auto-dropping to 5px on mobile). This is the recipe `.ui-glass` uses and the
-     one the original overlays blurred with — a heavier custom radius (16–34px)
-     over the live WebGL canvas silently fails to composite on some GPUs. */
-  /* Stronger, nav-specific backdrop blur (22px / 13px mobile) — the heavier frost
-     the ARCHVIZ v5 glass uses. Kept independent of `--ui-glass-blur` so only the
-     overlay glass changes, not the loader / other surfaces. */
   --nav-glass-blur: 22px;
   --nav-backdrop: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
   --nav-backdrop-panel: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
-  /* Apple "Liquid Glass" specular edge (ported from the ARCHVIZ v5 glass):
-       1. crisp bright TOP hairline      — the edge is brightest from above
-       2. faint full inner ring          — defines the whole rounded edge
-       3. bottom-right light-catch       — the soft "lensed" specular highlight
-       4. bottom edge glow               — completes the light-catch
-       5. long soft drop                 — depth/elevation (tuned per weight)
-     The bottom-right + bottom WHITE highlights are what give the glass its lit,
-     beveled "liquid" look (the old recipe darkened the bottom instead). */
   --nav-shadow-chip:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.05),
@@ -146,39 +106,15 @@
     inset 0 -9px 10px -10px rgba(255, 255, 255, 0.24),
     0 16px 40px -12px rgba(0, 0, 0, 0.55);
 
-  /* SINGLE SOURCE OF TRUTH for the glass backdrop. Edit `--ui-glass-blur`
-     (and the saturate / brightness knobs) and every glass surface across the
-     app re-tunes in lockstep — they all read `--ui-glass-backdrop` via
-     `.ui-glass` / `.ui-white-glass` / `.ui-blur`, or inline.
-     Apple HIG "Material" / "Liquid Glass" reference values:
-       blur        — 30–40 px (browser blur is ~1/3 strength of native)
-       saturate    — 180% (the vibrancy hue boost)
-       brightness  — small positive bump so dark scenes don't read as muddy
-       inner ring  — 0.5 px white at ~0.18 opacity = the HIG hairline highlight
-       outer drop  — long-radius, low-opacity for depth
-
-     Mobile note: see the `@media (max-width: 1023px)` block below — the blur
-     radius scales down on small screens so the blur:surface ratio stays
-     constant between phone and desktop (otherwise a fixed 40 px reads ~2×
-     heavier on the smaller mobile panels). */
   --ui-glass-blur: 10px;
   --ui-glass-saturate: 180%;
   --ui-glass-brightness: 1.06;
   --ui-glass-backdrop: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
-  /* Light + smooth glass shadow used by EVERY glass surface (panels, pills,
-     list rows): a very faint edge ring (barely there, so it never reads as a
-     sharp line) plus one soft, low drop. Just a hint of glass depth — not sharp,
-     not heavy. Same on phone and desktop. */
   --ui-glass-shadow:
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
     0 1px 6px -5px rgba(0, 0, 0, 0.07);
 }
 
-/* Phone and desktop should LOOK the same. Mobile browsers (esp. iOS Safari)
- * render backdrop-filter noticeably heavier than desktop at the same px, so a
- * matching 10px reads as MORE blur on the phone. We lower the mobile radius to
- * ~5px so the *visual* frost matches desktop's 10px — every other glass token
- * (tint, shines, shadow, saturate, brightness) stays identical. */
 @media (max-width: 1023px) {
   :root {
     --ui-glass-blur: 5px;
@@ -188,10 +124,6 @@
   }
 }
 
-/* Prevent text selection across the whole app (3D canvas drag triggers it).
-   Default type = Barlow (the LA2028 overlay body font), so text that doesn't
-   opt into `.nav-display` (Saira) still matches the Olympic Village overlays
-   instead of falling back to Geist. */
 body {
   user-select: none;
   -webkit-user-select: none;
@@ -200,54 +132,24 @@ body {
 
 /* ── Interior scene UI utilities ─────────────────────────────────────────── */
 
-/* Light variant — same HIG material, light tint for use on dark backgrounds.
- * The inner ring + drop shadow come from `--ui-glass-shadow`; no `border`
- * property is set so children using `.ui-glass` can opt out of the hairline
- * with `border: none` without fighting specificity. */
 .ui-white-glass {
   background: var(--ui-white-glass-bg);
   backdrop-filter: var(--ui-glass-backdrop);
   -webkit-backdrop-filter: var(--ui-glass-backdrop);
   box-shadow: var(--ui-glass-shadow);
   isolation: isolate;
-  /* Force own compositing layer so backdrop-filter still samples the scene
-     even when an ancestor uses transform/opacity (which otherwise breaks
-     backdrop-filter in Chrome desktop — the symptom is a see-through card
-     with no blur). */
   transform: translateZ(0);
   will-change: backdrop-filter;
   font-family: var(--font-saira), system-ui, sans-serif;
   color: rgba(20, 24, 32, 0.95);
 }
 
-/* Glass morphism — Apple HIG "Liquid Glass" style.
- *
- * The look is built from layered effects rather than a single tint:
- *   • dense dark `background` so text is legible over any scene
- *   • heavy `backdrop-filter` blur + 180% saturate (the vibrancy boost
- *     that's characteristic of HIG materials)
- *   • inset 0.5 px hairline highlight (via box-shadow, NOT border) so the
- *     edge is visible without taking up box-model space — drop it locally
- *     by setting `box-shadow: none` on a single element if needed
- *   • soft outer drop shadow for elevation off the underlying scene
- *
- * `isolation: isolate` keeps the backdrop-filter compositing context clean
- * — without it, sibling z-stacked elements can show through the panel and
- * break the blur.
- *
- * Note: there is intentionally NO `border` property here. The hairline is
- * part of `--ui-glass-shadow` so child elements (e.g. icon circles inside
- * a glass card) can override the shadow without inheriting an outline. */
 .ui-glass {
   background: var(--ui-glass-bg);
   backdrop-filter: var(--ui-glass-backdrop);
   -webkit-backdrop-filter: var(--ui-glass-backdrop);
   box-shadow: var(--ui-glass-shadow);
   isolation: isolate;
-  /* Force own compositing layer so backdrop-filter still samples the scene
-     even when an ancestor uses transform/opacity (which otherwise breaks
-     backdrop-filter in Chrome desktop — the symptom is a see-through card
-     with no blur). */
   transform: translateZ(0);
   will-change: backdrop-filter;
   font-family: var(--font-saira), system-ui, sans-serif;
@@ -259,15 +161,7 @@ body {
   box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.4);
 }
 
-/* Flat glass — identical DARK-SHADED look to `.ui-glass` but WITHOUT its own
-   backdrop-filter. Use for pills/list rows nested INSIDE an already-blurred
-   glass surface (site panel, minimap) so they don't re-blur the panel behind
-   them (the muddy "double blur" stack) while keeping the same dark tint. */
 .ui-glass-flat {
-  /* Near-solid dark: these sit over the already-blurred glass panel and have NO
-     backdrop-filter of their own. At a low alpha the panel's blur reads THROUGH
-     them (the muddy "double blur" stack the user sees), so the tint is kept
-     opaque enough to stay flat-dark — the whole point of the variant. */
   background: rgba(0, 0, 0,0.5);
   box-shadow: var(--ui-glass-shadow);
   font-family: var(--font-saira), system-ui, sans-serif;
@@ -282,11 +176,6 @@ body {
   will-change: backdrop-filter;
 }
 
-/* ── LA2028 overlay helpers ───────────────────────────────────────────────
-   Font roles + the two glass surfaces used across the wayfinding overlays.
-   `.nav-display` = Saira (titles, labels, numbers, buttons), `.nav-body` =
-   Barlow (descriptions / meta). `.nav-glass` and `.nav-glass-panel` mirror the
-   design's two backdrop stacks (chip-weight vs. panel-weight). */
 .nav-display {
   font-family: var(--font-saira), system-ui, sans-serif;
 }
@@ -294,11 +183,6 @@ body {
   font-family: var(--font-barlow), system-ui, sans-serif;
 }
 
-/* These mirror `.ui-glass` exactly — the proven Apple-"Liquid Glass" recipe used
-   across this app (and the ARCHVIZ project): token backdrop + isolation +
-   own compositing layer (`will-change` + `translateZ(0)`) so the frost samples
-   the live WebGL canvas even inside transform/opacity-animated wrappers. Only
-   the tint / border / shadow differ to carry the LA2028 look. */
 .nav-glass {
   background: var(--nav-glass);
   backdrop-filter: var(--nav-backdrop);
@@ -321,9 +205,6 @@ body {
   will-change: backdrop-filter;
 }
 
-/* Instructions overlay — contained panel variant.
- * A single compact black panel with one backdrop blur, soft padding and a
- * slow panning glow behind the cards (see InstructionsOverlay `contained`). */
 .instr-panel {
   background: rgba(0, 0, 0, 0.62);
   box-shadow:
@@ -333,9 +214,6 @@ body {
   transform: translateZ(0);
 }
 
-/* The panning glow — two soft radial blobs drifting slowly behind the cards.
- * `screen` blend keeps it additive so it reads as a gentle light wash, never
- * a hard shape. Sits behind the z-10 content layer. */
 .instr-panel__pan {
   position: absolute;
   inset: -45%;
@@ -495,10 +373,6 @@ body {
   }
 }
 
-/* ── Thin glass scrollbar ──────────────────────────────────────────────────
- * A subtle translucent line shown only where content actually overflows.
- * Used on the UI scroll panels (info card, side panel, minimap, carousels)
- * so there's a visible scroll affordance instead of a hidden scrollbar. */
 .ui-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
@@ -599,9 +473,6 @@ body {
   .meta-block--stairs::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'); }
 }
 
-
-
-
 /* loader holotwin */
 
 /* HoloTwin Smart Loader — branded HUD overlay (V2.4) */
@@ -614,20 +485,11 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start; /* content anchored to top */
-  /* Background is a DYNAMIC veil driven inline by HoloTwinHud from the shared
-     revealProgress: fully opaque while the bar fills (hides the empty scene +
-     bright sky behind), then thins once the point-cloud preview starts glowing
-     in on the canvas — so the silhouette shows through the loading screen and
-     the model "grows out of it". The old static `background: var(--htl-bg)`
-     hid the canvas for the whole load, which made the preview invisible. */
   background: transparent;
   color: var(--htl-color);
   font-family:
     -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   overflow: hidden;
-  /* Block the canvas underneath while the loader is on screen. Released only
-     AFTER the fade-out completes (see .htl-hidden) so the user can't click
-     into the 3D scene mid-fade. */
   pointer-events: auto;
   transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -637,19 +499,10 @@ body {
 }
 .htl-hidden {
   opacity: 0;
-  /* Discrete property — transition-delay holds pointer-events:auto until the
-     opacity fade has fully finished, then flips to none. Keeps the scene
-     untouchable for the full duration of the fade. */
   pointer-events: none;
   transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), pointer-events 0s 0.35s;
 }
 
-/* The progress-driven background veil. Its own layer with an animated OPACITY,
-   which the compositor changes for free — the alpha used to live in the root's
-   `background-color`, repainting the full screen every frame (and forcing the
-   blended radial above it to re-composite with it).
-   z-index -1 puts it exactly where that background-color sat: behind every
-   other child of .htl-root, which itself is a stacking context. */
 .htl-veil {
   position: absolute;
   inset: 0;
@@ -718,12 +571,6 @@ body {
 
 .htl-progress-fill {
   height: 100%;
-  /* Full width, SCALED — not a changing width. Animating `width` re-ran layout
-     for 120 ms after each of the hundred-odd progress steps, i.e. more or less
-     continuously through the load, on the same main thread that is decoding
-     mesh chunks. `transform` is compositor-only.
-     The gradient is unaffected: it is sized to this element's own box in both
-     versions, so the same span of it is on screen at any given percentage. */
   width: 100%;
   transform-origin: left center;
   transform: scaleX(0);
@@ -810,10 +657,6 @@ canvas.htl-main-loading {
   will-change: filter, transform;
 }
 
-/* Lighter hold-blur while the model dithers in (crossfade). Swapped in at
-   REVEAL_PEAK in place of .htl-main-loading, swapped out for .htl-main-ready
-   once the reveal fully completes — the scene stays softly veiled (and
-   non-interactive) until the correct model is fully on screen. */
 canvas.htl-main-revealing {
   filter: blur(10px) brightness(0.8) saturate(0.95);
   transform: scale(1.02);
@@ -832,14 +675,6 @@ canvas.htl-main-ready {
   will-change: filter, transform;
 }
 
-/* Phone-sized viewports, on EITHER axis.
-   `max-width: 640px` alone was effectively dead here: this app forces phones
-   into landscape, where the narrow edge becomes the HEIGHT and the width is
-   667-932px — so the phones these rules exist for never matched them, and got
-   the desktop 24px canvas blur that the note below calls out as a jank/crash
-   source. The height clause (the `short:` breakpoint) is what actually catches
-   a landscape handset; the width clause still covers portrait, where the
-   loader can be on screen before the rotate prompt resolves. */
 @media (max-width: 640px), (max-height: 540px) {
   /* Tighten the whole HUD so it fits inside the visible viewport on phones */
   .htl-hud {

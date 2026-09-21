@@ -1,29 +1,3 @@
-/**
- * findPathWeighted — drop-in replacement for `Pathfinding.findPath` with a
- * correct, DISTANCE-based A* over the zone's polygon graph.
- *
- * Why not the library's findPath? three-pathfinding's A* has two defects that
- * make routes both suboptimal and DIRECTION-DEPENDENT (A→B takes a different
- * corridor than B→A):
- *   1. every polygon hop costs `1.0` regardless of size — the search minimises
- *      polygon COUNT, not metres, so meshes with irregular triangle sizes get
- *      bizarre detours;
- *   2. the heuristic is distance SQUARED (inadmissible — on a 400m route it's
- *      ~160,000 vs hop costs in the tens), which degenerates A* into greedy
- *      "run straight at the target". Greedy search commits to whichever
- *      corridor looks locally best from ITS starting end — hence the asymmetry
- *      (SoFi: Entrance 2 → 3 was 478m one way, 669m the other, on opposite
- *      sides of the stadium).
- *
- * This version scores g = accumulated centroid-to-centroid metres and
- * h = straight-line metres to the goal (admissible) → shortest corridor,
- * same route in both directions. The funnel (string pull) is a faithful
- * port of the library's Channel, fed the SAME portal data, so the output
- * has identical shape/format to findPath: world-space points, start point
- * omitted. Endpoint semantics also match — the start must lie inside a
- * polygon (checkPolygon), so existing centroid-fallback call sites work
- * unchanged.
- */
 import * as THREE from "three";
 import { Pathfinding } from "three-pathfinding";
 
@@ -206,11 +180,6 @@ function corridorToPath(
   return path;
 }
 
-/**
- * Same contract as `pathfinding.findPath(start, target, zoneID, groupID)`:
- * returns world-space waypoints with the start position omitted, or null when
- * either endpoint has no containing polygon (callers fall back to centroids).
- */
 export function findPathWeighted(
   pathfinding: Pathfinding,
   startPosition: THREE.Vector3,
@@ -233,19 +202,6 @@ export function findPathWeighted(
   return corridorToPath(corridor, startPosition, targetPosition, zone!.vertices);
 }
 
-/**
- * Batch variant: routes from ONE start to MANY targets with a single graph
- * search (Dijkstra — A* without a heuristic settles nodes in shortest-distance
- * order, so one pass yields the optimal corridor to EVERY target). Used by the
- * Directions sheet: measuring N destinations costs ~one findPathWeighted call
- * instead of N.
- *
- * Endpoint semantics are the batch mirror of the single version + its callers'
- * fallback: an off-mesh start falls back to the nearest node's centroid
- * internally, and every route ends at the target's nearest-node CENTROID
- * (exactly what computePath passes as the funnel end). Per-target result is
- * null only when that target's node is unreachable from the start's island.
- */
 export function findPathsWeighted(
   pathfinding: Pathfinding,
   startPosition: THREE.Vector3,
@@ -265,9 +221,6 @@ export function findPathsWeighted(
   // otherwise from the fallback node's centroid (same as the callers' retry).
   const funnelStart = startIn ? startPosition : startNode.centroid;
 
-  // Nearest node WITHOUT the polygon-containment check — exactly what
-  // computePath resolves as its targetNode before calling the single version,
-  // so batch and single measures agree on the endpoint.
   const targetNodes = targetPositions.map(
     (t) => pathfinding.getClosestNode(t, zoneID, groupID) as ZoneNode | null,
   );

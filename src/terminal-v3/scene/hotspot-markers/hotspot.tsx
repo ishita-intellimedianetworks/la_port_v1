@@ -1,23 +1,5 @@
 "use client";
 
-/**
- * Hotspot — the marker itself: a small solid bead that breathes, with faint
- * shells pinging outward from it so it reads as live rather than painted on. A
- * white tooltip pill carries the name, and a generous invisible box collider
- * makes it easy to hit.
- *
- * It was a flat disc + ring lying on the surface. A disc disappears the moment
- * you view it edge-on — which, on a wall-mounted marker, is most of the time —
- * and reads as decal rather than object. A sphere has no bad angle.
- *
- * Its size is held constant ON SCREEN rather than in the world — see BEAD_PX.
- * A fixed world size made the same marker a speck from one layout and a wall
- * from the next, because the checkpoints that frame them stand anywhere from a
- * few metres to 460 units back.
- *
- * Purely presentational; the parent decides what a click does.
- */
-
 import { useEffect, useRef, useState } from "react";
 import { Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -28,61 +10,14 @@ import { NAV_GLASS } from "../../overlay/glass-theme";
 /** Rings in flight at once, evenly staggered through one cycle. */
 const PING_COUNT = 2;
 
-/**
- * How big the bead is ON SCREEN, in CSS pixels across, at any distance.
- *
- * The markers used to be a fixed world size (`hsSize`, 3 units — a 6 m ball),
- * which meant their apparent size was pure range: right at the distance the
- * number was chosen for, a speck from anywhere further, and filling a third of
- * the frame from a few metres away. Since a marker is a piece of UI standing in
- * the world rather than an object in it, the honest rule is the opposite one —
- * hold it constant on screen and let the world size follow the camera.
- *
- * This is the DIAMETER of the solid bead; the pings reach 2.2-3.1x it, so the
- * whole marker occupies roughly 50-75 px. Raise it and every marker grows
- * together, at every distance.
- */
 const BEAD_PX = 24;
 
-/** The same figure for a FINGER.
- *
- *  Bigger than the mouse figure because a fingertip covers ~9 mm of glass and
- *  you cannot see through it — but only a little, because what a finger needs
- *  is a big enough TARGET, and the target is COLLIDER_MULT_TOUCH below, not
- *  this. 34 made the beads themselves crowd a phone screen; 26 was better and
- *  still read heavy, so this is 22 — a ~35% smaller marker than the original
- *  and ~15% smaller than 26. Each of those steps raised the collider
- *  multiplier to match, so the thing you are actually aiming at has never
- *  moved: it is 67.6 px across at every one of the three bead sizes. */
 const BEAD_PX_TOUCH = 22;
 
-/** Bounds on the world radius the rule may ask for, as a multiple of the
- *  authored `size`. The floor keeps a marker from collapsing to nothing at the
- *  far end of a long shot; the ceiling stops one from swelling past the object
- *  it labels when the camera is almost inside it.
- *
- *  NOTE which end each one binds. `wanted` GROWS with distance, so MIN_SCALE
- *  bites up close and MAX_SCALE bites far away — i.e. the ceiling is what makes
- *  a distant marker smaller than BEAD_PX, not larger. At 1 it bound almost
- *  every shot in this venue (the layout checkpoints stand 370-460 units back),
- *  which is why the markers read as specks: the constant-screen-size rule was
- *  being clamped away before it could do anything. Touch gets a ceiling high
- *  enough for the rule to actually hold at those ranges. */
 const MIN_SCALE = 0.06;
 const MAX_SCALE = 1;
 const MAX_SCALE_TOUCH = 4;
 
-/** Edge of the invisible hit box, as a multiple of the bead RADIUS — so the
- *  target is `COLLIDER_MULT / 2` times the bead's width on screen, at every
- *  distance. 3.5 gives a 42 px square around a 24 px bead (fine for a mouse).
- *
- *  Touch is sized from the TARGET backwards, and the target is the fixed
- *  point: 4 x 34 px, 5.2 x 26 px and now 6.15 x 22 px all come to 67.6 px
- *  across (6.15 x 11 = 67.65). So three times the bead has shrunk and three
- *  times what a fingertip has to hit has not — still comfortably past the
- *  ~44 px minimum. Shrink the bead a fourth time and this has to rise again:
- *  COLLIDER_MULT_TOUCH = 67.6 / (BEAD_PX_TOUCH / 2). Forget it and the two
- *  silently re-couple, which is the bug this note exists to prevent. */
 const COLLIDER_MULT = 3.5;
 const COLLIDER_MULT_TOUCH = 6.15;
 
@@ -92,20 +27,12 @@ const TAP_SLOP_PX = 16;
 
 interface HotspotProps {
   position: [number, number, number];
-  /** The authored marker orientation (XYZ euler), straight off `hs_NNN` in the
-   *  hotspot GLB. Carried on the group so the marker stands in its authored
-   *  frame; the bead itself is a sphere, so nothing is visibly turned by it
-   *  until the marker grows a face. */
   rotation?: [number, number, number];
   /** Tooltip label (the destination name). */
   title: string;
   /** Click/tap on the marker — opens the centred hotspot info overlay.
    *  Navigation still never happens from a marker (list/map/panel only). */
   onHotspotClick?: () => void;
-  /** Base radius in world units. NOT the size on screen — the frame loop scales
-   *  the whole marker so the bead stays BEAD_PX across at any distance, and this
-   *  is what that scale is measured against (and what the MIN/MAX_SCALE clamps
-   *  bound). Ring + collider are multiples of it. */
   size?: number;
   color?: string;
   /** Disc + ring colour while hovered (defaults to red). */
@@ -126,28 +53,16 @@ export function Hotspot({
   color = "#ffffff",
   hoverColor = "#ff453a",
   pulse: alwaysPulse = false,
-  // Draw through geometry by default: the authored markers sit FLUSH on
-  // walls/floors, so with depth testing they z-fight or hide behind any wall
-  // between the player and the gate — i.e. invisible most of the time.
   depthTest = false,
 }: HotspotProps) {
   const coreRef = useRef<THREE.Mesh>(null);
   const pingRefs = useRef<(THREE.Mesh | null)[]>([]);
-  // The group everything visible hangs off, scaled per frame to hold the marker
-  // at BEAD_PX on screen. The tooltip is deliberately OUTSIDE it — an Html pill
-  // is screen-space already, and scaling its anchor would move it.
   const sizerRef = useRef<THREE.Group>(null);
   const markerWorld = useRef(new THREE.Vector3());
   const camera = useThree((s) => s.camera);
   // Canvas height in CSS pixels — the units BEAD_PX is expressed in, so the
   // marker is the same size on a laptop and on a 4K monitor.
   const viewportHeight = useThree((s) => s.size.height);
-  // Finger or mouse? Both the marker's SIZE and the way a press on it becomes
-  // "open the card" differ between the two — see BEAD_PX_TOUCH and the pointer
-  // handlers on the collider. Width is folded in alongside the pointer
-  // capability so a phone that reports a fine pointer still gets the big
-  // targets; a desktop answers neither question true. Kept as two separate
-  // calls because `a() || b()` would short-circuit the second hook away.
   const coarsePointer = useCoarsePointer();
   const narrowViewport = useIsMobile();
   const touchUi = coarsePointer || narrowViewport;
@@ -156,10 +71,6 @@ export function Hotspot({
   const colliderMult = touchUi ? COLLIDER_MULT_TOUCH : COLLIDER_MULT;
   const [hovered, setHovered] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(false);
-  // Phase, not elapsed time: the pings advance by `delta / period`, so changing
-  // the period (resting → selected → hovered) speeds the pulse up from wherever
-  // it currently is. Dividing a shared clock by the new period instead made
-  // every ring jump position the instant the cursor touched a marker.
   const phase = useRef(0);
   const breath = useRef(0);
   // Touch has no hover — a TAP on the marker shows the name pill for a couple
@@ -171,19 +82,6 @@ export function Hotspot({
     tapTimer.current = setTimeout(() => setHovered(false), 2200);
   };
 
-  // Why a tap is opened by hand instead of by `onClick`
-  // R3F turns the DOM `click` into a marker hit by RE-RAYCASTING at the click's
-  // coordinates, and a browser reports those from where the pointer was LIFTED.
-  // A mouse lifts on the pixel it pressed, so on desktop one click always lands.
-  // A finger rolls several pixels between touchdown and lift, and against a
-  // target this size that roll was enough to miss: the PRESS hit (the name pill
-  // appeared — exactly the symptom) while the click behind it raycast into empty
-  // space, so nothing opened. The second tap, now aimed at a marker the user
-  // could finally see, landed. Hence "one click on PC, two on the phone".
-  // So on touch the press is authoritative: it already proved the finger was on
-  // the marker, so remember it and watch the WINDOW for the lift. Lift nearby =
-  // a tap, and the card opens whatever a fresh raycast would have said; lift far
-  // away = the press was the start of a camera drag, and nothing opens.
   const tapUnbind = useRef<(() => void) | null>(null);
   /** When the touch path last opened the card — suppresses the synthesized
    *  `click` that follows, so one tap never opens twice. */
@@ -209,25 +107,7 @@ export function Hotspot({
     return () => clearTimeout(t);
   }, [hovered]);
 
-  // The pulse: rings that GROW OUT of the bead and fade as they go, the way a
-  // radar ping reads, plus a gentle breath on the bead itself.
-  // It used to be one shell scaling on a sine between 0.95x and 1.14x. At the
-  // distance these markers are actually seen from — their layout checkpoint is
-  // 370-460 units back — a 14% wobble on a 3-unit bead is under a pixel of
-  // travel, so every marker read as a dead white dot. A ring that leaves the
-  // bead and dies at 2-3x its radius is visible at any distance the bead is,
-  // because the motion is proportional to the marker, not to a fixed fraction.
-  // TWO rings, half a cycle apart: one ring alone is a blink with a long gap
-  // after it, and the eye reads the gap as the marker having stopped.
-  // Three strengths — resting / selected / hovered — so "which of these did I
-  // pick?" is answered by motion rather than by another colour.
   useFrame((_, delta) => {
-    // Constant screen size
-    // At `dist` from a perspective camera, one CSS pixel spans
-    // `2·tan(fov/2)·dist / viewportHeight` world units. Solving that for the
-    // radius that draws BEAD_PX across gives the scale below, so the bead is
-    // the same size whether the camera is 5 m or 500 m away — and it tracks a
-    // live FOV change (the FovDisc) on its own, since fov is read every frame.
     const sizer = sizerRef.current;
     const cam = camera as THREE.PerspectiveCamera;
     if (sizer && cam.isPerspectiveCamera && viewportHeight > 0) {
@@ -265,23 +145,6 @@ export function Hotspot({
     }
   });
 
-  // Sits exactly ON its authored pose — `hs_NNN`'s translation AND rotation,
-  // both straight out of the hotspot GLB. The rotation is carried on the group
-  // and NOT compensated for anywhere below: the bead is a sphere, so it looks
-  // the same whichever way the frame is turned, and everything that would care
-  // (the tooltip anchor) is deliberately outside it. Applying it costs nothing
-  // and means an oriented marker drops straight in later.
-  // What is NOT done is displacing the bead along that frame. An earlier
-  // version rotated the group and pushed the bead one radius along its local +Z
-  // to make it rest on a wall — with these poses that normal points straight
-  // DOWN, so the nudge buried it instead.
-  // `size` is only the BASE radius the screen-size rule scales from (see
-  // BEAD_PX): what reaches the screen is BEAD_PX across at every distance, and
-  // `size` sets where in the clamp range that lands. The ping reach, the breath
-  // and the collider are all multiples of it, so they follow automatically.
-  // Drawn unlit in the transparent pass with depthTest off, so it stays legible
-  // through geometry the way the disc did. Hover shows the name; a CLICK (when
-  // the parent passes onHotspotClick) opens the info overlay.
   return (
     <group position={position} rotation={rotation}>
       <group ref={sizerRef}>
@@ -291,11 +154,6 @@ export function Hotspot({
           <sphereGeometry args={[size, 32, 24]} />
           <meshBasicMaterial color={hovered ? hoverColor : color} transparent opacity={0.98} depthTest={depthTest} depthWrite={false} toneMapped={false} />
         </mesh>
-        {/* The pings — faint shells that expand away from the bead and fade
-            out. Back faces only, so the bead is seen THROUGH them rather than
-            behind a frosted ball, and they never wash the core out as they
-            pass over it. Opacity and scale are driven per frame above; the
-            values here are only the first frame. */}
         {Array.from({ length: PING_COUNT }, (_, i) => (
           <mesh
             key={i}
@@ -316,9 +174,6 @@ export function Hotspot({
           </mesh>
         ))}
 
-        {/* Invisible hover/click collider — hover shows the name tooltip; a
-            click opens the info overlay (when the parent wires it). Walks /
-            teleports never start from a marker. */}
         <mesh
           name="hotspot_hover_collider"
           renderOrder={9997}
@@ -364,10 +219,6 @@ export function Hotspot({
         </mesh>
       </group>
 
-      {/* Name pill — anchored at the MARKER CENTRE (outside the rotated group,
-          so an oriented disc can't push the anchor sideways/behind) and lifted
-          purely in screen space, guaranteeing it always reads ABOVE the
-          hotspot from any camera angle. Same glass chip as the nav UI. */}
       {tooltipVisible && (
         <Html position={[0, 0, 0]} center style={{ pointerEvents: "none" }} zIndexRange={[110, 100]}>
           <div
@@ -376,11 +227,6 @@ export function Hotspot({
               ...NAV_GLASS,
               opacity: hovered ? 1 : 0,
               transition: "opacity 200ms",
-              // Lifted clear of the BEAD, so it has to track it — at the touch
-              // size the desktop 26 px put the pill's lower edge inside the
-              // marker. Measured from the bead's TOP EDGE, not its centre: the
-              // touch bead's radius is BEAD_PX_TOUCH / 2, so -32 leaves the
-              // same 21 px of air above it that -34 left above the 26 px bead.
               transform: `translateY(${touchUi ? -32 : -26}px)`,
               color: "var(--nav-text)",
               padding: touchUi ? "6px 14px" : "5px 12px",

@@ -1,21 +1,6 @@
 import type * as THREE from 'three';
 import type { SharedUniforms } from './point-cloud-preview';
 
-/**
- * Patch the GLB's PBR materials with the V2.4 dithered-discard reveal.
- *
- * Each pixel of every patched material hashes its world position to pick
- * a unique 0..1 threshold. The pixel is discarded as long as
- * `sharedUniforms.uGlobalAlpha.value < pixelHash`. As the alpha rises
- * 0 → 1 during the crossfade, more pixels pass the test, so the mesh
- * fills in via dithering pattern (like dust accumulating onto the surface).
- *
- * Materials stay OPAQUE the whole time — no transparent queue, no
- * depth-sort issues, no walls "popping in" at the end.
- *
- * Pass either a single Material or any Object3D (will traverse and patch
- * all mesh materials it finds).
- */
 export function patchMeshForReveal(
   modelOrMaterial: THREE.Object3D | THREE.Material,
   sharedUniforms: SharedUniforms
@@ -32,10 +17,6 @@ export function patchMeshForReveal(
 }
 
 function patchOne(material: THREE.Material, sharedUniforms: SharedUniforms): void {
-  // GLB files share material objects across meshes — traverse() would call
-  // patchOne multiple times on the same material, stacking onBeforeCompile
-  // wrappers and prepending 'varying vec3 vWPos' more than once, which
-  // causes a GLSL redeclaration compile error.
   if ((material as any).__holotwinPatched) return;
   (material as any).__holotwinPatched = true;
 
@@ -46,10 +27,6 @@ function patchOne(material: THREE.Material, sharedUniforms: SharedUniforms): voi
     if (orig) orig(shader, renderer);
     shader.uniforms.uGlobalAlpha = sharedUniforms.uGlobalAlpha;
 
-    // Vertex: inject the varying declaration after #include <common>, which
-    // is present in ALL Three.js standard material shaders (MeshBasicMaterial,
-    // MeshStandardMaterial, etc.). 'varying vec3 vViewPosition' only exists in
-    // MeshStandardMaterial — using that as an anchor breaks non-PBR materials.
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',

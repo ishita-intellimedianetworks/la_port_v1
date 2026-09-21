@@ -1,28 +1,10 @@
 "use client";
 
-/**
- * The single JSON blob the debug panel exports — everything the three stores
- * are driving, shaped so each top-level key is the site-file path it goes
- * back into.
- *
- * The point of it being ONE object is that a look is all three at once. Sun
- * bearing, sun intensity and exposure trade against each other constantly while
- * dialling, so a session that ends with three separate readouts to transcribe
- * ends with two of them stale.
- *
- * Read imperatively from `getState` rather than through hooks: the caller is a
- * Leva button, which fires outside React's render.
- */
-
 import { useGradeStore } from "@/shared/stores/grade-store";
 import { useLightsStore } from "@/shared/stores/lights-store";
 import { useSkyStore } from "@/terminal-v3/stores/sky-store";
 import type { ResolvedLights } from "@/shared/types";
 
-/** Fields the SKY derives while the dome is on, so a value pasted back into
- *  `scene.lights` for one of them is ignored at runtime (`envOverride` is
- *  merged over the config — see SceneLights). They stay in the export because
- *  they are a true record of what was rendered. */
 export const SKY_DERIVED: readonly (keyof ResolvedLights)[] = [
   "sunDirection",
   "sunColor",
@@ -31,9 +13,6 @@ export const SKY_DERIVED: readonly (keyof ResolvedLights)[] = [
   "hemiGroundColor",
 ];
 
-/** Rounded on the way out, not on the way in: the sliders already step in
- *  useful increments, and it is float noise from `t`-derived colours and angles
- *  that would otherwise put `0.5500000000000001` in a config file. */
 const r = (n: number, d = 4) => Number(n.toFixed(d));
 
 export function buildDebugJson(): string {
@@ -46,9 +25,6 @@ export function buildDebugJson(): string {
     t: r(s.t, 3),
     clouds: s.clouds,
   };
-  // Omitted entirely while the sun is on the arc — an absent `sun` block is
-  // what "follow the time of day" means, and writing one out that merely
-  // repeats the arc would freeze the sun the next time `t` is authored.
   if (s.sunUnlinked) {
     sky.sun = { azimuth: r(s.sunAzimuth, 1), elevation: r(s.sunElevation, 1) };
   }

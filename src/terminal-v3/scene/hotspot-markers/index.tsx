@@ -10,10 +10,6 @@ interface HotspotMarkersProps {
   hsSize?: number;
 }
 
-/**
- * The resource markers in the scene. What is drawn follows entirely from what
- * was picked in the Resources panel — never from proximity to the player.
- */
 export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const site = useSite();
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);

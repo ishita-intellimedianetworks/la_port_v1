@@ -10,10 +10,6 @@ interface UsePlayerStateOptions {
   initialZone: string;
 }
 
-/**
- * Creates and groups all mutable ref state for PlayerController.
- * Refs are stable across renders — only created once on mount.
- */
 export function usePlayerState({
   startPosition,
   startRotation,

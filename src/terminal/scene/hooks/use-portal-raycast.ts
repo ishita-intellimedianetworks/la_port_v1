@@ -1,15 +1,3 @@
-/**
- * usePortalRaycast
- * ─────────────────────────────────────────────────────────────────────────────
- * Single-click raycast that enters an interior. On click (not a drag) it
- * raycasts into the scene and, for each hit, walks UP the parent chain looking
- * for an Object3D whose name matches one of the active floor's
- * `transitions[].meshName`. First match → `onEnter(transition)`.
- *
- * Heavily logged under the `[portal]` tag so it's debuggable in the browser
- * console (the GLB node that owns a mesh is often a parent of the hit Mesh, so
- * the parent-walk + the "hit … (no match)" log tell you the real names).
- */
 import { useEffect, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
 import type { FloorTransition } from "@/shared/types";

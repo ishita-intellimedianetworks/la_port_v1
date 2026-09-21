@@ -26,16 +26,8 @@ async function loadAndExtractGLB(file: File): Promise<{
         const objects: ExtractedNode[] = [];
         const cameras: ExtractedNode[] = [];
 
-        // Force a full world-matrix pass before reading any world transforms.
-        // glTF nodes nested under groups (cameras parented to "rigs", layouts
-        // under floor groups, etc.) only have meaningful world positions /
-        // rotations after this — reading `node.position` alone returns the
-        // LOCAL transform and silently misreports the scene-space pose.
         gltf.scene.updateMatrixWorld(true);
 
-        // Scratch instances reused per node — extract-pos runs at most once
-        // per file upload so allocation cost is irrelevant, but reusing keeps
-        // the code one-shape with the runtime animator.
         const worldPos  = new THREE.Vector3();
         const worldQuat = new THREE.Quaternion();
         const worldEul  = new THREE.Euler();
@@ -43,10 +35,6 @@ async function loadAndExtractGLB(file: File): Promise<{
         gltf.scene.traverse((node: THREE.Object3D) => {
           node.getWorldPosition(worldPos);
           node.getWorldQuaternion(worldQuat);
-          // Decompose to an XYZ-order Euler. Matches the convention the
-          // cinematic / exterior camera-animation use to reconstruct
-          // quaternions from config rotation triples (see
-          // camera-waypoint-animator.ts CONFIG_EULER_ORDER).
           worldEul.setFromQuaternion(worldQuat, "XYZ");
 
           const data: ExtractedNode = {

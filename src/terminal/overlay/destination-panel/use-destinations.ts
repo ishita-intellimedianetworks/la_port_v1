@@ -15,15 +15,8 @@ export interface DestinationRow {
   etaLabel: string;
 }
 
-// World-unit → metre conversion for distance/ETA display. Single source in
-// nav-config (the whole site ≈ 10 km), shared with the turn HUD so all readouts
-// agree.
 const DEST_METERS_PER_UNIT = navConfig.logic.displayMetersPerUnit;
 
-// Distances are cached against the player's position quantised to this cell
-// size — reopening the sheet without meaningfully moving reuses the last
-// measured rows verbatim. 3 world units ≈ a few display-metres of drift, well
-// inside the labels' rounding.
 const CACHE_CELL = 3;
 
 interface RowCache {
@@ -32,16 +25,6 @@ interface RowCache {
   rows: DestinationRow[];
 }
 
-/**
- * Computes per-destination navmesh distance + walking ETA from the player's
- * current position, sorted nearest-first (unreachable last).
- *
- * All destinations are measured in ONE batch call (measurePathsTo — a single
- * Dijkstra pass over the navmesh settles every target), so the whole sheet
- * fills at once instead of row-by-row. Results are cached by player position
- * and pre-warmed while the sheet is CLOSED (shortly after spawn and after each
- * close), so opening it is typically an instant cache hit.
- */
 export function useDestinations(
   dests: Destination[],
   ctrlRef: RefObject<PlayerControllerHandle | null>,
@@ -68,17 +51,11 @@ export function useDestinations(
     const walkAllowed = (dest: Destination) =>
       !!dest.camera && !dest.teleportOnly && !fromTeleportOnly;
 
-    // Teleport-only destinations (authored flag) have no walking route by
-    // definition — skip their measure entirely. Same when the player is
-    // currently AT a teleport-only spot (no walking OUT of it).
     const walkableIdx: number[] = [];
     const targets: { x: number; eyeY: number; z: number }[] = [];
     dests.forEach((dest, i) => {
       if (walkAllowed(dest) && dest.camera) {
         walkableIdx.push(i);
-        // eyeY → measure to the destination's authored LEVEL. Without it a
-        // multi-level venue measures to whatever node sits nearest the
-        // PLAYER's height at that XZ — often the floor above/below the spot.
         targets.push({ x: dest.camera.position[0], eyeY: dest.camera.position[1], z: dest.camera.position[2] });
       }
     });
@@ -131,9 +108,6 @@ export function useDestinations(
     else runIdRef.current++;
   }, [active, refresh]);
 
-  // Pre-warm: while the sheet is closed, measure once in the background —
-  // shortly after spawn AND after each close (the player usually walked
-  // somewhere in between). The next open then hits the cache instantly.
   useEffect(() => {
     if (active || !dests.length) return;
     const t = setTimeout(() => {

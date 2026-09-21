@@ -3,13 +3,6 @@ import type * as THREE from "three";
 import type { Pathfinding } from "three-pathfinding";
 import type { RoomZone } from "../navmesh/geometry";
 
-/** Walk/measure/preview target. Y resolution (see usePathfinding):
- *  `y` (floor-level) wins; else `eyeY` (authored camera height — the
- *  controller subtracts its cameraHeight to get the floor); else the
- *  PLAYER's current floor Y. Destination callers should pass
- *  `eyeY: camera.position[1]` — on multi-level venues the fallback picks
- *  the endpoint node at the player's level, which can sit a whole floor
- *  above/below the destination (walked-to-the-overhang-then-snapped bug). */
 export interface NavTarget { x: number; y?: number; eyeY?: number; z: number }
 
 export interface PlayerControllerHandle {
@@ -19,13 +12,7 @@ export interface PlayerControllerHandle {
     onDone?: () => void,
   ) => boolean;
   stopNavigation: () => void;
-  /** Navmesh path length (world units) from the player to a point, WITHOUT
-   *  walking — for destination distance/ETA. Multiply by getMetersPerUnit() for metres.
-   *  Returns null when no walkable path exists. */
   measurePathTo: (pos: NavTarget, targetZone?: string) => number | null;
-  /** Batch measurePathTo: distances to MANY points with a single graph search
-   *  (one Dijkstra pass settles every target) — the Directions sheet measures
-   *  all destinations at once, instantly, instead of one A* per row. */
   measurePathsTo: (targets: NavTarget[], targetZone?: string) => (number | null)[];
   /** Compute + show a route to a point as a non-walking preview (drawn by the
    *  3D route ribbon). Returns false when no walkable path exists. */
@@ -45,24 +32,11 @@ export interface PlayerControllerHandle {
   getFootPosition: () => { x: number; y: number; z: number };
   /** Effective walk speed in world units/sec (base speed × current multiplier). */
   getSpeed: () => number;
-  /** Real-world metres per world unit, so path lengths can be shown as a
-   *  realistic human-walking distance/ETA (the camera fly speed is far faster
-   *  than a person walks, so it must NOT drive the displayed time). Derived
-   *  from the avatar eye height ≈ a real 1.6 m. */
   getMetersPerUnit: () => number;
   resetToStart: () => void;
   /** smooth=true plays a GSAP transition instead of snapping */
   teleportTo: (pos: [number, number, number], rot: [number, number, number], smooth?: boolean) => void;
-  /**
-   * Sample the navmesh surface Y directly below the given (x, z). Returns null if
-   * no triangle in the current zone contains the point. When stacked triangles
-   * are possible (multi-floor navmesh), pass `expectedY` to disambiguate by
-   * picking the candidate whose Y is closest. Result does NOT include cameraHeight.
-   */
   probeFloorY: (x: number, z: number, expectedY?: number) => number | null;
-  /** Nearest walkable point to `pos` (default: the player), as a FOOT position,
-   *  plus how far away it is. Null when the nav graph has no zone loaded.
-   *  `dist` is what tells a caller whether the player is standing off-mesh. */
   nearestNavPoint: (pos?: { x: number; y?: number; z: number })
     => { x: number; y: number; z: number; dist: number } | null;
   getCurrentZone: () => string;
@@ -74,24 +48,8 @@ export interface PlayerControllerHandle {
   getSpeedMultiplier: () => number;
   /** Start the one-round idle drift rotation. Called by TerminalExperience after the scene is revealed. */
   startIdleDrift: () => void;
-  /**
-   * Smoothly rotate the player (yaw only) to face a world-space XZ point.
-   * The existing per-frame yaw lerp animates the camera into place — no
-   * GSAP, just sets `yawT`. Pitch is unchanged.
-   */
   lookAtPoint: (target: { x: number; z: number }) => void;
-  /**
-   * Capture the current canvas as a PNG data URL. Renders the scene once just
-   * before reading the buffer so it works regardless of `preserveDrawingBuffer`.
-   * @param download — if true, also triggers a browser download of the image.
-   */
   captureScreenshot: (download?: boolean) => string;
-  /**
-   * Lock the look-drag to yaw only (pitch frozen at its current angle). Used by
-   * fly-over poses (aerial Parking view): the drag spins the top-down view
-   * around the vertical axis but can't tilt it away from straight-down. Any
-   * teleport or new walk clears the lock automatically.
-   */
   setPitchLock: (v: boolean) => void;
 }
 
@@ -99,10 +57,6 @@ export interface PlayerControllerProps {
   /** Walk gate: navmesh ready AND not in a cinematic. Enables pathfinding walk
    *  + floor-follow. */
   enabled?: boolean;
-  /** Look gate: player is in first-person and not in a cinematic, REGARDLESS of
-   *  navmesh. When true but `enabled` is false (e.g. no navmesh loaded yet), the
-   *  camera still follows drag/idle rotation so the user can look around — just
-   *  no walking. */
   lookEnabled?: boolean;
   speed?: number;
   cameraHeight?: number;
@@ -117,9 +71,6 @@ export interface PlayerControllerProps {
   roomZonesMap?: MutableRefObject<Map<string, RoomZone[]>>;
   /** Fired when the player enters a different named room zone */
   onRoomChange?: (id: string | null) => void;
-  /** Truncate A* routes at height-band / steep segments (see
-   *  FloorConfig.routeSanitize). Default true; pass false for venues with a
-   *  clean multi-level navmesh whose ramp routes legitimately change level. */
   routeSanitize?: boolean;
   debug?: boolean;
 }

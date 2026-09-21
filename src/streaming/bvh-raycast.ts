@@ -1,17 +1,6 @@
 import * as THREE from "three";
 import { MeshBVH, acceleratedRaycast } from "three-mesh-bvh";
 
-/**
- * Lazily-accelerated raycasting for streamed chunk meshes.
- *
- * Hundreds of chunks mount and unmount continuously, so building a bounds tree
- * per chunk on arrival costs more than it saves. Instead the cheap
- * bounding-sphere test runs first and only the few chunks a ray actually
- * crosses build a tree. The tree lives on the geometry, which `ChunkManager`
- * keeps in its CPU cache across unmount/remount, so a chunk pays at most once
- * per download.
- */
-
 type BvhGeometry = THREE.BufferGeometry & { boundsTree?: MeshBVH };
 
 const _sphere = new THREE.Sphere();

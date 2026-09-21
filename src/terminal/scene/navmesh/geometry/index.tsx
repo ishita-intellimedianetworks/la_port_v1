@@ -20,10 +20,6 @@ export interface FloorBounds {
   zMin: number; zMax: number;
 }
 
-// Extract all meshes from a GLTF scene
-//   geo       — all submeshes merged (used for pathfinding zones)
-//   firstBBox — bounding box of the FIRST mesh only (used for minimap bounds)
-//   roomZones — per-named-mesh zone data for room detection
 function extractGeo(scene: THREE.Group): {
   geo: THREE.BufferGeometry;
   firstBBox: THREE.Box3;
@@ -63,10 +59,6 @@ function extractGeo(scene: THREE.Group): {
   return { geo: merged, firstBBox, roomZones };
 }
 
-// Single-floor navmesh loader
-// Mirrors SingleModel: one GLB at a time, loaded for the active floor only.
-// When the active floor changes the parent re-keys this component, the old
-// GLB is released, and the new floor's navmesh is fetched and registered.
 interface SingleNavmeshProps {
   floorId: string;
   url: string;
@@ -82,11 +74,6 @@ interface SingleNavmeshProps {
   debug?: boolean;
 }
 
-// The navmesh ships inside the baked asset set, where it is Draco-compressed
-// (8 KB against the 305 KB raw export). Point drei at the decoder committed
-// under public/draco/ — its default is a gstatic CDN path, which would make an
-// otherwise self-contained app fetch a decoder from the internet to be able to
-// walk, and fail offline.
 const DRACO_PATH = "/draco/";
 
 function SingleNavmeshContent({
@@ -98,12 +85,6 @@ function SingleNavmeshContent({
 
   useLayoutEffect(() => {
     if (done.current || !scene?.children?.length) return;
-    // Force matrices to current. Without this, a freshly-mounted navmesh (e.g.
-    // after a floor swap) can still have stale matrixWorld values when this
-    // effect fires, and `applyMatrix4(mesh.matrixWorld)` inside extractGeo
-    // leaves the welded geometry in LOCAL coords. Floors authored at non-zero
-    // Y then end up at Y=0 in the Pathfinding zone — player sits above the
-    // navmesh and findPath returns no walkable path.
     scene.updateWorldMatrix(true, true);
     const result = extractGeo(scene);
     if (!result) return;
@@ -135,20 +116,11 @@ function SingleNavmeshContent({
 
   return (
     <>
-      {/* Invisible, but raycasters still traverse it (three tests meshes
-          regardless of visibility) — BVH keeps those wasted tests cheap on
-          dense navmeshes (the stadium's has 44k triangles). */}
       <Bvh firstHitOnly={false}>
         <primitive object={scene} visible={false} />
       </Bvh>
       {debugGeo && (
         <>
-          {/* Walkable surface — bright green fill, DEPTH-TESTED so the mesh
-              renders at its ACTUAL position in the scene (occluded by geometry
-              in front of it, floating/sunken spots read as such) instead of
-              being painted on top of everything. Double-sided + polygonOffset
-              so it stays readable from any viewpoint and wins the z-fight
-              against the floor it lies on. */}
           <mesh geometry={debugGeo} renderOrder={999}>
             <meshBasicMaterial
               color="#00ff88"
@@ -162,9 +134,6 @@ function SingleNavmeshContent({
               polygonOffsetUnits={-4}
             />
           </mesh>
-          {/* Triangle edges — shows the actual mesh structure (where corridors
-              end, what the bowl coverage really is). Depth-tested like the fill
-              so edges sit exactly on the walkable surface. */}
           <mesh geometry={debugGeo} renderOrder={1000}>
             <meshBasicMaterial
               color="#006644"

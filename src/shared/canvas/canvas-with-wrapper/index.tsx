@@ -8,16 +8,6 @@ import isLowPower from "@/shared/runtime";
 import { degradeGpuBudget } from "@/streaming/memory";
 import { filterCss, useGradeStore } from "@/shared/stores/grade-store";
 
-/**
- * On Windows, ANGLE cross-compiles our GLSL to HLSL and the D3D compiler leaves
- * X4122 constant-folding notes ("sum of 0.996094 and -2.98545e-017 cannot be
- * represented accurately in double precision") in the info log of programs that
- * linked *successfully* — three prints any non-empty log as a warning. 0.996094
- * is `UnpackDownscale` (255/256) from three's own packing.glsl, pulled in by the
- * shadow-map depth unpack, so there is nothing on our side to fix and no other
- * platform reports it. Recognised only when EVERY line of the log is an X4122
- * note, so a real driver complaint in the same log still gets through.
- */
 const isBenignShaderLog = (log: unknown) =>
   typeof log === "string" &&
   log.trim().length > 0 &&
@@ -26,9 +16,6 @@ const isBenignShaderLog = (log: unknown) =>
     .split("\n")
     .every((line) => line.trim() === "" || /\bwarning X4122\b/.test(line));
 
-// three r183 deprecated THREE.Clock, but @react-three/fiber (≤ 9.x) still
-// constructs one internally — nothing to act on until R3F v10. Drop that one
-// notice and the X4122 logs above; every other three log passes through.
 THREE.setConsoleFunction((type: string, message: string, ...params: unknown[]) => {
   if (type === "warn" && typeof message === "string") {
     if (message.startsWith("THREE.Clock: This module has been deprecated")) return;
@@ -38,17 +25,7 @@ THREE.setConsoleFunction((type: string, message: string, ...params: unknown[]) =
   fn(message, ...params);
 });
 
-
-/**
- * Exposure — the HDR half of the grade. Mounted inside the Canvas because it
- * needs the renderer; it renders nothing. `toneMappingExposure` is a uniform in
- * a pass three.js already runs, so it is free and acts before the range is
- * clipped, letting highlights roll off rather than clamp.
- */
 const GradeExposure: FunctionComponent = () => {
-  // Read the renderer out of the store inside the effect rather than
-  // `useThree(s => s.gl)`: don't mutate a hook's return value, and don't re-run
-  // on renderer churn unrelated to exposure.
   const store = useStore();
   const exposure = useGradeStore((s) => s.exposure);
   useEffect(() => {
@@ -63,9 +40,6 @@ const GradeExposure: FunctionComponent = () => {
 const FPS_CAP = 60;
 const FPS_CAP_LOW_POWER = 30;
 
-/** Rate-limits the render loop. Pairs with `frameloop="demand"`: rAF still ticks
- *  at panel rate but only invalidates on the interval, so the RENDER rate is
- *  capped. Other callers of `invalidate()` still get their frame at once. */
 const FrameLimiter: FunctionComponent<{ fps: number }> = ({ fps }) => {
   const store = useStore();
   useEffect(() => {
@@ -103,9 +77,6 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
   // One sun, shadow map frozen after a single render (see SceneLights). Off on
   // low-power devices.
   const lowPower = isLowPower();
-  // The LDR half of the grade, as a CSS filter on the canvas element — no
-  // post-processing pass needed. `undefined` while neutral, which keeps the
-  // canvas off its own composited layer.
   const brightness = useGradeStore((s) => s.brightness);
   const contrast = useGradeStore((s) => s.contrast);
   const saturation = useGradeStore((s) => s.saturation);
@@ -135,35 +106,16 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
             width: "100%",
             position: "relative",
             touchAction: "none",
-            // Grades the 3D image only — the glass UI and drei's Html portals
-            // are siblings, so they stay untinted. Device-independent on
-            // purpose: this is a DOM style, and branching it on isLowPower()
-            // mismatches hydration (SSR has no window and answers false).
             filter,
           }}
           gl={{
-            // ON EVERYWHERE, as it was before the memory work. It was briefly
-            // off on low power to reclaim the ~20 MB multisample attachment,
-            // and turning it back on lost the context twice — but that was at
-            // 208 MB resident. The fog radius took the phone to 164 MB, so the
-            // attachment now fits with room to spare, and a phone at DPR 1.25
-            // on a 3x panel is the device that needs edge AA most.
             antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
-            // Per-fragment, and a phone is fill-bound first. Off there:
-            // highlights clip instead of rolling off, and `toneMappingExposure`
-            // goes inert with it.
             toneMapping: lowPower ? THREE.NoToneMapping : THREE.NeutralToneMapping
           }}
-          // Paired with FrameLimiter above: R3F draws only when invalidated, and
-          // that component is what invalidates, on an interval. Without the
-          // limiter this must go back to "always" or the scene freezes.
           frameloop="demand"
           id="canvas-wrapper"
           onCreated={({ gl }) => {
-            // A lost context stops the render loop silently: the progress bar
-            // is written from inside it, so the loading screen just freezes.
-            // three says nothing on the way down, so say it here.
             const canvas = gl.domElement;
             const onLost = (e: Event) => {
               // Halve the streamer's GPU ceiling and keep it halved — a loss is

@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * /admin/bounds — render the model top-down, then calibrate the site aerial
- * against that render.
- *
- *   1. RENDER    through an ortho frustum locked to the bbox, so the PNG is 1:1
- *                with world coordinates by construction (render-floor.ts). Copy
- *                the `map.plan` block out with it.
- *   2. CALIBRATE by laying the render over the aerial and lining up the quay
- *                (calibrate.ts).
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
 import { getSite, SITE_IDS, type SiteId } from "@/config";
@@ -22,12 +11,6 @@ import {
   calibrate, initialPlacement, planJson, scalePlacement, toJson, type Placement,
 } from "./calibrate";
 
-/**
- * WHICH MODEL is being calibrated. Each one has its own site file, its own GLB
- * and its own baked manifest, so the tool asks rather than assuming: this page
- * sits outside the routes, so there is no `SiteProvider` above it to inherit an
- * answer from.
- */
 function modelUrlsFor(id: SiteId) {
   const scene = getSite(id).scene;
   const slug = scene.stream?.slug ?? "";

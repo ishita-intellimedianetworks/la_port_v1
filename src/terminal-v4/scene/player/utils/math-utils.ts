@@ -11,12 +11,6 @@ export function lerpAngle(a: number, b: number, t: number): number {
   return a + d * t;
 }
 
-/**
- * Moves angle `a` toward `b` via the shortest arc at a fixed rate.
- * Unlike lerpAngle (exponential — fast start, slow finish), this advances
- * by exactly `maxDelta` radians per call, giving a constant-speed turn that
- * feels natural and never "snaps" regardless of the angular difference.
- */
 export function lerpAngleClamp(a: number, b: number, maxDelta: number): number {
   const d = ((((b - a) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
   if (Math.abs(d) <= maxDelta) return b;

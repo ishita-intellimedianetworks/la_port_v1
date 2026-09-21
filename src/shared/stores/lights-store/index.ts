@@ -1,14 +1,6 @@
 import type { ResolvedLights } from "@/shared/types";
 import { createStore } from "../create-store";
 
-/**
- * Bridges the in-canvas lights with any out-of-canvas lighting controls.
- *
- * A venue that asks for live controls seeds this store with its resolved
- * values; the scene then renders from `values` instead of the static config.
- * Seeding is keyed on the venue so switching venues reloads that venue's values
- * and never clobbers another's live edits.
- */
 export type LightsState = {
   /** True when the active venue requested live controls. */
   enabled: boolean;
@@ -24,41 +16,11 @@ export type LightsState = {
   /** Environment modes hide the drifting cloud layer, which reads as daytime. */
   cloudsHidden: boolean;
 
-  /**
-   * The `?debug=true` panel's edits — the LAST word on every field it names.
-   *
-   * It has to sit above `override` and above the sky's own `envOverride`, and
-   * that ordering is the whole reason it is a separate layer rather than writes
-   * into `values`: `values` is merged UNDER the sky, so a hand-set
-   * `sunIntensity` there is silently replaced by `<site>.json › sky.lights` on
-   * the very next render, and the panel would appear not to work.
-   *
-   * Sparse on purpose. Only the fields actually touched are present, so
-   * everything else keeps flowing from the config and the sky — move the
-   * time-of-day slider after setting `sunIntensity` and the tint still
-   * follows the palette while the intensity stays put.
-   */
   debug: Partial<ResolvedLights> | null;
 
-  /** The panel's shadow toggle, or null while it has not touched it. Separate
-   *  from `shadows` for the same reason `debug` is separate from `values`:
-   *  `shadows` is only consulted when the venue opted into `lights.controls`,
-   *  and the debug panel has to work on every venue. */
   debugShadows: boolean | null;
 
-  /**
-   * What SceneLights ACTUALLY rendered last, every layer resolved.
-   *
-   * The panel is downstream of a merge it does not perform (defaults → venue →
-   * sky → override → debug), so without this it could only show the sparse
-   * values it set itself and would have nothing to put in the JSON for the
-   * rest. SceneLights publishes here; the panel reads. Null until first render.
-   */
   resolved: ResolvedLights | null;
-  /** Whether the sun is actually CASTING, alongside `resolved`. Not part of
-   *  `ResolvedLights` (it is a scene-level prop, not a light value), and the
-   *  panel cannot infer it: `shadows` is false on floors like the stadium, so
-   *  defaulting the checkbox to on would mislabel them. */
   resolvedShadows: boolean;
 
   /** (Re)seed for a venue. Seeding the same venue again only updates `enabled`,
@@ -78,10 +40,6 @@ export type LightsState = {
   publishResolved: (values: ResolvedLights, shadows: boolean) => void;
 };
 
-/** True when `a` and `b` have the same keys with the same values, one level
- *  deep. `publishResolved` runs on every re-render of SceneLights and would
- *  otherwise write a new object each time — which re-renders the panel, which
- *  is subscribed to it. This is what makes that loop terminate. */
 function sameValues(a: ResolvedLights | null, b: ResolvedLights) {
   if (!a) return false;
   const ak = Object.keys(a) as (keyof ResolvedLights)[];

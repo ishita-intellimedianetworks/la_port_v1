@@ -1,36 +1,5 @@
 "use client";
 
-/**
- * NavPath3D
- * ─────────────────────────────────────────────────────────────────────────────
- * Renders the active navigation route INSIDE the 3D model — the same route the
- * 2D minimap draws:
- *
- *   • a thin blue route line (bright-blue core + darker-blue casing edge),
- *     the SAME blue as the 2D minimap line
- *   • a small real 3D pin (sphere head + cone tip) that floats just above the
- *     destination with a gentle bob, plus a small ground ring marking the spot
- *
- * It reads the live path straight from the PlayerController handle each frame
- * (getFootPosition + getPath3D), so the route shrinks as the player walks and
- * disappears the instant navigation ends — no React state, no re-renders.
- *
- * SIZING — real-world metres, NOT model bounds.
- * The whole-model bounding radius is huge (the village/stadium), while the
- * walkable area is a tiny part of it, so radius-scaled visuals came out far too
- * big. Instead everything is sized in metres via getMetersPerUnit (1 metre =
- * 1/mpu world units) so the line/pin/ring stay human-scale in any model.
- *
- * DEPTH: the ribbon, ring and the pin's solid pass are depth-tested so they
- * sit AT their place in the world (occluded by geometry in front — crucial on
- * multi-level venues where always-on-top markers show through whole floors).
- * A faint depthTest-off ghost of the pin remains as the through-walls locator.
- *
- * Per-frame mutation lives in `paintNavFrame` — a plain (non-hook) function, so
- * its parameters are exempt from react-hooks/immutability (same pattern as
- * useWalkFrame's runWalkFrame).
- */
-
 import { useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -50,30 +19,10 @@ const _ray = new THREE.Raycaster();
 const _down = new THREE.Vector3(0, -1, 0);
 const _origin = new THREE.Vector3();
 
-/** Cache of resolved ground Ys for the path's fixed waypoints, keyed by the
- *  waypoint's XZ POSITION (not by a whole-path signature): getPath3D() returns
- *  only the REMAINING waypoints, so a signature key changed at every corner
- *  (pathI advance) and re-raycast the entire rest of the route in one frame —
- *  a multi-second hang at every turn on big models. Positional keys survive
- *  route shrinking (and repeat visits to the same corridor) untouched.
- *  The foot point (index 0) moves every frame, so its ground-Y is cached too and
- *  only re-probed once the player has moved past FOOT_REPROBE_DIST — raycasting
- *  the whole scene 60×/s for the foot is the main walk-jank source on big models. */
 interface FloorCache { ys: Map<string, number>; footX?: number; footZ?: number; footY?: number; }
 
-/** Max UNCACHED waypoint ground-probes resolved per frame. A fresh route warms
- *  its cache over a few frames (unresolved points draw at the navmesh Y until
- *  their raycast lands) instead of bursting N whole-scene raycasts in one frame.
- *  12 (not 6): the densified polyline has ~2.5× the points of the raw route,
- *  and the model's BVH makes each ray cheap. */
 const MAX_GROUND_PROBES_PER_FRAME = 12;
 
-/** Positional cache key, quantised to 0.25 world units. Coarser than the old
- *  cm key on purpose: the densified polyline (see the resample block in
- *  paintNavFrame) includes samples derived from the MOVING foot segment — a
- *  cm-precision key would mint a new cache entry every frame for those, churn
- *  the probe budget and flood the Map. Ground height barely changes over
- *  25 cm, so nearby samples sharing an entry is fine. */
 const yKey = (x: number, z: number) => `${Math.round(x * 4)},${Math.round(z * 4)}`;
 
 /** Densified polyline scratch (module-level — single NavPath3D instance). */
@@ -81,34 +30,14 @@ const _px = new Float32Array(MAX_POINTS);
 const _py = new Float32Array(MAX_POINTS);
 const _pz = new Float32Array(MAX_POINTS);
 
-/** Resample spacing along the route, in metres. String-pulled waypoints can be
- *  15–30 m apart on the stadium; a single straight chord between two such
- *  points FLIES over ramps/stairs (the surface curves, the chord doesn't).
- *  A ground-probed sample every few metres makes the ribbon hug the floor. */
 const SUBDIV_M = 3;
 
 // How far (world units) the foot must move before the per-frame ground raycast
 // is run again. Between probes the last ground-Y is reused.
 const FOOT_REPROBE_DIST = 0.4;
 
-/** How far (world units, ≈ metres) a visible-surface hit may sit from the
- *  route's own navmesh Y and still be used. The navmesh Y is AUTHORITATIVE —
- *  it's the height the walk itself follows (and what the debug route line
- *  draws) — the raycast only fine-snaps the ribbon onto the rendered surface
- *  (navmesh authored a touch above/below the visible floor, welded-seam
- *  inflation). A wide window let the ribbon fall through gaps in the visible
- *  floor (escalator voids, railing slots) onto the storey BELOW — the blue
- *  path diverging from the debug line it should match. */
 const GROUND_SNAP_BAND = 2.5;
 
-/**
- * Fine-snap (x, z) onto the visible model near the route's own Y. Returns the
- * visible-surface hit CLOSEST to fallbackY within ±GROUND_SNAP_BAND; when no
- * surface is that close (hole in the mesh, overhang-only hits, off-model), the
- * navmesh Y wins — the ribbon then draws exactly where the walk goes. The
- * navmesh itself is invisible (skipped) and the route/pin meshes have raycast
- * disabled, so hits are real rendered ground.
- */
 function groundYAt(scene: THREE.Scene, x: number, z: number, fallbackY: number): number {
   _origin.set(x, fallbackY + 200, z);
   _ray.set(_origin, _down);
@@ -137,10 +66,6 @@ function hexRgb(hex: string): string {
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
 }
 
-// In-scene turn arrow (AR car-HUD style)
-// A single floating arrow placed at the NEXT bend in the route, pointing the way
-// you'll head after the turn — like a heads-up nav arrow over the road. Sized in
-// metres (scaled by W at runtime).
 const TURN_ARROW_SIZE_M = 1.7;
 const TURN_ARROW_LIFT_M = 1.9;
 const TURN_MIN_DEG = navConfig.logic.turnMinDeg;
@@ -214,11 +139,6 @@ function buildSetup(): NavSetup {
     map: routeTex,
     transparent: true,
     depthWrite: false,
-    // Depth-tested so the route is occluded by buildings and reads as lying on
-    // the ground (no see-through "swimming"). Safe now because the ribbon Y is
-    // raycast onto the VISIBLE floor (groundYAt), not the sunken navmesh — so it
-    // sits on the surface instead of being buried. polygonOffset wins the z-test
-    // against the floor it rests on.
     depthTest: true,
     polygonOffset: true,
     polygonOffsetFactor: -4,
@@ -248,12 +168,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
   const { ctrl, setup, ribbon, pin, ring, turnArrow, camera, scene, floorCache } = o;
   if (!ctrl || !ribbon) return;
 
-  // While walking, show the live shrinking route — but ONLY for walks started
-  // by choosing a destination (navHud, set by the destination sheet / transport
-  // / minimap-destination flows). Manual walks (3D double-click, plain minimap
-  // clicks) set navHud false and get no 3D route/pin. When idle, show a preview
-  // route if one has been set (destination card tap → preview, before
-  // "Directions") — that's also destination-driven by construction.
   const destDriven = useNavUiStore.getState().navHud;
   const pts = ctrl.isMoving()
     ? (destDriven ? ctrl.getPath3D() : [])
@@ -271,12 +185,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
   const width = M_LINE_W * W;
   const lift = M_LIFT * W;
 
-  // Full polyline = player feet → remaining waypoints, DENSIFIED into the
-  // module scratch arrays: a sample every ~SUBDIV_M metres (adaptive so it
-  // always fits MAX_POINTS), each dropped onto the visible floor below. The
-  // foot→first-waypoint samples are anchored FROM THE WAYPOINT END — the foot
-  // moves every frame but the waypoint doesn't, so those sample positions stay
-  // (nearly) fixed in world space and keep hitting the same cache entries.
   const foot = ctrl.getFootPosition();
   let n = 0;
   {
@@ -291,9 +199,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
       const w = pts[i];
       const segL = Math.hypot(w.x - cx, w.z - cz);
       if (i === 0) {
-        // Anchor from the fixed waypoint back toward the (moving) foot:
-        // sample at whole multiples of `step` measured from the WAYPOINT, in
-        // foot→waypoint order (largest distance first).
         for (let d = Math.floor((segL - 1e-6) / step) * step; d >= step - 1e-9 && n < MAX_POINTS - 1; d -= step) {
           const t = 1 - d / segL;
           _px[n] = cx + (w.x - cx) * t; _py[n] = cy + (w.y - cy) * t; _pz[n] = cz + (w.z - cz) * t; n++;
@@ -310,19 +215,10 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     }
   }
 
-  // Resolve each point's Y onto the VISIBLE floor (not the sunken navmesh).
-  // Waypoints are fixed world points → cached by POSITION so the cache survives
-  // the route shrinking as waypoints are passed; the foot (index 0) moves every
-  // frame so it's throttled by distance instead. Uncached waypoints resolve at
-  // most MAX_GROUND_PROBES_PER_FRAME per frame — beyond the budget they draw at
-  // the navmesh Y for a frame or two until their raycast lands.
   let probesLeft = MAX_GROUND_PROBES_PER_FRAME;
   if (floorCache.ys.size > 4096) floorCache.ys.clear();
   const resolveY = (i: number, x: number, fallbackY: number, z: number) => {
     if (i === 0) {
-      // Foot moves every frame — only re-raycast the scene once it has travelled
-      // past the threshold, otherwise reuse the cached ground-Y (huge per-frame
-      // saving while walking, especially with a large model in the scene).
       const fc = floorCache;
       if (fc.footX === undefined || fc.footY === undefined ||
           Math.hypot(x - fc.footX, z - fc.footZ!) > FOOT_REPROBE_DIST) {
@@ -390,11 +286,6 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
     pin.scale.setScalar(M_PIN * W);
   }
 
-  // Floating turn arrow at the NEXT bend (AR car-HUD style)
-  // A camera-facing arrow hovers above the next turn, tilted toward the turn
-  // side (↖ / ↗) — sleek, always-on-top, readable from a distance. Densified
-  // in-segment samples are collinear (bend angle ≈ 0) so the detection still
-  // fires only at real corners.
   if (turnArrow) {
     let turnIdx = -1;
     let isRight = false;
@@ -437,9 +328,6 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
 
-  // GPU resources built once. Used in render (geometry/material props) so they
-  // must be a useMemo value, not a ref. The per-frame buffer mutation lives in
-  // paintNavFrame (a plain function — exempt from react-hooks/immutability).
   const setup = useMemo(() => buildSetup(), []);
 
   useFrame((state) => {
@@ -463,44 +351,11 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
       {/* Route line — depth-tested; sits on the raycast ground. */}
       <mesh ref={ribbonRef} geometry={setup.geom} material={setup.routeMat} frustumCulled={false} renderOrder={998} visible={false} raycast={noRaycast} />
 
-      {/* In-scene turn arrow — floats over the next bend, pointing the way. The
-          group is positioned + oriented per frame; the child mesh lies flat.
-          Always-on-top (depthTest off) so it reads like a HUD nav arrow. */}
-      {/* Turn arrow — disabled for now. Re-enable by un-commenting; the
-          placement logic in paintNavFrame stays ready (no-ops while the ref is null).
-      <group ref={turnArrowRef} frustumCulled={false} visible={false}>
-        <mesh geometry={setup.arrowGeom} position={[0, -0.5, 0]} renderOrder={999} frustumCulled={false} raycast={noRaycast}>
-          <meshBasicMaterial color={TURN_ARROW_COLOR} transparent opacity={0.85} depthWrite={false} depthTest={false} side={THREE.DoubleSide} toneMapped={false} />
-        </mesh>
-      </group>
-      */}
-
-      {/* Ground ring at the destination spot (unit ring, scaled per frame).
-          DEPTH-TESTED so it reads as lying AT its spot (occluded by walls and
-          floors between you and it) — an always-on-top ring on a multi-level
-          venue showed through three storeys and looked pasted onto the screen.
-          polygonOffset wins the z-fight against the floor it rests on (and
-          against depth-writing decals like the crosswalk textures). */}
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} renderOrder={999} frustumCulled={false} visible={false} raycast={noRaycast}>
         <ringGeometry args={[0.62, 1, 40]} />
         <meshBasicMaterial color={navConfig.color.destRed} transparent opacity={0.85} depthWrite={false} depthTest polygonOffset polygonOffsetFactor={-4} polygonOffsetUnits={-4} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
 
-      {/* Floating 3D pin — group origin at the tip (y=0), cone points down.
-          TWO passes per shape:
-            • solid pass — depth-tested, so the pin sits AT its place in the
-              world and is properly occluded by geometry in front of it
-              (always-on-top made it read like a screen-space "look at" marker
-              floating through every level of the stadium);
-            • ghost pass — faint, depthTest off, drawn under the solid — the
-              through-walls locator hint, subtle enough not to read as the pin
-              itself. Raycast disabled on all so the ground sampling at the
-              destination XZ hits the floor, not the pin.
-          `transparent` is REQUIRED even on the solid pass: an alpha-textured
-          decal baked into the GLB (e.g. a crosswalk) draws in the transparent
-          pass, which runs AFTER opaque — an opaque pin would be painted over
-          despite passing the depth test. Transparent + renderOrder 999 keeps
-          the solid pin drawn last, on top of decals. */}
       <group ref={pinRef} frustumCulled={false} visible={false}>
         {/* ghost (through-walls hint) */}
         <mesh position={[0, 0.75, 0]} rotation={[Math.PI, 0, 0]} renderOrder={998} frustumCulled={false} raycast={noRaycast}>

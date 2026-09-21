@@ -1,9 +1,5 @@
 "use client";
 
-/**
- * TerminalUiContext — shared context + hook for the split interior pieces.
- */
-
 import { createContext, useContext } from "react";
 import type {
   FloorConfig,
@@ -36,9 +32,6 @@ export interface SceneGraphData {
     p: [number, number, number],
     r: [number, number, number],
   ) => void;
-  /** Fired during the last ~240 ms of the dollhouse fly-in, so the blackout is
-   *  fully opaque by the time the camera lands and the model swap happens
-   *  behind it. */
   handleTransitionCue: () => void;
   setCinematicActive: (v: boolean) => void;
   setIsModelLoaded: (v: boolean) => void;
@@ -54,9 +47,6 @@ export interface TerminalUi {
   inlineMode: boolean;
   unitName?: string;
   hasDollHouse: boolean;
-  /** The /lighting dollhouse-first flow is active (see the provider prop).
-   *  Overlays use it to keep venue switching available while parked in a
-   *  dollhouse overview. False on / — its overlays are unchanged. */
   dollhouseFirstVisit: boolean;
   floors: FloorConfig[];
   furniture?: FurnitureConfig;
@@ -87,9 +77,6 @@ export interface TerminalUi {
   triggerFloorTransition: SceneContextValue["triggerFloorTransition"];
   playerControllerRef: SceneContextValue["playerControllerRef"];
   pendingLayoutEntryRef: SceneContextValue["pendingLayoutEntryRef"];
-  /** Plain data for the R3F children. Built fresh each provider render — read
-   *  it as a value, NOT via a ref, so it can't trip React's
-   *  "access ref during render" guard. */
   sceneContent: SceneGraphData;
 }
 

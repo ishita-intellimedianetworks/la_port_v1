@@ -1,34 +1,5 @@
 "use client";
 
-/**
- * The `?debug=true` lighting panel, as Leva controls.
- *
- * WHAT DRIVES WHAT
- * Nothing here owns state. Every input writes the store the renderer already
- * reads — `sky-store` for the dome, `lights-store` for SceneLights,
- * `grade-store` for the canvas — so the site file still decides what the page
- * LOADS with and this only overrides it for the run.
- *
- * Light edits land in `lights-store.debug`, a layer merged LAST. That is not
- * incidental: `values` (the old `lights.controls` path) is merged UNDER the
- * sky, so a `sunIntensity` set there is replaced by `sky.lights` on the next
- * render and the control looks broken. `debug` is also SPARSE — only fields
- * actually touched — so moving the time-of-day slider afterwards still re-tints
- * everything that has not been pinned.
- *
- * THE TWO-WAY PROBLEM
- * Leva owns its own state, and four of these values are DERIVED from the sky
- * every time `t` moves. So the sync runs both ways: user edits go out through
- * `onChange`, and the derived colours come back in through `set()` for as long
- * as they are unpinned. Every `onChange` is guarded on `ctx.fromPanel`, because
- * `set()` fires them too and without the guard the first sync would pin all
- * four colours by itself.
- *
- * Seeded from the first RESOLVED light set rather than from config, so the
- * sliders open on what is actually on screen. That is why the parent waits for
- * it before mounting this.
- */
-
 import { useCallback, useEffect, useRef } from "react";
 import { button, folder, useControls } from "leva";
 import { useGradeStore } from "@/shared/stores/grade-store";
@@ -42,10 +13,6 @@ import { buildDebugJson } from "./debug-json";
  *  ones that have to be pushed BACK into the panel, and the only ones. */
 const DERIVED = ["ambientColor", "hemiSkyColor", "hemiGroundColor", "sunColor"] as const;
 
-/** Elevation runs 15°..85° — exactly the palette's own clamps. Anything wider
- *  would be dead travel: the floor is shadow acne (a shadow map's depth error
- *  goes as 1/tan(elevation)), the ceiling is that a vertical sun casts its
- *  shadows straight down under everything. */
 const EL_MIN = 15;
 const EL_MAX = 85;
 
@@ -64,16 +31,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
   const resolved = useLightsStore((s) => s.resolved);
   const debug = useLightsStore((s) => s.debug);
 
-  /**
-   * Pushing values back INTO the panel, through a ref.
-   *
-   * The schema below is built once (leva memoises it), and several of its
-   * callbacks need to write back — so they would have to capture leva's `set`
-   * from a `const` declared after the very call that creates them. That works
-   * only because they fire later, which is the kind of thing that stops being
-   * true the moment someone reorders two lines. The ref is filled in after
-   * mount and every callback goes through this stable wrapper instead.
-   */
   const setRef = useRef<Setter>(() => {});
   const push = useCallback<Setter>((patch) => setRef.current(patch), []);
 
@@ -111,18 +68,12 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
       { collapsed: sky.getState().mode === "off" },
     ),
 
-    // Unlinked, `t` stops reaching the sun: these two angles place the disk
-    // drawn in the dome AND aim the shadow-casting light, which read one
-    // `sunAngles` answer and so cannot disagree. Colours stay on `t`.
     sun: folder({
       "unlink from time of day": {
         value: sky.getState().sunUnlinked,
         onChange: (v: boolean, _p: string, ctx?: { fromPanel?: boolean }) => {
           if (!ctx?.fromPanel) return;
           sky.getState().setSunUnlinked(v);
-          // Unlinking seeds the angles from where `t` has the sun, so nothing
-          // jumps — push those back into the panel or it would keep showing
-          // whatever the sliders happened to be on.
           const a = sunAnglesForT(sky.getState().t);
           push({ azimuth: a.azimuth, elevation: a.elevation });
         },
@@ -154,11 +105,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
       "sun vector": { value: fmtVec(seed.sunDirection), editable: false },
     }),
 
-    // The HDRI is a photograph with its own sun baked in at a fixed bearing, and
-    // it supplies the reflections plus a large share of the fill. Nothing about
-    // moving the procedural sun moves it — so without this yaw the two suns sit
-    // wherever they happen to, and the model reads as lit from a direction with
-    // no sun over it.
     environment: folder({
       "env intensity": {
         value: seed.envIntensity,
@@ -175,9 +121,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
         hint: "spins the HDRI so its baked-in sun lines up with ours",
         onChange: light("envRotation"),
       },
-      // One-shot rather than a live link: where the HDRI's own sun sits is a
-      // property of the image and cannot be derived, so this only gets you to
-      // the same bearing — nudge from there, then paste the number back.
       "match sun": button(() => {
         const v = sky.getState().sunUnlinked
           ? sky.getState().sunAzimuth
@@ -197,9 +140,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
         onChange: light("ambientIntensity"),
       },
       ambientColor: { value: seed.ambientColor, label: "ambient colour", onChange: light("ambientColor") },
-      // Sky fill is a hemisphere light: full strength on up-facing surfaces,
-      // ground colour underneath. It is what keeps the away-from-sun side off
-      // black — raising ambient instead flattens the lit side into paper.
       "sky fill": {
         value: seed.hemiIntensity,
         min: 0,
@@ -319,10 +259,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
       { collapsed: true },
     ),
 
-    // `exposure` is a renderer uniform applied in HDR BEFORE tone mapping — it
-    // is free and its highlights roll off. The other three are a CSS filter over
-    // the finished 8-bit image: a full-screen composite that can band, and which
-    // is not emitted at all while all three are 0.
     grade: folder({
       exposure: {
         value: gradeSeed.exposure,
@@ -380,11 +316,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     }),
   }));
 
-  // Leva's `set` takes FLAT leaf keys — `folder()` namespaces the store path but
-  // not the key you address, and it warns on duplicates across folders, which is
-  // why every key above is unique. Its TYPE only sees the keys it can pull back
-  // out through `FolderInput`, so the cast is the honest way to say "leva's own
-  // typing is narrower than leva".
   useEffect(() => {
     setRef.current = setTyped as unknown as Setter;
   }, [setTyped]);

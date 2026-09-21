@@ -24,24 +24,11 @@ interface UseSceneLoadingOptions {
   onLoaded: () => void;
   sharedUniforms?: SharedUniforms;
   previewReady: boolean;
-  /** True when the point-cloud preview path is active. The crossfade is then
-   *  DEFERRED until the smoothed HUD bar (revealProgress) catches up to ~100%
-   *  — Smart-Loader V2 demo behavior: the cloud finishes filling in at the
-   *  bar's pace first, then the mesh dithers in over it. Without a preview
-   *  the crossfade fires immediately once the gates open. */
   progressDrivenReveal: boolean;
   onRevealStart?: () => void;
   onRevealDone?: () => void;
 }
 
-/**
- * Manages loading for SceneContent:
- * - Single-floor navmesh zone registration (only the ACTIVE floor's zone
- *   exists at any time)
- * - Single-model loaded gate
- * - Delegates minimap bounds to useMinimapBounds
- * - Triggers crossfadeReveal once everything is ready, then calls onRevealDone
- */
 export function useSceneLoading({
   floors: _floors,
   pathfinding,
@@ -67,19 +54,12 @@ export function useSceneLoading({
 
   const modelLoadedCount = useRef(0);
   const [allModelsLoaded, setAllModelsLoaded] = useState(false);
-  // Latest GLB key whose onLoaded has fired. Drives the furniture-toggle
-  // setup in SceneContent — that effect waits for `latestLoadedKey ===
-  // currentModelKey` so the swap only runs against the model that's actually
-  // committed to the scene (no race with the prior floor's leftover meshes).
   const [latestLoadedKey, setLatestLoadedKey] = useState<string | null>(null);
 
   const { setFloorBounds, setModelBounds } = useMinimapBounds({
     activeFloor, navReady, setMinimapData,
   });
 
-  // Navmesh zone registration
-  // Re-register when the active floor's navmesh remounts. navReady becomes
-  // false on every floor switch and flips true again once the new zone is set.
   const handleZoneReady = useCallback((floorId: string) => {
     setRegisteredFloorId(floorId);
     setNavReady(true);
@@ -90,10 +70,6 @@ export function useSceneLoading({
     onReady: handleZoneReady,
   });
 
-  // Floor change → invalidate navReady until the new zone registers
-  // The active-floor teleport effect in use-scene-navigation gates on
-  // navReady; resetting it here makes that effect wait for the new floor's
-  // navmesh GLB to load + register before snapping the player onto it.
   useEffect(() => {
     if (registeredFloorId !== null && registeredFloorId !== activeFloor.id) {
       setNavReady(false);
@@ -105,11 +81,6 @@ export function useSceneLoading({
     [registerFloor],
   );
 
-  // Fire onLoaded + reveal callbacks once all gates are open
-  // `assetsWarmed` (the other venues' byte warm, fed by the provider) is a
-  // gate too — ARCHVIZ style: the crossfade only starts once the WHOLE loader
-  // is about to complete, so the point cloud stays up through the download
-  // and the user actually sees the model dither in as the HUD lifts.
   const assetsWarmed = useProgressStore((s) => s.assetsWarmed);
   const loadFired = useRef(false);
   useEffect(() => {
@@ -133,20 +104,9 @@ export function useSceneLoading({
           onRevealDoneRef.current?.();
         });
       }
-      // Progress-driven path (preview cloud present): setProgress(100) above
-      // releases the smoother's target to 1; the deferred-crossfade effect
-      // below fires once revealProgress has caught up.
     }
   }, [navReady, allModelsLoaded, previewReady, assetsWarmed, progressDrivenReveal, onLoaded]);
 
-  // Deferred crossfade for the preview path (Smart-Loader demo timing)
-  // The demo waits for its smoothed displayedProgress to reach ≥ 0.995 before
-  // revealMesh(): the cloud finishes filling in at the bar's pace, holds for
-  // a 300ms beat, then the mesh dithers in over 3.5s while the cloud fades
-  // out (same uniform). revealProgress can't reach 0.995 before the gate
-  // above fires (the smoother's target is capped below 1 until
-  // setProgress(100)), so gating on it alone is safe — loadFired is checked
-  // anyway for clarity.
   const revealCaughtUp = useProgressStore((s) => s.revealProgress >= 0.995);
   const crossfadeFired = useRef(false);
   useEffect(() => {
@@ -177,9 +137,6 @@ export function useSceneLoading({
         cache[key] = {
           onLoaded: () => {
             modelLoadedCount.current++;
-            // queueMicrotask defers BOTH state updates out of the GLTF effect
-            // chain so React's "Cannot update X while rendering Y" warning
-            // doesn't fire when downstream consumers re-render.
             queueMicrotask(() => {
               setAllModelsLoaded(true);
               setLatestLoadedKey(key);

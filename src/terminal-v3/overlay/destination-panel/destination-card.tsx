@@ -8,9 +8,6 @@ import type { DestinationRow } from "./use-destinations";
 // readable as small text over the dark glass panel.
 const HERE_BLUE = "#2997FF";
 
-/** Crowd tier → dot colour (red heavy · yellow moderate · blue clear) — shown
- *  inline on cards whose destination carries an authored `crowd` level (the
- *  memorial gates), replacing the separate Crowd Flow category. */
 export const CROWD_DOT: Record<string, string> = {
   high: "#ff453a",
   med: "#ffd60a",
@@ -32,12 +29,6 @@ interface RowBodyProps {
   here?: boolean;
 }
 
-/**
- * Shared card row (design): a leading circular pin tile, the name with the
- * walk time UNDER it (footprints + eta), and on the right the bold distance
- * over a disclosure chevron. The "You're here" row swaps the eta line for a
- * blue marker and drops the distance column.
- */
 export function DestinationRowBody({ row, selected, icon: Icon, here = false }: RowBodyProps) {
   const { dest, distLabel, etaLabel } = row;
   return (
@@ -98,9 +89,6 @@ export function DestinationRowBody({ row, selected, icon: Icon, here = false }: 
         )}
       </div>
 
-      {/* Bold distance over a disclosure chevron — hidden when already here.
-          Teleport-only destinations (fly-overs, off-mesh spots) have no
-          walking distance, so no "—" placeholder either; just the chevron. */}
       {!here && (
         <div className="flex shrink-0 flex-col items-end gap-0.5">
           {row.meters != null && (
@@ -125,15 +113,9 @@ interface DestinationCardProps {
   now: number;
   /** The player is standing at this destination — shows the blue "You're here" card. */
   here?: boolean;
-  /** Walk-in interior (the Athletes' Hostel): renders an "Explore from inside"
-   *  action ON the "You're here" card — the standing-at destination never opens
-   *  the directions view, so this card is the only panel surface it can live on. */
   onExploreInside?: () => void;
 }
 
-/** A result card in the list (design: each row is a visible dark card with a
- *  gap to its neighbours). The row the player is standing at is a solid blue
- *  "You're here" card and is non-interactive. */
 export function DestinationCard({ row, onSelect, icon, here = false, onExploreInside }: DestinationCardProps) {
   if (here) {
     return (

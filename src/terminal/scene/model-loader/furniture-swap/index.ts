@@ -44,11 +44,6 @@ export function setupFurnitureToggle(
     }
   });
 
-  // PHASE 2 — For every textureSwap entry:
-  //           a) collect meshes that have the KEY material
-  //           b) grab the carrier mat from the mesh that has the VALUE material
-  //           c) swap all key-meshes → carrierMat  (initial OFF state)
-  //           d) store originalMat per mesh so toggle can restore it
   const store = new Map<string, {
     meshes: { mesh: THREE.Mesh; originalMat: StdMat }[];
     carrierMat: StdMat | null;
@@ -103,14 +98,6 @@ export function setupFurnitureToggle(
       }
     });
 
-    // Furniture group visibility (hide/show the geometry).
-    // Match the group name the SAME way materials are matched (`matchesKey`):
-    // exact after normalisation, plus numbered duplicates (kitchen001…). We
-    // deliberately do NOT substring-`includes` here — that made a "kitchen"
-    // group also swallow "kitchen door" (normalised "kitchendoor" contains
-    // "kitchen"), hiding the door whenever the kitchen group toggled. Exact
-    // matching keeps siblings like the kitchen door visible while still
-    // hiding the kitchen group (and its real children via the inner traverse).
     if (groups.length) {
       const patterns = groups.map(norm);
       scene.traverse((obj) => {

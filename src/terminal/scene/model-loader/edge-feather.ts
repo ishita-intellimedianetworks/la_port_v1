@@ -1,22 +1,5 @@
 import * as THREE from "three";
 
-/**
- * Dollhouse "soft edge" feather — the model's outer rim dissolves into the
- * (black) dollhouse background, like the reference's exterior soft-edge meshes,
- * but done globally on the whole model via a fragment-shader fade (no post-
- * processing). Adapted from ARCHVIZ's `softenEdges`: instead of fading the
- * material's ALPHA (which would force the whole city into the transparent queue
- * and cause depth-sort artifacts), it mixes the colour toward black toward the
- * rim and stays OPAQUE — same look against the black dollhouse backdrop.
- *
- * The footprint is a SQUARE/rectangle, so the falloff is a BOX (max of the X and
- * Z distances to the centre, normalised by the half-extents) — every edge fades
- * evenly, not a circle that would over-fade the corners.
- *
- * `edgeFeather.enabled` is shared into every patched shader's `uEdgeEnabled`
- * uniform and read live each frame, so it can be turned ON in the dollhouse and
- * OFF in first-person with no recompile (a plain value flip).
- */
 export const edgeFeather = { enabled: { value: 0 } };
 
 // Where the edge fade begins, as a fraction of the half-extent (0..1).
@@ -40,9 +23,6 @@ export function softenModelEdges(
         __edgeSoftened?: boolean;
         onBeforeCompile?: THREE.Material["onBeforeCompile"];
       };
-      // GLBs share materials across meshes — patch each once or the varying gets
-      // redeclared (GLSL compile error). Chains onto any existing onBeforeCompile
-      // (e.g. the reveal dither patch) rather than overwriting it.
       if (m.__edgeSoftened) continue;
       m.__edgeSoftened = true;
       const prev = m.onBeforeCompile;

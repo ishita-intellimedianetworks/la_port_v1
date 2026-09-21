@@ -1,14 +1,5 @@
 import * as THREE from 'three';
 
-/**
- * Decoder for the .preview.bin format produced by holotwin-bake.cjs.
- *
- * Format (LE):
- *   Header (16): "HTWN" | uint32 version=1 | uint32 pointCount | uint32 flags=0
- *   Bounds (24): float32 minX,minY,minZ,maxX,maxY,maxZ
- *   Points  (8 per): uint16[3] quantized pos | int8[2] octahedral normal
- */
-
 export interface PreviewBin {
   geometry: THREE.BufferGeometry;
   pointCount: number;
@@ -62,14 +53,6 @@ export function parsePreviewBin(buf: ArrayBuffer): PreviewBin {
   };
 }
 
-/**
- * Concatenate several PreviewBin parts into one — used to unify multi-floor
- * previews so they reveal/crossfade as a single point cloud sharing one
- * material (one uTime, one uReveal). Bounds are the union of all parts.
- *
- * Parts must already be in the same world coordinate space (the baker
- * preserves the source GLB's world transform, so stacked floors line up).
- */
 export function mergePreviews(parts: PreviewBin[]): PreviewBin {
   if (parts.length === 0) throw new Error('mergePreviews: no parts');
   if (parts.length === 1) return parts[0];

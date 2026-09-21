@@ -1,31 +1,5 @@
 "use client";
 
-/**
- * useMinimapBounds
- * ─────────────────────────────────────────────────────────────────────────────
- * Resolves minimap bounds for the active floor from the model's XZ bbox.
- *
- * Priority:
- *   model bbox (boundsUrl / modelUrl GLB) → navmesh bbox fallback.
- *
- * The "model bbox" here is whichever GLB the parent decided to wire up for
- * bounds measurement — typically the floor's `modelUrl`, but when a floor
- * authors a separate `boundsUrl` (a clean this-floor-only GLB used purely
- * for bbox measurement) the parent mounts that one and routes its bbox
- * through the same setter.
- *
- * The click→world mapping in `use-minimap.ts` is a linear interpolation from
- * (0..lb.dw, 0..lb.dh) → (minX..maxX, minZ..maxZ). For that mapping to be
- * accurate, the floor-plan PNG MUST be a top-down orthographic render whose
- * frame matches the bbox exactly — same XZ extents, same aspect ratio, no
- * padding/crop. See the asset requirements documented next to the
- * `boundsUrl` / `floorPlanUrl` fields in scene-config.
- *
- * Image orientation: the published bounds swap both axes (minX←maxX,
- * minZ←maxZ), encoding the 180° rotation between world XZ and PNG pixel
- * space that the rest of the pipeline expects.
- */
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { FloorConfig } from "@/shared/types";
@@ -53,11 +27,6 @@ export function useMinimapBounds({
     floorBoundsRef.current = bounds;
   }, []);
 
-  // Store model bounds when a model reports them.
-  // The version bump is what makes the minimap re-resolve, so it must happen
-  // ONLY on a real change. Bumping unconditionally turned every repeated report
-  // of identical bounds into a re-render — and the reporter re-runs whenever the
-  // model effect does, so the two fed each other.
   const setModelBounds = useCallback((floorId: string, bbox: THREE.Box3) => {
     const previous = modelBoundsMapRef.current[floorId];
     if (previous && previous.equals(bbox)) return;

@@ -1,17 +1,5 @@
 "use client";
 
-/**
- * SubcategoryRail — dropdown selector for the `segmentBy: "option"` categories
- * (memorial / stadium), where there can be many sub-categories (Layouts has 10).
- * Collapses to a single control showing the active sub-category (icon + label +
- * count); tapping opens the full list. Far more compact than a wrapping pill row.
- *
- * The open menu is PORTALED to <body> at a fixed position anchored to the
- * control, so the panel's `overflow-hidden` never clips it on short lists.
- *
- * Village categories (Dining "kind" / Practice "sport") keep SegmentRow.
- */
-
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -97,9 +85,6 @@ export function SubcategoryRail({ segments, active, onSelect }: SubcategoryRailP
 
   return (
     <>
-      {/* Collapsed control — solid accent fill like the Village SegmentRow's
-          active tab (same height rhythm and radius); icon/label/chevron all
-          white on blue. */}
       <button
         ref={btnRef}
         type="button"
@@ -129,9 +114,6 @@ export function SubcategoryRail({ segments, active, onSelect }: SubcategoryRailP
               left: rect.left,
               top: rect.top,
               width: rect.width,
-              // Fully OPAQUE — backdrop blur is unreliable over the WebGL
-              // canvas (see .ui-glass in globals.css), so any alpha lets the
-              // scene bleed through the menu.
               background: "rgb(24,28,35)",
               border: "1.5px solid rgba(255,255,255,0.16)",
               boxShadow: "0 14px 34px rgba(0,0,0,0.5)",

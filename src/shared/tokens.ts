@@ -11,10 +11,6 @@ export const tokens = {
     border: "rgba(255,255,255,0.08)",
   },
   duration: { fast: 0.2, base: 0.4, slow: 0.7 },
-  // Scene-entry UI choreography (interior + exterior). After a scene becomes
-  // visible (blackout cleared / fly landed) we hold for `delayMs` so the model
-  // reads alone for a beat, THEN slide the panels/bars in over `durationMs`.
-  // The Tailwind slide classes use `duration-[900ms]` to match `durationMs`.
   uiEntrance: { delayMs: 700, durationMs: 900 },
   ease: {
     out:  "power2.out",

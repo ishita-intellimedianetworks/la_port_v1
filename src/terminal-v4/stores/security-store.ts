@@ -2,18 +2,6 @@ import type { Site } from "@/config";
 import type { HotspotConfig, HotspotField } from "@/config/schema";
 import { createSeededStore } from "@/shared/stores/create-store";
 
-/**
- * One incident in the security layer's queue.
- *
- * Mirrors the handoff spec's §7 incident object. It lives HERE rather than in
- * `<site>.json` because an incident is not a property of the model: the demo
- * story creates one at step 4, acknowledges it at step 6 and resolves it at
- * step 7, with S08's counters following "in real time". The site file
- * describes what the terminal IS; this is what is happening in it now.
- *
- * `evidenceRefs[]` and `timeline[]` are named in §7 and deliberately absent:
- * nothing generates events yet, so there is nothing true to put in them.
- */
 export interface SecurityIncident {
   /** `SEC-DEMO-nnnn`. */
   id: string;
@@ -37,17 +25,6 @@ export interface SecurityIncident {
   assignedTeam: string;
 }
 
-/**
- * The six logical layers S08 toggles, from its Expected interaction: "Security
- * Mode toggles logical layers: ACCESS, CARGO, WATERSIDE, ANALYTICS, GEOFENCES,
- * INCIDENTS. Selecting a category highlights only demo entities/events in the
- * 3D model."
- *
- * A category is a property of the LAYER, not of the model, so the mapping lives
- * here beside the state that filters on it rather than in the site file. S08
- * itself has no category: it is the command view the toggles are hosted in, and
- * hiding it would take away the control being used.
- */
 export type SecurityCategory =
   | "access"
   | "cargo"
@@ -66,10 +43,6 @@ export const SECURITY_CATEGORIES: { key: SecurityCategory; label: string }[] = [
   { key: "incidents", label: "Incidents" },
 ];
 
-/**
- * Which hotspot belongs to which layer, per the spec's own feature names in §3
- * and §4. S08 is absent on purpose, as above.
- */
 export const CATEGORY_BY_HOTSPOT: Record<string, SecurityCategory> = {
   S01: "access",     // AI Access Control
   S02: "cargo",      // Container Security Screening
@@ -80,18 +53,6 @@ export const CATEGORY_BY_HOTSPOT: Record<string, SecurityCategory> = {
   S07: "incidents",  // Security Incident Management
 };
 
-/**
- * One demo event a presenter can fire, built from the spec's per-hotspot
- * "Expected interaction" lines.
- *
- * Each names both halves of what firing it does: the incident that reaches S07,
- * and the readings that change on the hotspot that raised it. Both follow the
- * spec's own words, so triggering S01's first variant produces exactly the
- * DENIED/LOCKED state its §4 entry describes rather than an invented one.
- *
- * These are DEFINITIONS, not state: a fixed table of what can be fired. What
- * has been fired lives in `incidents` and the hotspot readings.
- */
 export interface SecurityEventDef {
   /** Stable key, `<hotspotId>-<n>`, so a fired variant can be marked spent. */
   id: string;
@@ -116,31 +77,6 @@ export interface SecurityEventGroup {
   variants: SecurityEventDef[];
 }
 
-/**
- * What each hotspot can raise, grouped by hotspot.
- *
- * SEVERAL VARIANTS EACH, and every one stays inside the logic of the hotspot
- * that raises it: S01 only ever reports things a gate reader could refuse, S03
- * only things seen on the water, S06 only objects left in an aisle. A variant
- * that wandered outside its source would put a reading on that hotspot its
- * fields cannot express, and the demo would contradict itself on screen.
- *
- * Incident IDS ARE NOT HERE. They are allocated in fire order from
- * `INCIDENT_ID_START`, so the first event a presenter triggers is
- * SEC-DEMO-0041, the second 0042, and so on however they pick. Fixed ids would
- * have meant a queue numbered out of order, and the spec's own numbering
- * collides anyway (it cites SEC-DEMO-0042 for both S03 and S04).
- *
- * Timestamps ARE fixed strings, not `Date.now()`: they are what the demo
- * narrates, and a story that reads a different time on every load cannot be
- * rehearsed. The variants the spec authored (S04's intrusion, S06's unattended
- * object) keep its times; the rest follow the same afternoon so a queue of
- * several reads in a sensible order.
- *
- * ALL SYNTHETIC. The spec forbids encoding real credential logic, camera
- * coverage, patrol schedules or response routes, and nothing here describes a
- * real detection.
- */
 export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
   {
     hotspotId: "S01",
@@ -756,25 +692,9 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
   },
 ];
 
-/**
- * The field hotspots as a filter list: internal id plus the name an operator
- * sees.
- *
- * The id is the key, never the label. S01-S08 are references in this codebase
- * and must not reach the screen, so a filter chip reads "AI Video Analytics"
- * and matches on `sourceHotspotId` behind it.
- */
 export const SECURITY_SOURCES: { hotspotId: string; label: string }[] =
   SECURITY_EVENT_GROUPS.map((g) => ({ hotspotId: g.hotspotId, label: g.title }));
 
-/**
- * Is this one of the FIELD hotspots, S01-S06?
- *
- * The layer has two kinds. S01-S06 mark places on the terminal where something
- * can happen and can raise incidents; S07 and S08 are the command view, which
- * is where the demo is driven and read rather than a location. Several rules
- * split on that line, so it is named once here.
- */
 export const isFieldHotspot = (hotspotId: string): boolean =>
   SECURITY_EVENT_GROUPS.some((g) => g.hotspotId === hotspotId);
 
@@ -783,18 +703,6 @@ export const SECURITY_EVENTS: SecurityEventDef[] = SECURITY_EVENT_GROUPS.flatMap
   (g) => g.variants,
 );
 
-/**
- * One line in the audit history: something that happened, in order.
- *
- * §6 requires a resolved event to be "retained in timeline/audit history" and
- * §7 gives the incident a `timeline[]`. This is that record, kept for the whole
- * demo rather than per incident, so the log reads as one sequence of what the
- * presenter did: triggered, acknowledged, escalated, resolved.
- *
- * Not displayed yet. It is recorded now because the moments it describes are
- * only observable as they happen, and a history that starts being kept later
- * cannot recover them.
- */
 export interface SecurityAuditEntry {
   /** Monotonic within a session, so entries sort stably even at equal times. */
   seq: number;
@@ -813,23 +721,9 @@ export interface SecurityAuditEntry {
   severity?: IncidentSeverity;
   /** Status after the action, for the lifecycle entries. */
   status?: IncidentStatus;
-  /** Wall-clock of the interaction, ISO. This is the one timestamp in the layer
-   *  that is real: it records when the presenter pressed the button, not the
-   *  synthetic event time the demo narrates. */
   at: string;
 }
 
-/**
- * One of the demo's security operators.
- *
- * SYNTHETIC, like everything else here: invented names for a demonstration, not
- * staff. The spec forbids encoding real security staffing, so these describe
- * nobody. They exist so a log reads as a record of work done by people rather
- * than as a list of state transitions.
- *
- * `initials` is what the avatar shows; `tone` picks its colour, so the same
- * person is the same colour everywhere they appear.
- */
 export interface SecurityActor {
   name: string;
   initials: string;
@@ -860,141 +754,29 @@ export type SecurityAuditAction =
 
 /** §6's state contract, as the severities the counters group by. */
 export type IncidentSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-/** ACTIVE → INVESTIGATING on acknowledge, → RESOLVED on resolve (§5 steps 6-7).
- *  A resolved incident is KEPT, per §6: "Event retained in timeline/audit
- *  history." */
 export type IncidentStatus = "ACTIVE" | "INVESTIGATING" | "RESOLVED";
 
-/**
- * The Port Security demonstration layer: S01-S08.
- *
- * SEEDED FROM THE SITE FILE, THEN OWNED HERE. `securityHotspots[]` in
- * `<site>.json` is the opening position (anchors, labels and the readings each
- * popup shows at rest), and `init(site)` copies it in once. From that moment
- * the store is the source of truth: the demo mutates readings, raises
- * incidents and moves S08's counters, and none of that can be written back to
- * a file the app imports. Config answers "where does the demo start"; the
- * store answers "what is true now".
- *
- * Kept apart from `nav-ui-store` on purpose. That store is WAYFINDING: which
- * panel is open, what is selected, where the player is standing. This one is a
- * feature layer that switches on and off whole, which the spec requires
- * ("Security Mode can be enabled/disabled independently of the existing
- * operational H01-H30 layer"). Two stores means turning the layer off cannot
- * perturb the operator's position, open panel or selection.
- *
- * Everything here is SYNTHETIC. The spec forbids encoding real camera
- * positions, fields of view, credential rules, patrol schedules, response
- * routes or sensor coverage gaps. These are demo anchors on publicly
- * documented areas of the terminal, with DEMO naming and invented values.
- */
 export interface SecurityState {
-  /**
-   * Security Mode is on: the operator is at the executive overview with the
-   * security layer available.
-   *
-   * A MODE rather than a plain teleport, because turning it off has to put the
-   * operator back where they came from, which means the trip in is remembered.
-   */
   mode: boolean;
-  /**
-   * The layout Security Mode teleported AWAY from, so leaving can return there.
-   *
-   * Null while the mode is off, and also while it is ON but was entered from
-   * the overview itself, because then no trip happened and there is nothing to
-   * undo: the shield lights up and the camera stays put, so switching it off
-   * leaves the operator where they already are. Storing the overview as its own
-   * return would make the exit a teleport to where you are standing, blacking
-   * the screen out to arrive nowhere.
-   */
   returnLayoutId: string | null;
 
-  /**
-   * Which layout's security the mode is currently showing, or null while the
-   * management view is up.
-   *
-   * The mode has TWO levels. The shield opens the first: the security anchors
-   * belonging to the layout the operator was standing at, seen from their own
-   * CP. From there "Security management" opens the second, the executive
-   * overview with S07 and S08 on it. This is set on entry and KEPT across the
-   * trip to management, because it is what the Back button there returns to —
-   * a layout, at its security anchor's viewpoint.
-   *
-   * Null on entry only when the shield was pressed somewhere with no security
-   * anchor of its own, which goes straight to management and therefore has no
-   * layout-level view to go back to.
-   */
   securityLayoutId: string | null;
-  /** The management view (L10, S07 + S08) is up rather than a layout's own
-   *  anchors. Separate from `securityLayoutId` because that is REMEMBERED while
-   *  this is true — the two answer different questions. */
   managementOpen: boolean;
 
-  /**
-   * The S01-S08 anchors and their popup readings, live.
-   *
-   * Seeded from `securityHotspots[]`, then mutable: `setHotspotFields` is how
-   * a demo event flips S05's `zone_status` to ALERT or S01's `gate_state` to
-   * LOCKED. Positions and rotations come along unchanged (they are authored
-   * against the model and nothing moves an anchor at runtime) but they live
-   * here too so that one read answers the whole question.
-   */
   hotspots: HotspotConfig[];
   /** The same rows by id, rebuilt on every write so the two never disagree. */
   hotspotById: Record<string, HotspotConfig>;
   /** The untouched seed, so a demo can be put back to its opening position
    *  without a reload. See `resetToSeed`. */
   readonly seedHotspots: HotspotConfig[];
-  /** The same by id. A card showing one incident's readings builds them over
-   *  the seed, so fields that event did not write read as at rest rather than
-   *  carrying a different incident's values. */
   readonly seedHotspotById: Record<string, HotspotConfig>;
 
-  /**
-   * The incident queue S07 lists.
-   *
-   * A LIST, because the spec's own numbers require one: S08 reports
-   * `active_incidents: 2` with one HIGH and one MEDIUM alongside it, S01
-   * "creates incident SEC-DEMO-0041" while S04/S05 create SEC-DEMO-0042, and
-   * S07 is "the central incident card [that] receives events from S01-S06".
-   * The §4 field table for S07 is the detail of ONE incident, not the card.
-   *
-   * Newest first: the card reads top-down and a new event belongs at the top.
-   * Empty at rest: §5 opens with every system NORMAL and nothing active.
-   */
   incidents: SecurityIncident[];
   /** Which incident the S07 card has expanded, or null for the list. */
   selectedIncidentId: string | null;
-  /**
-   * What each incident's event wrote to its source hotspot, by incident id.
-   *
-   * A hotspot has ONE field set, and every event it raises patches the same
-   * one, so with three open the fields describe only the last. This keeps what
-   * each event actually reported, letting a card show the readings belonging to
-   * the incident being looked at rather than whichever fired most recently.
-   *
-   * The live field set is still the hotspot's own: it is the state of the
-   * SYSTEM, which is genuinely whatever happened last.
-   */
   incidentFields: Record<string, Record<string, HotspotField["value"]>>;
-  /**
-   * Set while the operator is away from the incident centre, having used an
-   * incident's VIEW LOCATION.
-   *
-   * Holds the incident they left from, so the way back can reopen the centre
-   * on it rather than on the top of the list. Lives in the STORE rather than in
-   * the card because the card unmounts during the trip: `goToLayout` clears
-   * `hotspotInfo`, which is what draws it.
-   */
   viewingIncidentId: string | null;
 
-  /**
-   * The layers currently drawn, per S08's Expected interaction.
-   *
-   * All six on at rest: the demo opens showing the whole security picture, and
-   * a presenter narrows from there. A category with no authored hotspot yet
-   * simply matches nothing, so turning it off is harmless.
-   */
   categories: Record<SecurityCategory, boolean>;
 
   /** Latch the mode and the layout to come back to (null = came from the
@@ -1006,16 +788,10 @@ export interface SecurityState {
      *  the mode opens straight at management. */
     securityLayoutId?: string | null,
   ) => void;
-  /** Swap between the two levels: `true` shows the executive overview with S07
-   *  and S08, `false` returns to `securityLayoutId`'s own anchors. Leaves
-   *  `securityLayoutId` alone — that is what Back comes back to. */
   setManagementOpen: (value: boolean) => void;
 
   /** Flip one layer. */
   toggleCategory: (category: SecurityCategory) => void;
-  /** Show one layer alone, the spec's "selecting a category highlights only
-   *  demo entities" read literally. Selecting the one already isolated puts
-   *  them all back, so the same click both focuses and clears. */
   isolateCategory: (category: SecurityCategory) => void;
   /** Every layer back on. */
   showAllCategories: () => void;
@@ -1027,55 +803,16 @@ export interface SecurityState {
   /** Raise one. Ignored if its id is already queued, so a demo trigger pressed
    *  twice does not stack duplicates. */
   raiseIncident: (incident: SecurityIncident) => void;
-  /**
-   * Fire one of `SECURITY_EVENTS`: raise its incident AND move the source
-   * hotspot to its event readings, in one action.
-   *
-   * One action rather than two calls because the two halves are one fact. An
-   * incident in the queue whose source hotspot still reads NORMAL is a demo
-   * contradicting itself on screen, and a half-applied pair is what you get if
-   * a caller is interrupted between them.
-   *
-   * Takes a VARIANT id (`S04-2`), not a hotspot id: each hotspot offers several
-   * events and they are fired one at a time.
-   */
   triggerEvent: (eventId: string) => void;
-  /** Which variants have been fired, so the trigger menu can show them as spent
-   *  and a second press cannot re-raise the same one. Firing one variant leaves
-   *  its siblings available: several incidents can be raised, one by one. */
   firedEventIds: string[];
 
-  /**
-   * Everything that has happened this session, oldest first.
-   *
-   * Oldest-first unlike `incidents`, because this is a LOG: it is read in the
-   * order events occurred, whereas the queue is read newest-first as a
-   * worklist. Survives `resolveIncident` by design, and survives `resetToSeed`
-   * too, which appends a `demo_reset` line rather than erasing the run that
-   * came before it. Only `reset`, leaving the layer entirely, clears it.
-   */
   audit: SecurityAuditEntry[];
 
-  /**
-   * Closed incidents, newest first: the history S07 can show beside its live
-   * queue.
-   *
-   * Seeded with three from earlier the same demo afternoon, and added to when a
-   * live incident is resolved, so the record grows as the demo runs. Separate
-   * from `incidents` on purpose: that is the worklist the counters read, this
-   * is what is already dealt with.
-   */
   history: SecurityIncident[];
   /** ACTIVE → INVESTIGATING, and flag it acknowledged (§5 step 6). */
   acknowledgeIncident: (id: string) => void;
   /** Bump severity one step, the spec's ESCALATE action. CRITICAL is the cap. */
   escalateIncident: (id: string) => void;
-  /** Drop severity one step, the inverse. LOW is the floor.
-   *
-   *  Not in the spec's §4 action list, which names only ESCALATE. It is here
-   *  because a demo that can only ever raise severity has one-way state: a
-   *  presenter who escalates to make a point cannot put it back without
-   *  resetting the whole run. */
   deescalateIncident: (id: string) => void;
   /** → RESOLVED (§5 step 7). Kept in the list, per §6's audit-history note. */
   resolveIncident: (id: string) => void;
@@ -1093,39 +830,6 @@ export interface SecurityState {
 const NO_INCIDENTS: SecurityIncident[] = [];
 /** Shared identity, so a reset never hands out a fresh array. */
 const NO_FIRED: string[] = [];
-/**
- * A short history the log starts with, so it does not open empty.
- *
- * Three incidents from earlier the same demo afternoon, each carried through to
- * RESOLVED, which is what §6 means by "Event retained in timeline/audit
- * history": a closed event stays on the record. They are numbered BELOW
- * INCIDENT_ID_START (0038-0040), so a live run picks up at 0041 and the whole
- * sequence reads as one continuous log.
- *
- * SYNTHETIC, like the rest of the layer. These describe nothing that happened:
- * they are three demo events shaped like the triggerable ones, so a presenter
- * opening the history sees the format rather than a blank panel. `at` is
- * authored here rather than generated, because a seeded entry has no real
- * moment of interaction to record.
- */
-/**
- * The shift that happened before this session, as data.
- *
- * ONE table describing each past incident and the steps it went through; the
- * closed-incident list and the audit log are both generated from it below. Two
- * hand-written lists would drift the first time one was edited, and a log that
- * disagrees with the record it describes is worse than no log.
- *
- * Shaped to read like a real day rather than a uniform sample: a quiet morning,
- * a cluster either side of the shift change, several routine things closed in
- * minutes and one that took most of an hour and had to be escalated. Some were
- * acknowledged and resolved by different steps, one was escalated then
- * de-escalated once it was understood, one was raised twice.
- *
- * SYNTHETIC, like everything in this layer: DEMO-named devices and zones,
- * generic team labels, and no real credential rule, patrol schedule or response
- * route. Nothing here describes anything that happened.
- */
 interface PastIncidentSpec {
   id: string;
   sourceHotspotId: string;
@@ -1460,13 +1164,6 @@ const PAST_INCIDENTS: PastIncidentSpec[] = [
   },
 ];
 
-/**
- * The closed incidents, as records.
- *
- * Severity is the value they ENDED at, walked forward through their own
- * escalations, so a record and its log can never disagree about where it
- * finished.
- */
 export const HISTORICAL_INCIDENTS: SecurityIncident[] = PAST_INCIDENTS.map((p) => {
   let severity = p.severity;
   for (const step of p.steps) {
@@ -1490,22 +1187,12 @@ export const HISTORICAL_INCIDENTS: SecurityIncident[] = PAST_INCIDENTS.map((p) =
   // S07 shows them in one list.
 }).reverse();
 
-/**
- * The audit trail for all of it, generated from the same table.
- *
- * Every incident contributes its trigger, its raise and one line per step, so a
- * past incident opens with a log as full as a live one will have. `seq` runs in
- * time order across the whole day.
- */
 const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
   const out: Omit<SecurityAuditEntry, "seq">[] = [];
   const iso = (hms: string) => `${DEMO_DAY}T${hms}.000Z`;
 
   for (const p of PAST_INCIDENTS) {
     const raisedAt = p.eventTime.slice(11);
-    // The detection itself has no operator: a camera or a reader saw it. Every
-    // line after it is somebody's work, resolved per step so a hand-off shows
-    // as a different person against that line.
     out.push({
       action: "event_triggered",
       hotspotId: p.sourceHotspotId,
@@ -1584,25 +1271,6 @@ const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
     .map((e, i) => ({ ...e, seq: i + 1 }));
 })();
 
-/**
- * A short history the log starts with, so it does not open empty.
- *
- * Three incidents from earlier the same demo afternoon, each carried through to
- * RESOLVED, which is what §6 means by "Event retained in timeline/audit
- * history": a closed event stays on the record. They are numbered BELOW
- * INCIDENT_ID_START (0038-0040), so a live run picks up at 0041 and the whole
- * sequence reads as one continuous log.
- *
- * SYNTHETIC, like the rest of the layer. These describe nothing that happened:
- * they are three demo events shaped like the triggerable ones, so a presenter
- * opening the history sees the format rather than a blank panel. `at` is
- * authored here rather than generated, because a seeded entry has no real
- * moment of interaction to record.
- */
-/**
- * The first incident number. The spec's own first id is SEC-DEMO-0041, so a
- * demo run from the top reproduces the numbering it describes.
- */
 const INCIDENT_ID_START = 41;
 
 /** `SEC-DEMO-0041`, `SEC-DEMO-0042`, ... Four digits, as every id in the spec
@@ -1630,13 +1298,6 @@ const ALL_CATEGORIES: Record<SecurityCategory, boolean> = {
   incidents: true,
 };
 
-/**
- * Who the live demo's actions are recorded against.
- *
- * A presenter driving the demo is one person at one desk, so everything they do
- * carries one identity rather than a random name per click, which would read as
- * several people sharing a mouse.
- */
 const LIVE_ACTOR = SECURITY_ACTORS.rm;
 
 /** The ladder ESCALATE climbs. */
@@ -1645,14 +1306,6 @@ const SEVERITY_ORDER: IncidentSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 const byId = (rows: HotspotConfig[]): Record<string, HotspotConfig> =>
   Object.fromEntries(rows.map((h) => [h.id, h]));
 
-/**
- * Replace one incident, leaving every other identity untouched.
- *
- * Returns the SAME array when the id is absent or the patch changes nothing.
- * The card subscribes to `incidents`, and a fresh array on every no-op write
- * would re-render the whole list. The discipline `withOption` follows in the
- * nav store, for the same reason.
- */
 function patchIncident(
   list: SecurityIncident[],
   id: string,
@@ -1670,10 +1323,6 @@ function patchIncident(
 export const useSecurityStore = createSeededStore<SecurityState, Site>(
   "security-store",
   (site) => {
-    // Deep-copied at seed time: the store hands these rows out to be edited,
-    // and the config module memoises ONE resolved `Site` per id for the life of
-    // the process. Mutating its arrays in place would leave edits behind after
-    // a reset, and, on a route sharing the object, in another tree entirely.
     const seedHotspots: HotspotConfig[] = (site.securityHotspots ?? []).map((h) => ({
       ...h,
       fields: h.fields.map((f: HotspotField) => ({ ...f })),
@@ -1699,18 +1348,10 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
       audit: SEEDED_AUDIT,
       history: HISTORICAL_INCIDENTS,
 
-      // Both halves in one action: the flag and the layout to come back to have
-      // to move together, or an interrupted pair leaves the mode on with
-      // nowhere to return. Switching OFF always clears the return layout: it
-      // has been spent.
-
       setMode: (value, returnLayoutId = null, securityLayoutId = null) =>
         set({
           mode: value,
           returnLayoutId: value ? returnLayoutId : null,
-          // Entering with no layout of its own means the shield was pressed
-          // where nothing is anchored, so the mode opens at management and has
-          // no layout-level view to fall back to.
           securityLayoutId: value ? securityLayoutId : null,
           managementOpen: value ? !securityLayoutId : false,
         }),
@@ -1753,21 +1394,9 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
         if (state.firedEventIds.includes(eventId)) return;
         const { hotspotId } = def;
 
-        // Numbered in FIRE ORDER, not by which hotspot it came from: the
-        // presenter picks the running order, and the queue should read 0041,
-        // 0042, 0043 down the card whatever they picked. Counted off the
-        // incidents already raised rather than off a stored cursor, so the
-        // numbering cannot drift from the list it describes.
         const id = incidentIdFor(INCIDENT_ID_START + state.incidents.length);
 
-        // The hotspot's readings first, then the incident. Order is not
-        // observable from outside (one React commit), but doing the readings
-        // first means no frame can show an incident sourced from a hotspot that
-        // still reads NORMAL.
         state.setHotspotFields(hotspotId, def.fields);
-        // Kept per incident as well as applied to the hotspot, so a card can
-        // show the readings for the incident selected rather than the last one
-        // to fire. See `incidentFields`.
         set({ incidentFields: { ...get().incidentFields, [id]: def.fields } });
         state.raiseIncident({ ...def.incident, id, status: "ACTIVE", acknowledged: false });
 
@@ -1777,9 +1406,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
           action: "event_triggered",
           hotspotId,
           incidentId: id,
-          // Named by WHAT was detected and WHERE, not by the anchor's internal
-          // id: S01-S08 are references in this codebase, not things the demo
-          // calls anything.
           detail: `${def.label} at ${def.incident.locationLabel}`,
         });
         audit = appendAudit(audit, {
@@ -1802,9 +1428,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
               ? x
               : { ...x, acknowledged: true, status: "INVESTIGATING" },
           );
-          // Nothing moved: no state change, and no line in the log either. An
-          // audit that records attempts rather than changes stops being a
-          // record of what happened.
           if (incidents === s.incidents) return {};
           return {
             incidents,
@@ -1844,9 +1467,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
         set((s) => {
           const incidents = patchIncident(s.incidents, id, (x) => {
             const next = SEVERITY_ORDER[SEVERITY_ORDER.indexOf(x.severity) - 1];
-            // A resolved incident does not move, and LOW is the floor. Note
-            // indexOf returning 0 makes the lookup -1, which is undefined
-            // rather than the last element: JS arrays do not wrap.
             return !next || x.status === "RESOLVED" ? x : { ...x, severity: next };
           });
           if (incidents === s.incidents) return {};
@@ -1870,11 +1490,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
             x.status === "RESOLVED" ? x : { ...x, status: "RESOLVED" },
           );
           if (incidents === s.incidents) return {};
-          // Retired into the history the moment it closes, so the two lists
-          // together are always the whole record: `incidents` what is open,
-          // `history` what is done. It stays in `incidents` as well, because
-          // §6 keeps a resolved event on the queue as audit history and
-          // `incidentCounts` already excludes it from every tally.
           const closed = incidents.find((x) => x.id === id);
           return {
             incidents,
@@ -1896,9 +1511,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
 
       isolateCategory: (category) => {
         const now = get().categories;
-        // Already the only one showing: this click is the way back out, so put
-        // every layer back rather than leaving the operator with one switch
-        // that no longer does anything.
         const alone =
           now[category] && SECURITY_CATEGORIES.every((c) => c.key === category || !now[c.key]);
         if (alone) {
@@ -1928,10 +1540,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
           viewingIncidentId: null,
           categories: ALL_CATEGORIES,
           firedEventIds: NO_FIRED,
-          // The log SURVIVES a demo reset and gains a line saying one happened.
-          // Clearing it would erase the run that just finished, which is the
-          // run most worth having a record of. The history it produced stays
-          // for the same reason: those incidents did occur in this session.
           audit: appendAudit(s.audit, {
             action: "demo_reset",
             detail: "Demo reset to opening state",
@@ -1961,15 +1569,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
   },
 );
 
-/**
- * The live counters S08's Command View reports.
- *
- * DERIVED, never stored: §8 requires "S08 counts/status update when demo
- * incidents change state", and a second copy of a number that must agree with a
- * list is a number that will eventually disagree with it. RESOLVED incidents
- * stay in the list as audit history but count as closed, so they are excluded
- * from every tally here.
- */
 export function incidentCounts(incidents: SecurityIncident[]) {
   const open = incidents.filter((x) => x.status !== "RESOLVED");
   return {

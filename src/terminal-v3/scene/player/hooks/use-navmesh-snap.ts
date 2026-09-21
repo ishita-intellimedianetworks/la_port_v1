@@ -1,12 +1,4 @@
 /* eslint-disable react-hooks/immutability */
-/**
- * useNavmeshSnap
- * ─────────────────────────────────────────────────────────────────────────────
- * One-shot effect that runs on mount (once navmesh + player are ready).
- * Probes the navmesh directly below the spawn point and snaps the player's
- * Y to the exact floor surface, preventing the camera from spawning mid-air
- * or underground when floor geometry doesn't sit at Y = 0.
- */
 import { useEffect } from "react";
 import * as THREE from "three";
 import { Pathfinding } from "three-pathfinding";
@@ -20,10 +12,6 @@ interface UseNavmeshSnapOptions {
   camera: THREE.Camera;
 }
 
-/**
- * One-shot effect: snaps the player's Y position onto the navmesh surface
- * as soon as the nav graph is ready. Runs once per mount.
- */
 export function useNavmeshSnap({
   state,
   enabled,
