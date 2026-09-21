@@ -3469,27 +3469,30 @@
       ],
       "camera": {
         "position": [
-          -1534.0809,
-          4.6845,
-          430.6008
+          -1777.6,
+          60,
+          627.2
         ],
         "rotation": [
-          -0.0574,
-          -0.5508,
-          -0.03
+          3.0374,
+          0.591,
+          -3.0834
         ]
+      },
+      "geofence": {
+        "url": "/models/la-port-zone-c5-water-geofence-v1.glb"
       },
       "alert": {
         "level": "danger",
         "title": "Danger",
-        "detail": "Unauthorized watercraft inside the monitored zone"
+        "detail": "1 unauthorized craft identified inside the monitored zone"
       },
       "fields": [
         {
           "name": "zone_id",
           "label": "Zone ID",
           "type": "string",
-          "value": "WS-DEMO-01"
+          "value": "WS-01"
         },
         {
           "name": "zone_status",
@@ -3500,21 +3503,22 @@
         },
         {
           "name": "detected_watercraft",
-          "label": "Detected",
-          "type": "integer",
-          "value": 4
-        },
-        {
-          "name": "authorized_watercraft",
-          "label": "Authorized",
+          "label": "Craft Detected",
           "type": "integer",
           "value": 3
         },
         {
-          "name": "unauthorized_watercraft",
-          "label": "Unauthorized",
+          "name": "authorized_watercraft",
+          "label": "Authorized Craft",
           "type": "integer",
-          "value": 1
+          "value": 2
+        },
+        {
+          "name": "unauthorized_watercraft",
+          "label": "Unauthorized Craft",
+          "type": "integer",
+          "value": 1,
+          "tone": "alert"
         },
         {
           "name": "event_severity",
@@ -3532,6 +3536,11 @@
       "name": "AI Video Analytics",
       "popupTitle": "Yard Video Analytics",
       "icon": "security",
+      "poster": {
+        "url": "/security/cam-04-analytics.png",
+        "width": 1608,
+        "height": 978
+      },
       "position": [
         -1012.8342,
         15.4923,
@@ -3559,7 +3568,14 @@
           "name": "camera_id",
           "label": "Camera ID",
           "type": "string",
-          "value": "CAM-DEMO-04"
+          "value": "CAM-04"
+        },
+        {
+          "name": "feed_status",
+          "label": "Feed",
+          "type": "enum",
+          "value": "Online",
+          "tone": "ok"
         },
         {
           "name": "analytics_status",
@@ -3569,35 +3585,46 @@
           "tone": "ok"
         },
         {
+          "name": "classifies",
+          "label": "Classifies",
+          "type": "string",
+          "value": "Person · Vehicle"
+        },
+        {
+          "name": "vehicles_tracked",
+          "label": "Vehicles Tracked",
+          "type": "integer",
+          "value": 2
+        },
+        {
+          "name": "people_tracked",
+          "label": "People Tracked",
+          "type": "integer",
+          "value": 0
+        },
+        {
           "name": "zone_id",
           "label": "Zone ID",
           "type": "string",
-          "value": "YARD-DEMO-RZ-02"
+          "value": "YARD-RZ-02"
         },
         {
-          "name": "detected_class",
-          "label": "Detected Class",
+          "name": "last_detection",
+          "label": "Last Detection",
           "type": "string",
-          "value": "None"
+          "value": "Vehicle · 96%"
         },
         {
-          "name": "confidence",
-          "label": "Confidence",
-          "type": "percentage",
-          "value": "—"
+          "name": "detections_24h",
+          "label": "Detections (24h)",
+          "type": "integer",
+          "value": 148
         },
         {
-          "name": "event_time",
-          "label": "Event Time",
-          "type": "datetime",
-          "value": "—"
-        },
-        {
-          "name": "severity",
-          "label": "Severity",
-          "type": "enum",
-          "value": "None",
-          "tone": "ok"
+          "name": "alerts_24h",
+          "label": "Alerts (24h)",
+          "type": "integer",
+          "value": 0
         },
         {
           "name": "incident_status",
@@ -3605,6 +3632,35 @@
           "type": "enum",
           "value": "No active event",
           "tone": "ok"
+        },
+        {
+          "name": "detected_class",
+          "label": "Detected Class",
+          "type": "string",
+          "value": "None",
+          "eventOnly": true
+        },
+        {
+          "name": "confidence",
+          "label": "Confidence",
+          "type": "percentage",
+          "value": "—",
+          "eventOnly": true
+        },
+        {
+          "name": "event_time",
+          "label": "Event Time",
+          "type": "datetime",
+          "value": "—",
+          "eventOnly": true
+        },
+        {
+          "name": "severity",
+          "label": "Severity",
+          "type": "enum",
+          "value": "None",
+          "tone": "ok",
+          "eventOnly": true
         }
       ]
     },
@@ -3615,6 +3671,9 @@
       "name": "Restricted Area / Geofence",
       "popupTitle": "Restricted Zone",
       "icon": "security",
+      "geofence": {
+        "url": "/models/la-port-zone-c5-crane-geofence-v1.glb"
+      },
       "position": [
         -1122.3207,
         6.684,
@@ -3642,7 +3701,7 @@
           "name": "zone_id",
           "label": "Zone ID",
           "type": "string",
-          "value": "CRANE-DEMO-RZ-01"
+          "value": "CRANE-RZ-01"
         },
         {
           "name": "zone_type",
@@ -3690,6 +3749,11 @@
       "name": "AI Anomaly / Unattended Object",
       "popupTitle": "Security Analytics - Anomaly",
       "icon": "security",
+      "poster": {
+        "url": "/security/cam-07-anomaly.png",
+        "width": 1254,
+        "height": 1254
+      },
       "position": [
         -1347.0518,
         15.3872,
@@ -3717,51 +3781,126 @@
           "name": "camera_id",
           "label": "Camera ID",
           "type": "string",
-          "value": "CAM-DEMO-07"
+          "value": "CAM-07"
+        },
+        {
+          "name": "feed_status",
+          "label": "Feed",
+          "type": "enum",
+          "value": "Online",
+          "tone": "ok"
+        },
+        {
+          "name": "analytics_status",
+          "label": "Analytics",
+          "type": "enum",
+          "value": "Active",
+          "tone": "ok"
+        },
+        {
+          "name": "classifies",
+          "label": "Classifies",
+          "type": "string",
+          "value": "Person · Vehicle · Object"
+        },
+        {
+          "name": "vehicles_tracked",
+          "label": "Vehicles Tracked",
+          "type": "integer",
+          "value": 3
+        },
+        {
+          "name": "people_tracked",
+          "label": "People Tracked",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "zone_id",
+          "label": "Zone ID",
+          "type": "string",
+          "value": "YARD-RZ-07"
+        },
+        {
+          "name": "dwell_threshold",
+          "label": "Dwell Threshold",
+          "type": "string",
+          "value": "5 min"
+        },
+        {
+          "name": "flagged_objects",
+          "label": "Flagged Objects",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "detections_24h",
+          "label": "Detections (24h)",
+          "type": "integer",
+          "value": 96
+        },
+        {
+          "name": "alerts_24h",
+          "label": "Alerts (24h)",
+          "type": "integer",
+          "value": 0
+        },
+        {
+          "name": "review_queue",
+          "label": "Sent to Review",
+          "type": "integer",
+          "value": 0
         },
         {
           "name": "event_type",
           "label": "Event Type",
           "type": "enum",
           "value": "None",
-          "tone": "ok"
+          "tone": "ok",
+          "eventOnly": true
         },
         {
           "name": "detection_time",
           "label": "Detection Time",
           "type": "datetime",
-          "value": "—"
+          "value": "—",
+          "eventOnly": true
         },
         {
           "name": "duration",
           "label": "Duration",
           "type": "string",
-          "value": "—"
+          "value": "—",
+          "eventOnly": true
         },
         {
           "name": "confidence",
           "label": "Confidence",
           "type": "percentage",
-          "value": "—"
+          "value": "—",
+          "eventOnly": true
         },
         {
           "name": "classification",
           "label": "Classification",
           "type": "string",
-          "value": "—"
+          "value": "—",
+          "eventOnly": true
         },
         {
           "name": "review_required",
           "label": "Review Required",
           "type": "boolean",
-          "value": false
+          "value": false,
+          "eventOnly": true
         },
         {
           "name": "severity",
           "label": "Severity",
           "type": "enum",
           "value": "None",
-          "tone": "ok"
+          "tone": "ok",
+          "eventOnly": true
         }
       ]
     },

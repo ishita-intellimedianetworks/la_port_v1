@@ -34,9 +34,6 @@ import { edgeFeather } from "./scene/model-loader/edge-feather";
 const HOME_REACH_UNITS = 0.8;
 
 const SETTLE_MIN_MS = 350;
-/** The hold is a courtesy, not a load gate. Past this the fade lifts and the
- *  tail of the backlog resolves in front of the user — otherwise the poll runs
- *  to `MAX_BLACKOUT_WAIT_MS` (8 s) and the teleport reads as a hang. */
 const SETTLE_MAX_MS = 1500;
 const SETTLE_FRACTION = 0.1;
 /** ...but never insist on better than this in absolute terms, so a small jump
@@ -44,10 +41,6 @@ const SETTLE_FRACTION = 0.1;
 const SETTLE_FLOOR = 8;
 
 function dressingSettled(): () => boolean {
-  // Clocked from the first poll, not from the click: the swap that creates the
-  // backlog only lands a fade-in later, so a click-time clock spends itself
-  // before the streamer has seen the new camera, and `peak` latches on the
-  // leftover of the view being left — against which nothing ever looks settled.
   let start = -1;
   let peak = 0;
   return () => {

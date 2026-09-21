@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --ui-loadblur-tint: rgba(0, 0, 0, 0.7);
+
+  /* ── v5 typography — Inter everywhere (matches 20hatsfira.com). Overriding the
+     font tokens flips every component that reads them; body text inherits. ── */
+  --font-geist-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  --font-geist-mono: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  --font-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+
+  --ui-glass-bg: rgba(9, 11, 15, 0.52);
+  --ui-glass-bg-hover: rgba(16, 19, 25, 0.64);
+  --ui-border: rgba(255, 255, 255, 0.30);
+  --ui-glass-border: rgba(255, 255, 255, 0.26);
+  --ui-glass-border-hover: rgba(255, 255, 255, 0.38);
+  --ui-glass-border-active: rgba(255, 255, 255, 0.48);
+
+  --ui-glass-blur: 22px;
+  --ui-glass-saturate: 180%;     /* Apple's vibrancy value */
+  --ui-glass-brightness: 1.05;
+  --ui-glass-backdrop: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+
+  --ui-glass-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.40),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset -10px -8px 12px -12px rgba(255, 255, 255, 0.50),
+    inset 0 -9px 10px -10px rgba(255, 255, 255, 0.32),
+    0 12px 36px -14px rgba(0, 0, 0, 0.62);
+}
+
+/* Inter throughout v5 (loaded after globals.css on v5 routes, so it wins). */
+body {
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.ui-glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%),
+    var(--ui-glass-bg);
+  box-shadow: var(--ui-glass-shadow);
+  border-color: var(--ui-glass-border);
+}
+
+/* Instructions overlay panel — same liquid-glass effect as the rest (sheen +
+   dark tint + specular edge + border), replacing its flat black fill. */
+.instr-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%),
+    var(--ui-glass-bg);
+  box-shadow: var(--ui-glass-shadow);
+  border: 1px solid var(--ui-glass-border);
+}
+
+/* Scale the blur down on small screens so the blur:surface ratio matches
+   desktop (a fixed 22px reads ~2× heavier on small phone panels). */
+@media (max-width: 1023px) {
+  :root { --ui-glass-blur: 13px; }
+}
+
+@keyframes brand-diagonal-reveal {
+  from {
+    opacity: 0;
+    -webkit-mask-position: 100% 100%;
+            mask-position: 100% 100%;
+  }
+  to {
+    opacity: 1;
+    -webkit-mask-position: 0% 0%;
+            mask-position: 0% 0%;
+  }
+}
+
+.brand-diagonal-reveal {
+  -webkit-mask-image: linear-gradient(135deg, #000 0%, #000 35%, rgba(0, 0, 0, 0) 75%);
+          mask-image: linear-gradient(135deg, #000 0%, #000 35%, rgba(0, 0, 0, 0) 75%);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-size: 250% 250%;
+          mask-size: 250% 250%;
+  animation: brand-diagonal-reveal 2000ms ease-out both;
+}
+
+.ui-load-blur {
+  background: var(--ui-loadblur-tint);
+  backdrop-filter: var(--ui-glass-backdrop);
+  -webkit-backdrop-filter: var(--ui-glass-backdrop);
+  isolation: isolate;
+  transform: translateZ(0);
+  will-change: opacity, backdrop-filter;
+}
+
+.ui-load-blur--strong {
+  backdrop-filter: blur(56px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+  -webkit-backdrop-filter: blur(56px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+}
+
+@media (max-width: 640px) {
+  /* Heavy blur is GPU-expensive on phones — scale it down to avoid load-time jank. */
+  .ui-load-blur--strong {
+    backdrop-filter: blur(32px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+    -webkit-backdrop-filter: blur(32px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
+  }
+}

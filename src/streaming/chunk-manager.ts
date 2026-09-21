@@ -184,12 +184,8 @@ export class ChunkManager {
   /** Tier swaps started per tick. Smaller than `maxLoadsPerTick`: the fill is
    *  racing a loading screen, a re-tier costs a decode against a live frame. */
   private retierBudget = 2;
-  /** Ticks of full-rate re-tiering left. A teleport lands under a blackout, so
-   *  there is no live frame to protect and 2/tick would leave the whole new
-   *  neighbourhood coarse for the ten-odd seconds the fade waits on it. */
   private retierBurst = 0;
   private _prevCam = new THREE.Vector3(NaN, NaN, NaN);
-  /** Further than any walk covers in one tick, so only a jump trips it. */
   private static readonly JUMP_METRES = 50;
   private static readonly BURST_TICKS = 30;
   /** Backlog of chunks wanting a sharper tier or rung — see `StreamStats.dressing`.
@@ -551,8 +547,6 @@ export class ChunkManager {
   /** Main entry — call ~updateHz times/sec with the camera. */
   update(camera: THREE.Camera) {
     camera.getWorldPosition(this._cam);
-    // A teleport — Home, First Person, a map jump — moves further in one tick
-    // than walking ever does. See `retierBurst`.
     if (
       Number.isFinite(this._prevCam.x) &&
       this._prevCam.distanceTo(this._cam) > ChunkManager.JUMP_METRES

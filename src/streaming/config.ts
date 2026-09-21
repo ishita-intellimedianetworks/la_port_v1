@@ -72,13 +72,16 @@ const STREAM_BASE_V1 = process.env.NEXT_PUBLIC_STREAM_BASE;
 const STREAM_BASE_V2 = process.env.NEXT_PUBLIC_STREAM_BASE_V2;
 const STREAM_BASE_V3 = process.env.NEXT_PUBLIC_STREAM_BASE_V3;
 const STREAM_BASE_V4 = process.env.NEXT_PUBLIC_STREAM_BASE_V4;
+const STREAM_BASE_V5 = process.env.NEXT_PUBLIC_STREAM_BASE_V5;
 const ASSET_ROOT = (process.env.NEXT_PUBLIC_ASSET_BASE ?? "/assets").replace(/\/+$/, "");
 
 const withSlash = (u: string) => `${u.trim().replace(/\/+$/, "")}/`;
 
 function assetBaseFor(id: StreamVariantId, block: { slug: string; assetBase?: string }): string {
   const fromEnv =
-    id === "v4"
+    id === "v5"
+      ? (STREAM_BASE_V5 ?? STREAM_BASE_V4)
+      : id === "v4"
       ? STREAM_BASE_V4
       : id === "v3"
         ? STREAM_BASE_V3
@@ -186,6 +189,7 @@ export const STREAM_VARIANTS: Record<StreamVariantId, StreamVariant> = {
   v2: buildVariant("v2", SITES.v2.scene.stream),
   v3: buildVariant("v3", SITES.v3.scene.stream),
   v4: buildVariant("v4", SITES.v4.scene.stream),
+  v5: buildVariant("v5", SITES.v5.scene.stream),
 };
 
 export function streamVariant(id: StreamVariantId): StreamVariant {

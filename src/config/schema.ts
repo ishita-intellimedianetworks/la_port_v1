@@ -315,6 +315,7 @@ export type HotspotField = {
   /** Required by the handoff but unsupplied by either source document.
    *  Rendered as absent, and reported by `npm run verify` until filled. */
   pending?: boolean;
+  eventOnly?: boolean;
   ref?: string;
 };
 
@@ -366,6 +367,14 @@ export type HotspotConfig = {
     delaySeconds?: number;
     repeatSeconds?: number;
   };
+  geofence?: {
+    url: string;
+  };
+  poster?: {
+    url: string;
+    width: number;
+    height: number;
+  };
   alert?: {
     level: "danger" | "caution";
     /** One word, as the banner's heading: "Danger", "Caution". */
@@ -400,6 +409,7 @@ export type SiteConfig = {
     popup: UiConfig["popup"];
   };
   layouts: LayoutRow[];
+  worldModels?: string[];
   hotspots: HotspotConfig[];
   /** Why the security rows read as they do: the rest/event split, and where
    *  their positions came from. */

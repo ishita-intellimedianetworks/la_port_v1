@@ -2,6 +2,7 @@ import v1Json from "./sites/v1.json";
 import v2Json from "./sites/v2.json";
 import v3Json from "./sites/v3.json";
 import v4Json from "./sites/v4.json";
+import v5Json from "./sites/v5.json";
 
 import type {
   CameraPose,
@@ -16,7 +17,7 @@ import type {
 } from "./schema";
 
 /** Every model the app can serve, in route order: `/`, `/v2`, `/v3`, `/v4`. */
-export const SITE_IDS = ["v1", "v2", "v3", "v4"] as const;
+export const SITE_IDS = ["v1", "v2", "v3", "v4", "v5"] as const;
 export type SiteId = (typeof SITE_IDS)[number];
 
 const FLOORPLAN_BASE = (process.env.NEXT_PUBLIC_FLOORPLAN_BASE ?? "/floorplan").replace(/\/+$/, "");
@@ -40,6 +41,7 @@ export interface Site {
   hotspotById: Record<string, HotspotConfig>;
   /** Security rows by id, for the same reason `hotspotById` exists. */
   securityHotspotById: Record<string, HotspotConfig>;
+  worldModels: string[];
   startLayoutId: string;
   /** Where the experience begins. Every "default pose" — the Canvas camera, the
    *  first-person start, the fallback for an unauthored layout — reads THIS. */
@@ -151,6 +153,7 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
     layoutById,
     hotspotById,
     securityHotspotById,
+    worldModels: doc.worldModels ?? [],
     startLayoutId,
     startPose,
     poseForLayout,
@@ -167,6 +170,7 @@ export const SITES: Record<SiteId, Site> = {
   v2: resolveSite("v2", v2Json as unknown as SiteConfig),
   v3: resolveSite("v3", v3Json as unknown as SiteConfig),
   v4: resolveSite("v4", v4Json as unknown as SiteConfig),
+  v5: resolveSite("v5", v5Json as unknown as SiteConfig),
 };
 
 export function getSite(id: SiteId): Site {

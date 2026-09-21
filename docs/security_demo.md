@@ -1,13 +1,20 @@
-# The v4 Port Security layer
+# The v5 Port Security layer
 
-How `/v4` works, and why it is built the way it is.
+How `/v5` works, and why it is built the way it is.
 
-`/v4` is a fork of `/v3` that adds a **Port Security demonstration layer**,
-hotspots S01-S08, on top of the existing operational terminal. This document
-covers the fork, the layer, and the decisions behind both.
+`/v5` carries the **Port Security demonstration layer**, hotspots S01-S08, on
+top of the existing operational terminal. This document covers the fork, the
+layer, and the decisions behind both.
 
-> **Keep this current.** It is the only prose description of how v4 differs from
-> v3. Anything that changes v4's behaviour (a new hotspot, a store field, a
+> **LINEAGE.** `/v4` was forked from `/v3` and is where this layer was built.
+> `/v5` was then forked from `/v4` and is where it is developed now. The two
+> carry the **same code** - `index.tsx` and four sky-store self-imports apart -
+> and differ in their site files: `v4.json` gates S03-S08 off and authors no
+> `worldModels`, so `/v4` stays the stable two-anchor demo while `/v5` runs six.
+> Everything below describes v5; where it says "v4" it is describing history.
+
+> **Keep this current.** It is the only prose description of how v5 differs from
+> v3. Anything that changes v5's behaviour (a new hotspot, a store field, a
 > mode rule, a config key) should land here in the same change.
 
 ---
@@ -22,11 +29,11 @@ Anchor positions come from `reference_files/la-port-zone-c5-hs-v5 (1).glb`,
 nodes `hs_s01` to `hs_s08`, and viewpoints from
 `reference_files/la-port-zone-c5-cp-v6.glb`, paired by
 `reference_files/List-HS CP (1).xlsx`. The v5 file re-anchored **six of the eight** against the
-current bake; S05, S07 and S08 came back byte-identical to v4's. Positions are
+current bake; S05, S07 and S08 came back byte-identical to v5's. Positions are
 the ones in the table below.
 
 That same file carries `hs_001` to `hs_030`, the operational anchors, and all
-thirty match `hotspots[]` in `v4.json` to 4dp. Nothing in the app reads the GLB
+thirty match `hotspots[]` in `v5.json` to 4dp. Nothing in the app reads the GLB
 — it is a hand-off format — so that agreement is the only available proof that a
 new drop is in the same authoring space as the file it is about to be written
 into. **Check it before trusting an `hs_sNN` node:** if the thirty do not match,
@@ -42,8 +49,10 @@ rules, and again in the acceptance criteria:
 
 No real camera fields of view, credential logic, patrol schedules, emergency
 response routes, security staffing, or sensor coverage gaps may be encoded.
-Every ID, zone, incident and reading is synthetic and DEMO-named (`CAM-DEMO-04`,
-`SEC-DEMO-0042`, `YARD-DEMO-RZ-02`). Geographic grounding is public only: the
+Every ID, zone, incident and reading is synthetic and carries the disclosure
+the spec requires - either the DEMO infix (`SEC-DEMO-0042`) or the word
+*Simulated* (`CAM-04`, `YARD-RZ-02`); §8 tracks the half-finished move from the
+first to the second. Geographic grounding is public only: the
 Port's terminal listing, a public Draft EIS/EIR, published gate-camera context
 and the 2025 terminal map, all cited in the spec's §9.
 
@@ -51,16 +60,25 @@ and the 2025 terminal map, all cited in the spec's §9.
 
 ---
 
-## 2. Why v4 is a fork, not a flag
+## 2. Why each one is a fork, not a flag
 
-`/v4` was made the way `/v3` was: a byte-identical copy of the tree above it,
-forked so it can diverge without touching its source.
+Both forks were made the same way: a byte-identical copy of the tree above,
+free to diverge without touching its source.
 
 ```
 src/terminal-v3/      →  src/terminal-v4/      (88 files)
 src/app/v3/page.tsx   →  src/app/v4/page.tsx
 config/sites/v3.json  →  config/sites/v4.json
+
+src/terminal-v4/      →  src/terminal-v5/      (91 files)
+src/app/v4/page.tsx   →  src/app/v5/page.tsx
+config/sites/v4.json  →  config/sites/v5.json
 ```
+
+The v5 fork is the same four edits as the v3 one: the `TerminalExperienceV5`
+rename, its `site` default, the route, and every `@/terminal-v4` self-import
+repointed at `@/terminal-v5` - the import repoint being the one that matters,
+since a missed one would have v5 sharing v4's store singletons.
 
 At the moment of the fork only five files differed: the `TerminalExperienceV4`
 rename, its `site` default, the route's doc comment, and four
@@ -78,6 +96,17 @@ catches a half-registration.
 it, v4 would fall through to v1's base and stream the wrong bake silently,
 against the file's stated intent that an unset variable 404 loudly. v4 points at
 its own bake, v9 (see the streaming section below).
+
+**v5 SHARES v4's BASE**, by falling back to it:
+`STREAM_BASE_V5 ?? STREAM_BASE_V4`. The two site files carry the same
+`stream.slug`, `portla-c5-v9w-inst-mo` - v5 is a fork of the layer, not of the
+bake - so a separate base would only be a second name for one set of chunks.
+Falling back is what makes that true in a deploy as well as on paper: `.env`
+has `NEXT_PUBLIC_STREAM_BASE_V4` set and no V5, and without the fallback v5
+would drop to the `ASSET_ROOT/<slug>/` path instead of the CDN base v4 uses,
+streaming from somewhere v4 never touches. `NEXT_PUBLIC_STREAM_BASE_V5` still
+wins if it is ever set, which is the one line to add the day v5 gets a bake of
+its own.
 
 The variable lives in `.env`, which is gitignored, so **a deploy needs it set
 in that host's own environment** - Vercel project settings, for instance. Next
@@ -130,12 +159,64 @@ would make it the one thing that reads as foreign.
 It leads the list because it is the shortest row and the one being
 demonstrated. The operational layouts keep their own order below it.
 
-### Only S01 and S02 are reachable
+### The layer opens with two incidents open
 
-`HotspotConfig.enabled: false` on **S03 through S08**. They are still listed
-under Security - the set is eight and looking like six would be a lie - but the
-row is **dimmed to 40% and not pressable**, and no marker is ever drawn for
-them: not in the security overview, not in the nearby set while walking.
+`OPEN_INCIDENTS` replaces the empty seed. Two, matching what the two alarm
+screens already claim:
+
+| | source | severity | |
+|---|---|---|---|
+| `SEC-DEMO-0043` | S03 waterside, `WS-01` | **HIGH** | unauthorized watercraft in zone |
+| `SEC-DEMO-0044` | S06 anomaly, `CAM-07` | **MEDIUM** | unattended object |
+
+**Because S08 derives, it does not need authoring.** `commandViewFields` reads
+the store, so the command view now says `Waterside - 1 event · HIGH` and
+`Video Analytics - 1 event · MEDIUM`, with counters at 2 active / 1 high /
+1 medium / 0 critical. Hard-coding those numbers would have left two places to
+keep in step; this way S08 cannot disagree with S03's DANGER banner or S06's
+FLAGGED FOR REVIEW, because it is reading the same rows they describe.
+
+S07's queue picks them up for free, and each source card keeps its own grid:
+`SourceIncidents` only renders at two or more open on one hotspot, and these
+are one each.
+
+**This changes the layer's opening premise.** §5 step 1 had every system NORMAL
+with nothing detected, and the emptied event fields in `_securityNote` were
+held back for exactly that. Two screens now open mid-event instead, so "nothing
+is happening until you make it happen" no longer describes the demo.
+
+### The layer switches are gone
+
+S08 carried six chips that added and removed marker categories. Removed, with
+`SecurityLayerToggles` and `LayerChip`. The store keeps `categories`,
+`toggleCategory` and `showAllCategories` - nothing reads them now, and they are
+the hook if the idea comes back.
+
+It was the only control in the layer that changed what was on screen, so S08 is
+now purely a readout, which is what the other seven are.
+
+### All eight are reachable, but only six have markers
+
+No `enabled: false` remains in `v5.json`. `v4.json` carries it on S03-S08,
+which is the whole of what separates the two routes.
+
+**S07 and S08 have no marker, and open a different way.** `isFieldHotspot` is
+true only for S01-S06 - the six that appear in `SECURITY_EVENT_GROUPS` - and
+`hotspot-markers` filters on it, so the incident log and the command
+switchboard draw no disc. They are instruments, not places. Since a card is
+normally opened by clicking its disc, enabling them alone would have made them
+travel somewhere and show nothing.
+
+So the Resources row does both for them: `goToHotspot` takes an `onArrive`, and
+the flap passes one for any hotspot that is **not** a field hotspot, setting
+`hotspotInfo` from inside the transition. The card is therefore up as the
+picture returns. The six that do have markers keep the old behaviour -
+travelling to them deliberately leaves the card closed, so someone can stand at
+the viewpoint and watch the terminal.
+
+A row that IS disabled is still listed under Security - the set is eight and
+looking like six would be a lie - but it is **dimmed to 40% and not pressable**,
+and no marker is ever drawn for it.
 
 `disabled` on the button rather than `opacity` alone, so the keyboard and a
 screen reader get the same answer the eye does.
@@ -143,9 +224,11 @@ screen reader get the same answer the eye does.
 This is the honest state for a capability whose data and viewpoint exist but
 whose story is not finished. Hiding the rows would make the layer look shorter
 than it is; leaving them live would let them be pressed into a half-built view.
-Absent means enabled, so all thirty operational rows and S01/S02 are unaffected.
+Absent means enabled, so all thirty operational rows and S01-S06 are unaffected.
 
-Removing the flag is the whole of "turn one back on".
+Removing the flag is the whole of "turn one back on" - which is all S03 through
+S06 needed. Their fields, alert, camera and CP pairing were authored from the
+start; nothing but that one line stood between them and the screen.
 
 ### S07 and S08 are in the list
 
@@ -190,8 +273,9 @@ That narrowing was once the whole story, and §8 read straight: *"demo zones
 disappear ... **unless a user explicitly selects** an active incident."*
 Picking a row by name in the tree is that explicit selection.
 
-It no longer is. The enabled pair (S01, S02) is added back after the narrowing,
-so the two layers DO draw together — see "What is on screen, and when".
+It no longer is. The enabled anchors — S01-S06 — are added back after the
+narrowing, so the two layers DO draw together — see "What is on screen, and
+when".
 
 Its `index`/`total` count within the **six field capabilities** — the set the
 tree shows it in — rather than its parent layout's operational children.
@@ -202,9 +286,9 @@ tree shows it in — rather than its parent layout's operational children.
 
 This is the decision most likely to be misremembered, so it is stated plainly:
 
-> **`v4.json` seeds the layer. The store owns it.**
+> **`v5.json` seeds the layer. The store owns it.**
 
-`config/sites/v4.json` › `securityHotspots[]` is the **opening position**:
+`config/sites/v5.json` › `securityHotspots[]` is the **opening position**:
 anchors, labels, and the readings each popup shows at rest. `initStores(site)`
 copies it into `useSecurityStore` once, at the root's render, before any child
 reads it.
@@ -234,14 +318,14 @@ split buys: the tree can choose to show both, while nothing that reads
 
 ### Rotations are converted, not copied
 
-The GLB stores quaternions; `v4.json` stores XYZ Euler, via three.js's
+The GLB stores quaternions; `v5.json` stores XYZ Euler, via three.js's
 `Euler.setFromQuaternion` in order `XYZ`. The conversion is validated by the
 thirty operational nodes above: every one reproduces its `hotspots[]` row's
 rotation exactly, so a converted `hs_sNN` is being read the same way thirty
 known-good rows already are.
 
 The v5 drop left every rotation where it was — only positions moved. A
-quaternion of `-0` where v4.json holds `0` is the same rotation and is written
+quaternion of `-0` where v5.json holds `0` is the same rotation and is written
 as `0`, so the file does not pick up a `-0` on a value that did not change.
 
 | | Position | Rotation | Moved in v5 |
@@ -372,7 +456,7 @@ aerial.
 `hs_001` to `hs_030`, and all thirty match `hotspots[]` to 4dp - the only
 available proof that a new export is in the same authoring space as the file it
 is about to be written into. Its eight security anchors are byte-identical to
-what was already in `v4.json`, so this drop moved nothing; only the cameras
+what was already in `v5.json`, so this drop moved nothing; only the cameras
 changed.
 
 ### S01 and S02 stand on the ground, on the truck's right
@@ -503,16 +587,22 @@ with the store flag and the marker branch behind it, rather than left as a flag
 nothing sets and a branch nothing enters.
 
 So a security marker reaches the scene three ways: **picked by name** from the
-unfolded list, **walked past** on the navmesh, or — for the enabled pair —
+unfolded list, **walked past** on the navmesh, or — for any enabled anchor —
 **unconditionally**, via `alwaysOn`.
 
-**THE ENABLED PAIR IS ALWAYS UP.** S01 and S02 are the only anchors with
-`enabled` unset; every other row is `enabled: false`. Those two are unioned
-into the marker set after every rule above has run, so the narrowing to a
-picked disc cannot take them down. Before this, opening S01 hid its own marker
-AND S02 — the layer went dark on the click that was meant to demonstrate it.
-This is wider than §8 and is a deliberate demo choice: the security anchors are
-what v4 exists to show.
+**THE ENABLED SET IS ALWAYS UP.** S01-S06 carry no `enabled` flag; S07 and S08
+are `enabled: false`. Those six are unioned into the marker set after every rule
+above has run, so the narrowing to a picked disc cannot take them down. Before
+this, opening S01 hid its own marker AND S02 — the layer went dark on the click
+that was meant to demonstrate it. This is wider than §8 and is a deliberate demo
+choice: the security anchors are what v5 exists to show.
+
+**Six discs now, not two.** Turning S03-S06 on put four more anchors into
+`alwaysOn`, so first person carries a disc at the quay, the central yard, the
+crane corridor and the southern yard at all times, however far off. They draw at
+a constant screen size, so a distant one is a speck rather than a billboard -
+but the rule reads as "what is near you" and is not, and six is the number to
+have in mind before adding a seventh.
 
 **THE OPEN CARD'S OWN MARKER IS THE ONE EXCEPTION, AND IT IS THE LAST WORD.**
 A bead pulsing behind — or under — the panel it just opened is the marker
@@ -581,9 +671,9 @@ Below `sm` the card comes in on every axis:
 | padding | 24 | 16 |
 | corner | 14 | 12 |
 | title / subtitle | 18 / 13 | 15 / 11 |
-| field label / value | 12.5 / 17 | 11.5 / 15 |
-| row padding | 7 | 5 |
-| alert title / detail | 12.5 / 12 | 11 / 11 |
+| field label / value | 10.5 caps / 18 | 10 caps / 15 |
+| row padding | 9 | 6 |
+| alert title / detail | 11 caps / 14 | 10 caps / 12.5 |
 | column gap | 32 | 20 |
 
 `PanelHeader` is shared with the destination panels, which are the width of the
@@ -599,16 +689,79 @@ is for.
 and against it the card's rows sat on daylight: the 60%-white label tier
 vanished and the green status words lost their tone.
 
-The card keeps that shared glass. A darker, dimmed ground of its own was tried
-and reverted - it read as frost rather than glass, and made the one surface
-covered in readings the heaviest thing on the overlay. The legibility lives in
-the type instead:
+**The type-only answer was tried first, and it did not carry.** A darker ground
+was rejected once - it read as frost rather than glass, and made the one
+surface covered in readings the heaviest thing on the overlay - so the
+legibility was pushed into the type: labels up to `--nav-text-2`, sizes up,
+and `CARD_TEXT_SHADOW` on every glyph.
+
+Composite the numbers and that was never going to be enough. `rgba(9,11,15,0.52)`
+over a bright daylight view resolves to **`#65686d`**, a mid grey, and on it:
+
+| over bright sky | before | after |
+|---|---|---|
+| a white value | 4.74 | **6.59** |
+| a red value | 1.70 | **3.52** |
+| DANGER on its own banner | 1.96 | **3.63** |
+
+**The tint is not the lever - the backdrop is.** Raising the tint to 84% was
+tried and it did read as the frost the first reversal warned about. The fault
+was never the 52%; it is `--ui-glass-brightness: 1.06`, which *brightens* what
+is behind the panel. Frosted glass does the opposite. Real frost over a bright
+scene comes back dark, and the shared recipe was pushing a daylight view up
+before the tint ever got to it.
+
+So the card keeps a translucent `rgba(9,11,15,0.48)` and takes its own
+backdrop, `CARD_FROST` = `blur(30px) saturate(150%) brightness(0.78)`. The
+30px blur is the other half: at 10px the containers and cranes behind the card
+stayed legible as shapes, which is what made a panel of readings look busy.
+Blurred to 30 they are colour, not detail.
+
+**0.78, not 0.55.** Dimming to 0.55 was tried and came back too dark - the
+panel stopped reading as glass and started reading as a slate. 0.78 is the
+lightest setting where the tone words still carry, and it is the one number to
+move if the balance is wrong: **down** darkens the panel and lifts every
+contrast in the table below, **up** lightens it and costs the red first.
+
+| scene behind | 52% + `brightness(1.06)` | 48% + `brightness(0.78)` |
+|---|---|---|
+| bright sky | `#6a6e73` | `#55585d` |
+| green yard | `#35442d` | `#2b3725` |
+| dim view | `#131820` | `#10141a` |
+
+It is still glass - the scene moves behind it and its colour still comes
+through, which is why the yard panel is green and the sky panel is neutral. It
+just stops setting the contrast.
+
+The type work stays and now has a ground to sit on:
 
 | | before | now |
 |---|---|---|
-| label colour | `--nav-text-faint` (60% white) | `--nav-text-2` (82%) |
-| label / value size | 11.5 / 15 | 12.5 / 17 |
-| shadow | none | `CARD_TEXT_SHADOW` |
+| label | 12.5px sentence case, `--nav-text-2` | 10.5px caps, 0.1em, `--nav-text-faint` |
+| value | 17px semibold | 18px bold |
+| row padding | 7 | 9 |
+| shadow | `CARD_TEXT_SHADOW` | unchanged |
+
+Labels went **down and dimmer** rather than up. With a stable ground the label
+no longer has to fight for itself, and a small caps label under a big bold value
+reads as an instrument panel - which is what a card of readings is - instead of
+two tiers of similar prose.
+
+**A different red, chosen for the frost.** `TONE_COLOR.alert` and
+`SEVERITY_COLOR.HIGH` are **`#ff9b93`**, a coral measuring 3.52 / 6.18 / 9.11
+across the three scenes above, against `#ff5c5c`'s 1.70 on the old panel.
+A deeper red cannot win here: the panel is translucent by design and stays
+light, so the ink has to come up to meet it rather than the ground going down
+to meet the ink. That is also why the red got lighter again when the frost did
+- the two move together, and the red is the reading that runs out first.
+
+**The banner is a gradient now**, `rgba(182,44,34,0.52)` fading to `0.16` left
+to right, with a 4px bar and a 1px inner ring. The flat 22% wash over the old
+glass was resolving to a dusty `#795d5e` - closer to mauve than to a warning -
+and the fade gives the strip a direction so the bar, the icon and the word sit
+at the solid end. Its two lines also swapped weight: the level is now the small caps
+kicker and the sentence is the 14px line, because *what is wrong* is the part
+worth reading.
 
 `CARD_TEXT_SHADOW` is `0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)` -
 a tight plate under each glyph and a wider halo around it. Set **once, on the
@@ -766,7 +919,7 @@ Four things about the mixer that are easy to get wrong, and are handled:
   clip list in the message. Silence there is indistinguishable from an
   animation that was never authored.
 
-**/v4 streams v9; /v3 stays on v8.** The bake is `portla-c5-v9o-inst-mo`,
+**/v5 streams v9; /v3 stays on v8.** The bake is `portla-c5-v9o-inst-mo`,
 published at `.../la-port/v9w-inst-mo/assets/` and pointed at by
 `NEXT_PUBLIC_STREAM_BASE_V4` - which wins outright over `stream.slug`
 (`config.ts > assetBaseFor`), so the slug in the site file is a label, not the
@@ -776,7 +929,7 @@ URL. `NEXT_PUBLIC_STREAM_BASE_V3` is a separate variable and was not touched.
 `CraneCycle2`, `TruckHaul`, `SceneTour`, `WaterWaves`. v8's umbrella
 `AllAnimations` is gone and `WaterWaveLoop` was renamed, so a v8 bake and a v9
 bake do not share a single clip name except by accident - **which is why this
-only comes alive on v9.** Pointing /v4 back at a v8 base would leave
+only comes alive on v9.** Pointing /v5 back at a v8 base would leave
 `GateSequence` matching nothing, and the console would say so.
 
 **The policy is applied when the manager is BORN, not only when it changes.**
@@ -800,7 +953,7 @@ needed" and skip.
 
 **Defaults keep v3 and v2 untouched.** With no clip claimed, every clip loops and
 plays the moment `animated.glb` lands, which is exactly what `ChunkManager` did
-before. Only v4 calls `setOneShotClips` and `setLoopsRunning`.
+before. Only v4 and v5 call `setOneShotClips` and `setLoopsRunning`.
 
 ### The still stands in the card as a turned plane
 
@@ -908,39 +1061,145 @@ frame it needed cost the popup its shape. This keeps the card a card.
 No operational hotspot has an image, and the field is optional, so H01-H30 are
 untouched - they keep their two columns and no plane.
 
+### The camera cards report the camera, not the empty event
+
+S04 and S06 opened with **five and six of their eight rows saying nothing** -
+None, em dash, em dash, NONE, NO ACTIVE EVENT. Section 4's tables are written
+around an event, and with the event held back to rest what was left read as a
+form that had failed to load rather than a camera reporting all-clear.
+
+`HotspotField.eventOnly` is the fix: the row is authored, and rendered only
+while an incident is open on that hotspot. `HotspotDataCard` filters on it in
+both branches of the field memo. Nothing is deleted - `security-store.ts`
+patches `detected_class`, `confidence`, `event_time`, `severity` and
+`incident_status` by name across six S04 variants, and seven more names across
+five S06 ones, so removing them would break the events before they are
+reachable. The card **grows** when one fires, which is a better beat than a
+card that was pre-filled with blanks waiting for it.
+
+The space that frees goes to what an idle camera can actually report:
+
+| | |
+|---|---|
+| **is my sensor blind** | `Feed`, `Analytics` - the question an operator asks first, and the card could not answer it. A camera reading ACTIVE that has not sent a frame in an hour is the incident. |
+| **what it can tell apart** | `Classifies` - Person · Vehicle. The point of "AI Video Analytics" over motion detection, and the reason `Last Detection` can carry a confidence at all: a motion detector has nothing to be confident about. |
+| **what it sees now** | `Vehicles Tracked`, `People Tracked` |
+| **what it has seen** | `Detections (24h)`, `Last Detection`, `Alerts (24h)` |
+
+**The counts are split by class, not totalled.** "Objects Tracked: 2" does not
+say two of what, and in a yard aisle that is the whole question - two trucks is
+Tuesday, two people on foot is the incident. Split, `People Tracked: 0` earns
+its row while nothing is happening, which is exactly what the emptied event
+rows failed to do.
+
+**The classes are not invented.** Person, Vehicle and Person group are what the
+store's S04 variants fire on - person in restricted zone, vehicle in pedestrian
+lane, person on the quay edge, crowd forming. The card claims only what the
+demo can raise.
+
+**`Rules Armed` was authored and cut.** It read `4 of 4` - how many analytics
+rules are live, the field that answers "the camera saw it, so why were we not
+told". True, and it needed a paragraph like this one to land; a reading that
+has to be explained is not a reading. Its removal is the same test the first
+version of this card failed in the other direction.
+
 ### S03 looks out over the water, and is standing in an alert
 
-**The camera.** S03's CP was derived from `cp_001`'s side, and `cp_001` is L01
-Main Channel - which sits at x -1732, **west of the anchor, out on the water**,
-looking east at the terminal. For a waterside monitoring zone that is exactly
-inverted: it showed the land. The camera now stands on the quay at
-`[-1501.3038, 25.9564, 368.2249]` and faces **west, over open water**.
+**The camera is `cp_016`, and this paragraph used to say otherwise.** S03's
+viewpoint was once derived from `cp_001`'s side - L01 Main Channel, at x -1732,
+west of the anchor and looking east, so a waterside zone was being shown from
+the water with the land in frame. A quay standpoint at
+`[-1501.3038, 25.9564, 368.2249]` facing west was computed to replace it, and
+that number outlived its own fix: `cp-v6` then authored a CP for the anchor and
+the derivation stopped being the answer. See *The eight are AUTHORED, not
+derived*. `cp_016` put it at `[-1534.0809, 4.6845, 430.6008]`, 11 units out,
+yaw -31.6, the anchor 0.2 h / 1.2 v off centre - looking AT the zone from low
+over the water rather than out across it from the quay.
+
+**It now frames the whole story.** The spawn-derived pose could not: sitting at
+z -60 and looking up the +z axis, EVER LEGACY at z -112 and the zone's southern
+corners at z -457 and -510 were all **behind the camera**. The card claims three
+craft - two authorized, one not - and the shot held one of them.
+
+```
+position  [-1777.6, 60.0, 627.2]
+rotation  [3.0374, 0.591, -3.0834]        XYZ, = YXZ [0.0864, 2.548, 0]
+```
+
+600 units out from the centroid of everything that has to be in frame, on a
+bearing of 124 degrees, 60 up, aimed at `(-1442, 8, 130)`. That is **208 units
+to the right** of the old sightline and 794 further along it.
+
+| in frame | distance | horizontal | vertical | side |
+|---|---|---|---|---|
+| unauthorised craft | 232 | +6.3° | -12.4° | right |
+| zone corner A | 322 | +16.4° | -10.3° | right |
+| zone corner D | 295 | -4.7° | -11.2° | left |
+| Berth 226 | 666 | +3.9° | -4.2° | right |
+| EVER LEGACY | 889 | -0.3° | -3.2° | left |
+| zone corner C | 1279 | -6.7° | -2.6° | left |
+| zone corner B | 1285 | -1.6° | -2.6° | left |
+
+Against half-angles of 30 horizontal and 17.5 vertical at `world.fov` 35, so
+every one clears with room. The unauthorised craft is nearest and on the right,
+the zone runs away down the middle, and the two berthed vessels sit beyond it -
+2 authorized and 1 not, which is what the readings say.
+
+**The standoff was solved, not chosen.** Nine points - four zone corners, three
+vessels, two corners of the craft's own box - swept over bearing, height and
+distance for the tightest camera that holds all nine inside 28 x 16 degrees with
+nothing nearer than 200 units, so the near craft cannot swallow the frame.
+
+**Watch the euler order when re-authoring this one.** `cameras.spawn` stores
+**YXZ**, because it is applied directly; `securityHotspots[].camera` stores
+**XYZ** and `poseForCamera` reorders it. Pasting spawn's stored triple into the
+hotspot block would have been reordered a second time and canted the horizon.
+The XYZ equivalent is the one spawn's own `_note` records from `/extract-pos`,
+and it round-trips through `xyzToYxz` back to `[0.0488, 2.9080, 0]`.
 
 Which way the water is, from the file rather than by assumption: L01 stands at
 x -1732 and looks east; the operational hotspots run x -1397 to -693; the
 navmesh stops at x -1500.1. Everything west of that is water, and S03's anchor
-sits 28 units beyond the edge, which is right for a waterside zone.
+sits 28 units beyond the edge with its CP 34 beyond - both off the walkable
+world, which is right for a zone that is on the water.
 
-The heading is 333 degrees rather than due west. Due west is `sunDot` +0.50 -
-straight into the sun, against `ground-views.ts`'s +0.15 cap - and swinging it
-north puts the sun behind at **-0.55**, the table's own target, while keeping
-open water across the whole frame. Pitch is 0.65 of the marker's depression, so
-the water and the horizon keep the upper frame instead of the shot filling with
-surface.
+**The readings are what is in the shot.** Three craft detected, two
+authorized, one not:
 
-**The readings.** Four craft detected, three authorized, one not:
+| | label | |
+|---|---|---|
+| `zone_id` | Zone ID | WS-01 |
+| `zone_status` | Zone Status | ALARM *(alert tone, red)* |
+| `detected_watercraft` | Craft Detected | 3 |
+| `authorized_watercraft` | Authorized Craft | 2 |
+| `unauthorized_watercraft` | Unauthorized Craft | 1 *(alert tone, red)* |
+| `event_severity` | Severity | HIGH *(alert tone, red)* |
 
-| | |
-|---|---|
-| `zone_status` | ALARM *(alert tone, red)* |
-| `detected_watercraft` | 4 |
-| `authorized_watercraft` | 3 |
-| `unauthorized_watercraft` | 1 |
-| `event_severity` | HIGH *(alert tone, red)* |
+**The counts answer to the scene, not to the spec table.** Section 4 gave
+4 / 3 / 1 and the card carried it verbatim while nothing was drawn. With the
+zone up at `cp_016` the shot holds two authorized craft and one extra, so the
+readings are 3 / 2 / 1 - and 2 + 1 = 3, which is the arithmetic anyone reading
+the card will check first. The labels name the subject for the same reason:
+"Authorized" alone next to a restricted-zone hotspot reads as people.
+
+The field `name` keys are untouched - `security-store.ts` patches
+`detected_watercraft` by name in four S03 event variants, so renaming them
+would break the events before they are even reachable.
 
 `HIGH` and `ALARM` are both already in `<site>.json` > `tones.alert`, so the red
 comes from the tone table rather than from anything hard-coded, and the status
 flag rule upper-cases them.
+
+**The count that is wrong is red as well, and that needed a rule change.**
+`unauthorized_watercraft` is an `integer`, and a number matches nothing in the
+tone table, so it carries `tone: "alert"` in the file. Nothing else in v5 does -
+`Field` and `valueColor` only coloured an `enum`, so an authored tone on any
+other type was accepted and silently ignored. A tone the file PUTS ON a field is
+a deliberate statement, so it is now honoured whatever the type; a tone DERIVED
+from the word table still reaches only an `enum`, which is what keeps a sentence
+containing "Active" from being recoloured. The same change lights **S08's
+severity counters**, integers carrying a tone `commandViewFields` computes,
+which had never been able to show it.
 
 **The banner.** `HotspotConfig.alert` is a standing state, not a fired event -
 the layer has no triggers. It renders **first in the card body, above every
@@ -950,17 +1209,212 @@ S03 carries `level: "danger"`, titled **DANGER**, detailing *"Unauthorized
 watercraft inside the monitored zone"*. The accent bar and icon carry the
 colour, so the panel behind stays the same glass as every other card.
 
-**Dark red, and the fallback is the colour.** `--tone-alert` is not defined in
-any stylesheet, so `TONE_COLOR`'s fallback is what actually renders. v4's is
-`#c0342b` rather than the `#ff5c5c` the other routes use: on a glass panel a
-light red reads as a highlight, and an alert should read as a warning. v3 and v1
-keep their own copies of that table and are unaffected. It applies to every
-alert-tone value in v4, operational rows included, which is the point - one red
-means one thing.
+**It is a component, `AlertBanner`.** The level was being branched on four
+times over - background, border, icon, heading - to say one thing, so it is
+resolved once into `ink` and a wash and the branch is gone.
+
+**The heading was the smallest type on the card.** 12.5px, under field labels
+at 12.5 and field values at 17: the one line saying something is wrong was set
+below everything it was warning about. It is 14px now, and the sentence under
+it moved from `--nav-text-2` to `--nav-text`, because what is wrong is primary
+content and not a caption.
+
+**The fallback IS the colour.** `--tone-alert` is not defined in any
+stylesheet, so `TONE_COLOR`'s fallback is what actually renders. v3 and v1 keep
+their own copies of that table and are unaffected by anything here.
+
+**One red was two jobs, and the dark one could only do one of them.** v5 ran
+`#c0342b` rather than the `#ff5c5c` the other routes use, on the argument that
+on a glass panel a light red reads as a highlight and an alert should read as a
+warning. That argument is right **about the surface** and wrong about the ink,
+and the same value was doing both.
+
+The card is glass at `rgba(9,11,15,0.52)`, so what sits behind a word is the
+scene. Composite it and the panel runs from `#12171f` over a shadowed view to
+`#65686d` over bright sky, and the banner's own 18% wash from `#311c21` to
+`#755f61`. Against those:
+
+| | dark end | bright end |
+|---|---|---|
+| `#c0342b` on the banner wash | 2.86 | **1.06** |
+| `#c0342b` on the panel | 3.23 | **1.00** |
+| `#ff5c5c` on the banner wash | 5.26 | 1.95 |
+| `#ff5c5c` on the panel | 5.94 | 1.85 |
+
+**1.00 is the word not being there.** Over bright sky the deep red is the same
+luminance as the glass it is printed on, so DANGER, ALARM, HIGH and the
+unauthorized count all disappear into the panel - on the one card in the layer
+whose whole job is to be noticed. It fails at the dark end too, just visibly:
+2.86 against 4.5.
+
+`CARD_TEXT_SHADOW` cannot rescue it either. The halo is black, and a dark red
+reads only 3.77 against black while `#ff5c5c` reads 6.94 - the shadow the card
+already carries is built for light ink and was doing nothing for this.
+
+**So the two jobs are split.** `TONE_COLOR.alert` is **ink** and goes back to
+`#ff5c5c`, which is what v1 and v3 use, so one red means one thing across all
+three routes rather than one per route. `ALERT_SURFACE` is the **wash** and
+keeps the deep red, raised 0.18 -> 0.22 now that it is no longer sharing duty
+with the text - which is what actually keeps the strip reading as a warning
+block. Nothing is read off a wash, so it can afford to be dark.
 
 **The two have to agree.** A danger banner over four green rows would be the
 card contradicting itself, so `alert.level` and the fields' tones are authored
 together or not at all.
+
+### S04's popup is a picture, not a grid
+
+`HotspotConfig.poster` - when a hotspot carries one the card renders it wide
+(`min(1280px, 100vw - 32px)`) and the field grid is hidden. S04 carries
+`/security/cam-04-analytics.png`, 1608x978.
+
+**Because the composition already is the card.** The image holds the pole and
+CAM-04, the coverage cone, two tracked vehicles boxed with `Vehicle · 89%` and
+`Vehicle · 96%`, and the Yard Video Analytics panel itself. Rendering the field
+grid under it would print the same ten readings twice.
+
+It also closes the gap the field version could not. `Vehicles Tracked: 2`
+described boxes that do not exist in the scene - S04's tracked-object animation
+is still in §8 - so the one card whose subject is "what the camera sees" could
+not show it. The poster shows it. The authored fields stay in `v5.json` behind
+the poster, so removing that one key puts the grid back.
+
+The card keeps its real header and close control; the panel inside the picture
+is artwork.
+
+### S06's popup is a picture too
+
+`/security/cam-07-anomaly.png`, 1254x1254 - square, which is why `poster`
+carries its own `width` and `height` rather than the card hardcoding S04's
+ratio. CAM-07 on its pole over the southern yard aisle, a crate ringed in red
+mid-aisle with **Dwell Time 00:12:37** against a **00:10:00** threshold, and
+the panel reading FLAGGED FOR REVIEW.
+
+S06's own `fields[]` are still authored at rest behind the poster, and the
+picture shows a dwell breach. That no longer contradicts S08, because the store
+now opens with the two incidents both pictures report - see below.
+
+### S05 draws its corridor
+
+The second `demo_zone_geometry`, and the same machinery as S03's:
+`/models/la-port-zone-c5-crane-geofence-v1.glb`, one node `Virtual Geofence` at
+`[-1279.66, 3.05, -25.32]`, 20 verts, authored in world coordinates. It is
+emissive red in the bake like the water one, and `ZoneGeofence` repaints it
+`#30d158` - nothing about S05 needed a line of code, only the `geofence` key.
+
+**949 x 44 units, standing 6.1 high** - a long narrow corridor rather than an
+area, which is what a crane rail run is. Corners
+`(-1512, 389) (-1087, -459) (-1047, -439) (-1473, 409)`.
+
+**Both the anchor and the CP are INSIDE it**, unlike S03 where the camera looks
+at the zone from outside. `cp_013` stands at `[-1116.0, 7.3, -361.2]` and the
+anchor sits 14 units away at `[-1122.3, 6.7, -348.7]`, both within the
+footprint. Standing in the restricted zone is the right place to be shown it
+from: the card reports four people inside and none in violation, and the
+operator is one of the things inside the drawn limit.
+
+### The unauthorised craft is world furniture
+
+`SiteConfig.worldModels` - a list of GLBs mounted with the scene and never
+taken down, authored in world coordinates like the geofence. v5 carries one,
+`/models/la-port-zone-c5-unauthorised-ship-optimized.glb`: 1.6 MB, Draco
+geometry and WebP textures, one node at `[-1627.84, -5.73, 450.37]`, 91
+primitives over 91 materials and 38 images.
+
+It is **not** gated on S03, which is the difference between it and the zone.
+The craft is in the water whether or not anyone is looking at the waterside
+hotspot; the boundary is an overlay that answers to the selection. That split
+is also why the two are separate GLBs - the combined bake would have put the
+ship inside `ZoneGeofence`, where the material pass would have painted all 91
+of its materials green.
+
+`WorldModels` takes the draco path, stubs `raycast` on every mesh, and refcounts
+through `acquireGLTF`/`releaseGLTF` like every other loader here.
+
+**IT DOES NOT SIT IN THE ZONE.** The hull's world box is
+`x -1639.0..-1616.7, y -7.1..25.7, z 398.7..504.6` - 106 long, 22 wide - and
+every corner of that footprint is outside the geofence polygon, the nearest by
+**18.2 units** off the D-A edge. It reads as a craft standing off the boundary,
+not one inside it, so S03's banner saying *"1 unauthorized craft identified
+inside the monitored zone"* is contradicted by the thing it is describing.
+Either the ship moves about 30 units south-east in the bake, or the sentence
+becomes "identified at the zone boundary". Unresolved.
+
+### S03 draws its zone
+
+The spec's `demo_zone_geometry`, and the first of the two. `HotspotConfig`
+gained an optional `geofence: { url }`; S03 carries
+`/models/la-port-zone-c5-water-geofence-v1.glb`, 2 KB, uncompressed, served
+from `public/` rather than the bake's S3 base because it is app furniture
+rather than terminal geometry.
+
+**The GLB is authored in WORLD coordinates.** One node, `Water Geofence`,
+carrying its own translation `[-1360.48, -3.13, -43.72]`, so `ZoneGeofence`
+mounts it at identity and nothing in the code positions it. 20 verts, 10 tris:
+a four-cornered footprint extruded from y -11.82 to y +1.66, four walls and a
+lid, no floor. Emissive at strength 2.5 over a base colour at alpha 0.28,
+double-sided - a glowing translucent boundary.
+
+**The colour is overridden, not re-baked.** The GLB is emissive red
+`(1, 0.09, 0.06)`; `GEOFENCE_COLOR` sets both `color` and `emissive` to
+`#30d158`, which is `tones.ok` - the same green a card sets a healthy reading
+in, so the zone reads in the layer's own palette rather than a second red. It
+is a UI decision over 20 verts of geometry, so it lives in code where it is one
+line to change; strength, alpha and double-sidedness stay as authored. **It
+does not track `zone_status`** - the card says ALARM while the zone draws
+green, and if the zone is ever meant to answer to the reading, that is a rule
+to write rather than a colour to pick.
+
+| | |
+|---|---|
+| footprint | 984 x 116 units, 0.11 km², corners `(-1529, 422) (-1088, -458) (-1192, -510) (-1633, 370)` |
+| standing proud | 1.66 above the node baseline; the other 11.8 is below, i.e. under the water |
+| the anchor | sits **0.9 units from the near corner** - the marker is on the zone, not beside it |
+
+**Two things it must not do, both set in a layout effect rather than in the
+bake.** `raycast` is stubbed out on every mesh: the zone is a thousand units
+long and passes between the camera and its own marker, so a pointer test
+against it would swallow the click that opens the card. And `depthWrite` goes
+off: one closed volume at alpha 0.28 with depth writes on means whichever wall
+drew first hides the three behind it, and the box reads as a flat slab instead
+of a boundary you can see into.
+
+**It LOADS on that pick, not before.** `useGLTF` is called inside the inner
+component, which is only mounted once a hotspot carrying a `geofence` is the
+selected or open one, so nothing is fetched or parsed until S03 is reached.
+Nothing preloads it either: the provider's idle preloader walks `floors[]`
+`modelUrl` only, `StillPreload` takes `image` only, and `prefetchUrls` has no
+callers. The refcount release runs the other way too - deselecting clears the
+cache and disposes the scene, so a second visit re-fetches. At 2 KB that is the
+right trade; a heavier zone would want the release held.
+
+**It is keyed on EITHER route, because they are not the same one.** Picking
+Waterside by name in the Resources tree sets `selectedHotspotId` and
+deliberately leaves the card closed; clicking the marker sets `hotspotInfo` and
+leaves the selection alone. `ZoneGeofence` takes `hotspotInfo ?? selected`, so
+however S03 was reached the zone is up.
+
+**Not gated on the view**, unlike the markers. A disc from 180 units up is a
+speck, which is the reason `scene/index.tsx` mounts `HotspotMarkers` only in
+first person. A zone a thousand units long is not a speck, and reads better
+from the dollhouse than from inside it.
+
+**What the authored viewpoint actually shows.** `cp_016` stands 9.7 units off
+the near corner at eye 4.68, with the lid 3.0 below it:
+
+| corner | out | lid, below eye |
+|---|---|---|
+| A (the anchor's) | 9.7 | 17.4° |
+| D | 116 | 1.5° |
+| B | 994 | 0.2° |
+| C | 1001 | 0.2° |
+
+So the short 116-unit edge reads as an edge in front of you and the 984-unit
+length recedes to a line, with `fog.far` at 900 taking the far end anyway. That
+is a boundary seen from a boat, which is defensible for a waterside zone - but
+if the card's *four detected against three authorized* is meant to read as an
+AREA, the shot wants altitude, and that is a camera change rather than a
+geometry one.
 
 ### S01 carries four fields, not eight
 
@@ -1005,7 +1459,7 @@ timestamp S07's incident carries. The spec's S07 incident **is** S04's
 detection, and §5 step 2 has the presenter *trigger* it. A camera already
 reporting it would start the demo at step 3.
 
-Every displaced value is recorded in `_securityNote` inside `v4.json`, so the
+Every displaced value is recorded in `_securityNote` inside `v5.json`, so the
 event state need not be re-derived from the .docx.
 
 Nothing triggers events yet. When that is built, the event state is applied
@@ -1100,7 +1554,7 @@ and a story that reads a different time on every load cannot be rehearsed.
 
 They name anchors in this codebase. **They must never reach the screen.** An
 operator sees the system that reported something ("AI VIDEO ANALYTICS"), what
-was detected, and where ("YARD-DEMO-RZ-02"), never the id of the anchor it was
+was detected, and where ("YARD-RZ-02"), never the id of the anchor it was
 attached to.
 
 This is easy to break without noticing, because the ids are the natural key in
@@ -1120,8 +1574,8 @@ convention, not how the values should read on screen, so:
 - **Prose reads as prose.** Incident types, sources, teams and locations are
   sentence case: "Restricted-zone intrusion", "AI video analytics", "Security
   operations".
-- **A TONED VALUE IS A STATUS FLAG, and flags are caps.** On a hotspot card any
-  `enum` that resolves to a tone renders upper-cased - VERIFIED, OPEN, CLEARED,
+- **A TONED VALUE IS A STATUS FLAG, and flags are caps.** On a hotspot card a
+  value that resolves to a tone renders upper-cased - VERIFIED, OPEN, CLEARED,
   INTACT, NORMAL - by the same condition that colours it. The two belong
   together: a row that is coloured is reporting a state, and one that is not is
   reporting a value. Authored casing does not matter, since `toneFor`
@@ -1129,15 +1583,16 @@ convention, not how the values should read on screen, so:
   CLEARED. **This reverses an earlier decision** that had status values read as
   sentence case; the colouring had already made them flags, and the casing now
   agrees with it.
-- **Identifiers stay as written.** `CAM-DEMO-04`, `SEC-DEMO-0041`,
-  `EGHU4829136`, `YARD-DEMO-RZ-02`. The spec requires DEMO naming, and these
-  are how such ids are genuinely written.
+- **Identifiers stay as written**, whatever form the id takes: `CAM-04`,
+  `SEC-DEMO-0041`, `EGHU4829136`, `YARD-RZ-02`. They print as authored and are
+  never re-cased. The two forms sit side by side because the DEMO infix is only
+  half dropped - see §8.
 - **Severity and status keywords stay caps.** `CRITICAL`, `HIGH`, `ACTIVE`,
   `RESOLVED`. They are §6's visual-state contract and drive the tone colouring.
   `toneFor` upper-cases before matching, so it tolerates either, but these read
   as status flags rather than words.
 - **Locations are the layout's own name** from `layouts[]`: "Central Container
-  Yard", not "YARD-DEMO-RZ-02". The zone code still appears where the spec puts
+  Yard", not "YARD-RZ-02". The zone code still appears where the spec puts
   it, as a hotspot's `zone_id` field.
 
 ### Times
@@ -1479,15 +1934,28 @@ Tracked here so the gap is explicit:
   view's rebuild — see *Triggering events*. The store's 24 variants,
   `triggerEvent` and `resetToSeed` are all still there, waiting for a control.
 
-- **Ids still carry the DEMO infix** on screen: `SEC-DEMO-0034`, `CAM-DEMO-04`.
-  The Lightbox Specification allows "DEMO" or "SIMULATED", and the decision to
-  drop the infix and disclose with the word *Simulated* instead has been taken
-  but not applied to `securityHotspots[]` or to `PAST_INCIDENTS`.
+- **The DEMO infix is half dropped.** The Lightbox Specification allows "DEMO"
+  or "SIMULATED"; the decision is to drop the infix and disclose with the word
+  *Simulated* instead. Applied to the five ids S03-S06 put on screen - `WS-01`,
+  `CAM-04`, `YARD-RZ-02`, `CRANE-RZ-01`, `CAM-07` - because those four cards
+  were being opened for the first time and would otherwise have shipped showing
+  exactly what the decision says not to show. **Still carrying it:** S02's
+  `SL-DEMO-982741`, H06's "LIVE DEMO", and all of `security-store.ts` - every
+  `PAST_INCIDENTS` id and `sourceId`, and `incidentIdFor`'s generator. Until
+  that lands the S07 log will say `WS-DEMO-01` for the zone whose own card says
+  `WS-01`.
+
+- **S03-S06 have no still.** S01 and S02 open with a cut-out render standing
+  beside their readings, turned 13 degrees. The other four have no `image`, so
+  `still` is undefined and their fields simply spread across both columns -
+  which reads, but it is not the card the studies chose. Four renders, one per
+  capability, is the whole of the gap.
 
 - **VIEW EVENT.** Every other S07 action works. This one needs a camera move to
   the event itself rather than to its parent layout, and nothing marks where
   within a layout an event occurred.
-- **`demo_zone_geometry`**: S03 and S05 call for drawn geofences.
+- ~~**`demo_zone_geometry`**~~ **- done.** Both boundaries are in. See *S03
+  draws its zone* and *S05 draws its corridor*.
 
 - **`enabled_in_security_mode`** per hotspot: currently a hotspot is shown or
   hidden by its category, not by a flag of its own.
@@ -1510,7 +1978,7 @@ locally, and a build overwrites its `.next/`. Use:
 
 ```bash
 npx tsc --noEmit                       # must be clean
-npx eslint src/terminal-v4             # must match src/terminal-v3 exactly
+npx eslint src/terminal-v5             # must match src/terminal-v3 exactly
 ```
 
 The lint parity check is the useful one: v3 and v4 carry the same 95 inherited
