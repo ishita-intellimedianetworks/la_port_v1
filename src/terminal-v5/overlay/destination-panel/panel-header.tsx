@@ -4,18 +4,13 @@ import { ArrowLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PanelHeaderProps {
-  /** Empty string omits the title/subtitle block entirely (just back/close). */
   title: string;
   subtitle: string;
-  /** Omitted where the panel closes another way (click-outside on the flaps). */
   onClose?: () => void;
-  /** When set (directions mode), a back arrow returns to the options list. */
   onBack?: () => void;
   dense?: boolean;
 }
 
-/** Panel header — optional back arrow + title/subtitle on the left, a 30px
- *  hairline-circle close on the right. */
 export function PanelHeader({ title, subtitle, onClose, onBack, dense }: PanelHeaderProps) {
   return (
     <div className={cn("flex items-start gap-2.5", dense && "max-sm:gap-2")}>
@@ -34,8 +29,6 @@ export function PanelHeader({ title, subtitle, onClose, onBack, dense }: PanelHe
 
       {title && (
         <div className="min-w-0 flex-1">
-          {/* First line sits in a button-height row so the title lines up with the
-              back / close circles instead of riding above them. */}
           <div className={cn("flex min-h-[30px] items-center short:min-h-[26px]", dense && "max-sm:min-h-[26px]")}>
             <h2
               className={cn(

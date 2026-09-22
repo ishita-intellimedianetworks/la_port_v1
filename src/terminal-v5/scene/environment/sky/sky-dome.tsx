@@ -13,18 +13,16 @@ const DOME_SCALE = 100;
 
 const BLACK = new THREE.Color(0x000000);
 
-const vertexShader = /* glsl */ `
+const vertexShader = `
   varying vec3 vDir;
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
-    // World-space view ray. Taken from the transformed vertex rather than the
-    // box's local position so the dome is correct under any parent transform.
     vDir = world.xyz - cameraPosition;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
 
-const fragmentShader = /* glsl */ `
+const fragmentShader = `
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uHaze;
@@ -54,8 +52,6 @@ const fragmentShader = /* glsl */ `
   float fbm(vec2 p) {
     float v = gradNoise(p) + gradNoise(p * 2.04 + vec2(17.3, 9.1)) * 0.5;
     #ifndef SKY_CHEAP
-    // Third octave is dropped on low-power devices: it is a 0.25-weight detail
-    // inside a thin horizon band, and it is a third of the noise cost.
     v += gradNoise(p * 4.11 + vec2(42.7, 28.6)) * 0.25;
     #endif
     return v;
@@ -65,9 +61,6 @@ const fragmentShader = /* glsl */ `
   void main() {
     vec3 dir = normalize(vDir);
 
-    // Vertical gradient. pow(up, 0.42) keeps the horizon stop wide and the
-    // zenith stop tight, which is what makes the dusk band read as a sunset
-    // rather than a linear ramp.
     float up = clamp(dir.y, -0.15, 1.0);
     vec3 col = mix(uHorizon, uZenith, pow(max(up, 0.0), 0.42));
 
@@ -79,8 +72,6 @@ const fragmentShader = /* glsl */ `
     col += uSun * smoothstep(0.9990, 0.9997, s) * 6.0;
 
     #ifdef SKY_CLOUDS
-    // A low band of cloud near the horizon. Guarded: outside the band the whole
-    // noise field is skipped, and the band is a thin strip of the frame.
     float band = smoothstep(0.03, 0.16, dir.y) * (1.0 - smoothstep(0.22, 0.6, dir.y));
     if (band > 0.001) {
       vec2 uv = dir.xz / (dir.y + 0.18) * 0.55;
@@ -93,9 +84,6 @@ const fragmentShader = /* glsl */ `
 
     gl_FragColor = vec4(col * uFade, 1.0);
 
-    // A raw ShaderMaterial gets neither of these for free — without them the
-    // dome would sit in linear space while every other material in the scene is
-    // tone-mapped and sRGB-encoded, and the sky would read washed out.
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -104,8 +92,6 @@ const fragmentShader = /* glsl */ `
 export default function SkyDome({
   sky,
 }: {
-  /** True once the sky should be visible (first person); false fades it to
-   *  black for the dollhouse, where the model reads as an isolated object. */
   sky: boolean;
 }) {
   const scene = useThree((s) => s.scene);
@@ -113,8 +99,6 @@ export default function SkyDome({
   const meshRef = useRef<THREE.Mesh>(null);
   const mix = useRef(0);
 
-  // Time of day and the cloud band are LIVE (see `sky-store`) so the debug
-  // panel can drive them; the site file only seeds them.
   const t = useSkyStore((s) => s.t);
   const clouds = useSkyStore((s) => s.clouds);
   const aimed = useSkyStore((s) => s.sunUnlinked);
@@ -154,12 +138,8 @@ export default function SkyDome({
     });
   }, [clouds]);
 
-  // The horizon colour the fog has to match, held where the frame loop can read
-  // it without re-subscribing to the palette.
   const horizon = useRef(new THREE.Color());
 
-  // Resolve the palette into the existing uniform objects. Their identity never
-  // changes, so this costs no recompile and no reallocation on the GPU side.
   useEffect(() => {
     const s = sampleSky(t, aim);
     const u = material.uniforms;
@@ -173,8 +153,6 @@ export default function SkyDome({
     SKY_HORIZON.isSet = true;
   }, [t, aim, material]);
 
-  // The material is ours, not R3F's (it comes in as a prop, not a JSX child),
-  // so its program is ours to release.
   useEffect(() => () => material.dispose(), [material]);
 
   useFrame((_, delta) => {
@@ -192,8 +170,6 @@ export default function SkyDome({
     material.uniforms.uFade.value = k;
     material.uniforms.uTime.value += delta;
 
-    // Park the dome on the camera. Written through the parent transform so it
-    // stays correct wherever the environment sits in the graph.
     mesh.position.copy(camera.position);
     mesh.parent?.worldToLocal(mesh.position);
 

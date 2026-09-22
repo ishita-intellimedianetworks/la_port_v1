@@ -13,9 +13,7 @@ interface MapDestinationControlsProps {
   onStart: () => void;
   onClear: () => void;
   onTeleport: () => void;
-  /** For the in-walk speed control (mirrors the 3D dock). */
   ctrlRef: RefObject<PlayerControllerHandle | null>;
-  /** Memorial list-mode design: no idle hint text, no hairline separator. */
   listMode?: boolean;
 }
 
@@ -60,8 +58,6 @@ export function MapDestinationControls({
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {selected.accessible ? (
               <>
-                {/* Walk only where a navmesh route exists — fly-overs and
-                    off-mesh destinations are teleport-only. */}
                 {selected.walkable !== false && (
                 <button
                   type="button"

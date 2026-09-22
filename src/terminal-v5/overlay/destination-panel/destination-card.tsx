@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 import { ChevronRight, DoorOpen, Footprints, LocateFixed, MapPin, type LucideIcon } from "lucide-react";
 import type { DestinationRow } from "./use-destinations";
 
-// Bright accent (matches --nav-accent-bright) — the darker #0A84FF was barely
-// readable as small text over the dark glass panel.
 const HERE_BLUE = "#2997FF";
 
 export const CROWD_DOT: Record<string, string> = {
@@ -13,7 +11,6 @@ export const CROWD_DOT: Record<string, string> = {
   med: "#ffd60a",
   low: "#30d158",
 };
-/** Tier word shown beside the dot — a bare dot alone doesn't read as crowd. */
 export const CROWD_WORD: Record<string, string> = {
   high: "Heavy",
   med: "Moderate",
@@ -23,9 +20,7 @@ export const CROWD_WORD: Record<string, string> = {
 interface RowBodyProps {
   row: DestinationRow;
   selected: boolean;
-  /** Category icon, shown as a leading tile beside the destination name. */
   icon?: LucideIcon;
-  /** The player is currently standing at this destination — mark it "You're here". */
   here?: boolean;
 }
 
@@ -33,7 +28,6 @@ export function DestinationRowBody({ row, selected, icon: Icon, here = false }: 
   const { dest, distLabel, etaLabel } = row;
   return (
     <div className="flex items-center gap-3 short:gap-2.5">
-      {/* Leading circular pin tile — solid blue when standing here. */}
       {Icon && (
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full short:h-[26px] short:w-[26px]"
@@ -51,8 +45,6 @@ export function DestinationRowBody({ row, selected, icon: Icon, here = false }: 
         </div>
       )}
 
-      {/* Name with the walk time under it — wraps (breaking long words) so it's
-          never cut to "…" and never forces a horizontal scrollbar. */}
       <div className="min-w-0 flex-1">
         <div className="nav-display break-words text-[15px] font-semibold leading-snug short:text-[13px]" style={{ color: "var(--nav-text)" }}>
           {dest.label}
@@ -66,8 +58,6 @@ export function DestinationRowBody({ row, selected, icon: Icon, here = false }: 
                 className="h-[8px] w-[8px] rounded-full short:h-[7px] short:w-[7px]"
                 style={{ background: CROWD_DOT[dest.crowd], boxShadow: `0 0 6px ${CROWD_DOT[dest.crowd]}` }}
               />
-              {/* Tier word stays in the normal muted text colour — the DOT
-                  carries the tier colour (matches the map treatment). */}
               <span className="nav-body text-[10.5px] font-semibold short:text-[9.5px]" style={{ color: "var(--nav-text-2)" }}>
                 {CROWD_WORD[dest.crowd]}
               </span>
@@ -107,11 +97,8 @@ interface DestinationCardProps {
   row: DestinationRow;
   selected: boolean;
   onSelect: () => void;
-  /** Category icon, rendered as the row's leading tile. */
   icon?: LucideIcon;
-  /** Unused now — kept for call-site compatibility (transit shown in selected card). */
   now: number;
-  /** The player is standing at this destination — shows the blue "You're here" card. */
   here?: boolean;
   onExploreInside?: () => void;
 }

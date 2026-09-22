@@ -7,8 +7,6 @@ export type CameraPose = {
 };
 
 export type LayoutCamera = {
-  /** Authoring note — data, not config. */
-  _note?: string | string[];
   position: Vec3;
   rotation?: Vec3;
   /** A point to look at; the rotation is derived from it and `position`. */
@@ -21,9 +19,6 @@ export type StreamTier = {
 };
 
 export type StreamHideRule = {
-  _note?: string;
-  /** Which source mesh this rule stands for. Documentation only. */
-  _mesh?: string;
   /** Exact `materials.json` name(s); the chunk must carry at least one. A list
    *  is one rule, so an object assembled from many materials stays one entry. */
   material?: string | string[];
@@ -35,8 +30,6 @@ export type StreamHideRule = {
 export type StreamConfig = {
   slug: string;
   assetBase?: string;
-  /** Authoring note for `assetBase` — data, not config. */
-  _assetBaseNote?: string;
   tiers: Record<"near" | "mid" | "far", StreamTier>;
   streaming: {
     /** `tiers.far.distance` × this = the unload radius — an anti-thrash margin,
@@ -85,6 +78,11 @@ export type StreamConfig = {
      *  the colour of the sky it dissolves into. Set a hex only to pin it. */
     color?: string;
   };
+  /** Replaces the phone profile's own far-band scale for this model. The mobile
+   *  profile pulls `tiers.far.distance` in hard, and `unloadDist` and the fog
+   *  far plane follow it; a model whose subject sits beyond that horizon needs
+   *  its own number. Omitted = the profile's default. */
+  mobileFarScale?: number;
   forceTier?: "near" | "mid" | "far";
   /** Chunks matched by any of these are never loaded — see `StreamHideRule`.
    *  Authored per view, so normally set inside `dollhouse` / `aerial`. */
@@ -92,7 +90,6 @@ export type StreamConfig = {
 
   pick?: StreamHideRule[];
   aerial?: {
-    _note?: string | string[];
     /** Camera height (world Y, metres) that switches the bands. Two thresholds,
      *  so a camera sitting on the line cannot flip every tick. */
     enterAboveMetres: number;
@@ -105,7 +102,6 @@ export type StreamConfig = {
   };
 
   dollhouse?: {
-    _note?: string | string[];
     tiers?: Partial<Record<"near" | "mid" | "far", StreamTier>>;
     streaming?: Partial<StreamConfig["streaming"]>;
     cache?: Partial<StreamConfig["cache"]>;
@@ -117,16 +113,13 @@ export type StreamConfig = {
 };
 
 export type MapConfig = {
-  _note?: string;
   base?: {
-    _note?: string;
     /** Bare filename, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
      *  `/floorplan`). An absolute URL is honoured verbatim. */
     imageUrl: string;
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   };
   plan?: {
-    _note?: string;
     /** Bare filename, resolved against NEXT_PUBLIC_FLOORPLAN_BASE (default
      *  `/floorplan`). An absolute URL is honoured verbatim. */
     imageUrl: string;
@@ -204,7 +197,6 @@ export type SceneConfig = {
 };
 
 export type SkyConfig = {
-  _note?: string;
   /** `off` = the flat background colour (the previous backdrop). */
   mode: "day" | "afternoon" | "dusk" | "off";
   /** Explicit point on the day arc, 0..1, overriding the mode's default stop.
@@ -369,9 +361,20 @@ export type HotspotConfig = {
   };
   geofence?: {
     url: string;
+    color?: string;
   };
   poster?: {
     url: string;
+    width: number;
+    height: number;
+  };
+  /** A looping camera clip, shown at the top of the card with the field grid
+   *  under it. Unlike `poster` the readings are NOT hidden: a clip shows what
+   *  the camera sees and carries no panel of its own. `poster` here is the
+   *  first frame, painted while the video buffers. */
+  clip?: {
+    url: string;
+    poster?: string;
     width: number;
     height: number;
   };
@@ -387,7 +390,6 @@ export type HotspotConfig = {
 };
 
 export type SiteConfig = {
-  _note?: string;
   meta: SceneConfig["meta"];
   /** Foreign key into `layouts` — the layout whose camera the experience opens
    *  on, and the fallback pose for anything unauthored (`startPose`). */
@@ -411,9 +413,6 @@ export type SiteConfig = {
   layouts: LayoutRow[];
   worldModels?: string[];
   hotspots: HotspotConfig[];
-  /** Why the security rows read as they do: the rest/event split, and where
-   *  their positions came from. */
-  _securityNote?: string;
   securityHotspots?: HotspotConfig[];
 };
 

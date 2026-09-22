@@ -66,6 +66,10 @@ export interface StreamingConfig {
    *  `freeCpuArrays` is on. See `StreamConfig.pick`. */
   pick: StreamHideRule[];
   fog: { enabled: boolean; start: FogStart; color?: string };
+  /** Replaces `MOBILE.farScale` for this model. The phone profile pulls the far
+   *  band in hard, and with it `unloadDist` and the fog far plane; a model whose
+   *  subject is further out than that horizon needs its own number. */
+  mobileFarScale?: number;
 }
 
 const STREAM_BASE_V1 = process.env.NEXT_PUBLIC_STREAM_BASE;
@@ -133,6 +137,7 @@ function toStreamingConfig(m: StreamConfig): StreamingConfig {
     freeCpuArrays: s.freeCpuArrays ?? false,
 
     fog: m.fog,
+    mobileFarScale: m.mobileFarScale,
     transmission: m.render.transmission,
     progressiveTex: m.render.progressiveTextures,
     texUpgradesPerTick: m.render.texUpgradesPerTick,
@@ -219,7 +224,7 @@ const MOBILE = {
 function mobileProfile(c: StreamingConfig): StreamingConfig {
   const nearDist = Math.round(c.nearDist * MOBILE.nearScale);
   const midDist = Math.round(c.midDist * MOBILE.midScale);
-  const farDist = Math.round(c.farDist * MOBILE.farScale);
+  const farDist = Math.round(c.farDist * (c.mobileFarScale ?? MOBILE.farScale));
   const unloadDist = Math.round(farDist * (c.unloadDist / c.farDist));
   // A CEILING per tier, never a set: a bake authoring a smaller rung keeps it.
   const rung = (t: Tier, px: number) => Math.min(px, MOBILE.rung[t]);

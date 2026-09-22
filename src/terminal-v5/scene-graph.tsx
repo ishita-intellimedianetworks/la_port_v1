@@ -27,8 +27,6 @@ export default function SceneGraph() {
       onModelLoaded={d.handleModelLoaded}
       onRevealStart={d.handleRevealStart}
       onRevealDone={d.handleRevealDone}
-      // Shared uGlobalAlpha for the point-cloud → dither reveal (village has a
-      // baked .preview.bin). Inline/orchestrated mode skips the effect.
       sharedUniforms={d.inlineMode ? undefined : d.sharedUniforms}
       debug={d.debug}
       skipEffects={d.inlineMode}

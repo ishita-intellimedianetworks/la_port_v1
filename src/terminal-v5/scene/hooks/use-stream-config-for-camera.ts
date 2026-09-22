@@ -23,8 +23,6 @@ export function useCameraAloft(): boolean {
   useFrame(() => {
     if (!at) return;
     const y = camera.getWorldPosition(world.current).y;
-    // setState with an unchanged value is a no-op in React, so this costs
-    // nothing on the frames — nearly all of them — where the answer is stable.
     setAloft((was) => (was ? y >= at.exitBelow : y >= at.enterAbove));
   });
 

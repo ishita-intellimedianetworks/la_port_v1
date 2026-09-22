@@ -1,91 +1,16 @@
 {
-  "_note": "SINGLE SOURCE OF TRUTH FOR ONE MODEL — this file is the whole site for the route that loads it, and NOTHING here is shared with the other two. src/config/sites/ holds one such file per bake (v1 = /, v2 = /v2, v3 = /v3); they are read by src/config/index.ts, which resolves each into its own `scene` / `ui` / `layouts` / `hotspots` view, and the route picks one with <SiteProvider id>. There is deliberately no inheritance and no merge: an edit here can only ever change this route. The cost is that a change meant for every model has to be made in all three files — that is the trade this layout makes on purpose. THIS FILE IS /v2: the instanced, animated-water v6wo bake with the lag work on. Shaped as DB TABLES, not as a tree: `layouts` and `hotspots` are sibling arrays and a hotspot names its parent with `layoutId` (the foreign key). The nesting the Resources panel shows is rebuilt at load by src/config/index.ts, and the engine's scene/destination structure is projected from it by src/shared/scene-data/adapter.ts — nothing is generated to disk, so no value exists here twice. Each top-level key maps to one table or one settings row: meta/assets/stream/world/cameras/lights/globals are the site record, zones/tones/copy are its presentation, layouts and hotspots are the two content tables.",
   "meta": {
     "id": "everport-la",
     "label": "Everport Terminal Services"
   },
   "startLayoutId": "L01",
   "assets": {
-    "_note": "TWO MODELS, ONE ZONE. `modelUrl` is the DOLLHOUSE model — a decimated whole-zone GLB drawn in one go, which is the right answer for a fixed vantage that frames everything at once. The walking view does not use it: it streams the chunk set in `stream` instead. `previewUrl` is the point-cloud silhouette shown behind the loading HUD and must be baked FROM `modelUrl` — it is that model dissolving in, so a preview of any other mesh draws a cloud at the wrong scale and in the wrong place. 60,000 points, bounds x -2156..-64 / z -875..969, which is the 25-compressed GLB's own extent. There is no `navmeshUrl` here: the bake emits the navmesh alongside the chunks, so it travels with them (and follows NEXT_PUBLIC_ASSET_BASE to a CDN) rather than being a second copy someone has to keep in step. Set it only for a site with no `stream` block.",
     "modelUrl": "/models/la-port-zone-c5-25-compressed.glb",
     "previewUrl": "/models/la-port-zone-c5-25-compressed.preview.bin",
     "envFile": "/env.hdr"
   },
   "stream": {
-    "_note": [
-      "THE SECOND BAKE — portla-c5-v6wo-inst-mo, streamed at /v2. This block is",
-      "COMPLETE: it used to be authored as a partial override merged over /'s",
-      "`stream` at import, and is now the whole contract on its own, so retuning it",
-      "cannot reach the other routes and a retune there does not reach here.",
-      "",
-      "WHAT IS DIFFERENT FROM v1, and it is two things, not one.",
-      "",
-      "1. A DIFFERENT ASSET SET. v1 streams portla-c5-v5-obj: object chunks,",
-      "   instancing OFF, a static ocean, 816 chunks all carrying geometry. This",
-      "   streams portla-c5-v6wo-inst-mo: the v6 optimized-water zone re-baked with",
-      "   instancing ON and the ocean ANIMATED. 639 chunks of which only 291 carry",
-      "   geometry - the other 348 are pure placement lists costing no download at",
-      "   all - plus a 786-entry palette drawn 23,095 times, and a NEAR tier encoded",
-      "   with meshopt + KHR_mesh_quantization instead of Draco, so positions,",
-      "   normals and UVs stay int16/int8 in VRAM rather than being dequantized to",
-      "   float32 on load. Textures are UASTC KTX2. Near tier: 8,339,157 triangles,",
-      "   56.7 MB encoded - and under `geometry: resident` that IS the session: the",
-      "   near tier is the only tier ever fetched, mid/far are published but dead.",
-      "   13,248,813 = source. The manifests differ, so this needs its own",
-      "   `assetBase` and its own dollhouse `hide` list.",
-      "",
-      "2. THE LAG WORK, which is all in `render` plus three streaming numbers. None",
-      "   of it is specific to this bake - it would help / too - but / is",
-      "   deliberately frozen as the control, so it lives here.",
-      "",
-      "THE OCEAN IS NOT FREE. animated.glb is 5.4 MB and permanently resident:",
-      "765,590 triangles draw every frame wherever you stand, and the 573,440-tri",
-      "ocean is ONE mesh spanning 20 km whose bounding sphere always intersects the",
-      "frustum, so it never culls. It cannot be decimated either - morph targets are",
-      "per-vertex, so simplifying the base invalidates them. If this route is slower",
-      "than / despite everything below, that is the first place to look, and the",
-      "lever is a lower-poly ocean IN THE SOURCE GLB, not anything in this app.",
-      "",
-      "SIX CHUNKS OF 782,512 TRIANGLES. The instanced bake only splits objects above",
-      "800 m (lowering that corrupts the instancer), so c0-c5 are ~2.7 MB of Draco",
-      "each and are the slowest single decodes in the set. That is what the",
-      "outward-sweep reveal in chunk-manager.ts exists for: a decoded chunk waits",
-      "until nothing NEARER is still decoding, with a 600 ms escape hatch so one of",
-      "them cannot dam everything queued behind it."
-    ],
     "slug": "portla-c5-v6wo-inst-mo",
-    "_bands": [
-      "WHY far IS 900 AND NOT 300, i.e. why geometry looked missing.",
-      "",
-      "The 50/150/300 bands came from the original 2.1 x 1.9 km portla-c5. This",
-      "is a 15 x 10 km district cut into OBJECT chunks, whose sizes vary",
-      "enormously: radius p10 3.6 m, p50 19 m, p90 112 m, p99 692 m. A chunk",
-      "loads by the distance to its SURFACE, so a big object is credited with",
-      "its own size and outlives a small object standing on it — by a mean of",
-      "1355 m over the 4055 co-located pairs in this manifest. That is the whole",
-      "bug: the canopy renders and its poles do not, the stack renders and its",
-      "containers do not. Nothing is missing from the bake.",
-      "",
-      "MEASURED, 150 ground cameras, 360° (worst case). A HOLE is an object",
-      "whose own chunk is absent while a building-scale chunk covering the same",
-      "spot is present:",
-      "  near/mid/far   resident   encoded   chunk tris   HOLES",
-      "    50/150/300      272      6.0 MB     3.97 M      3057   <- was",
-      "    50/250/300      262      5.3 MB     3.68 M      2242",
-      "    50/250/600      525     10.3 MB     7.29 M       363",
-      "    50/250/900      575     11.3 MB     8.29 M        53   <- is",
-      "Holes fall 98%, and 11.3 MB still sits well under residentBudgetMB.",
-      "",
-      "mid 250 (was 150) costs +0.3 MB and keeps the 150-250 m ring off the far",
-      "tier, which is simplifyRatio 0.15 — raising far without raising mid would",
-      "have put most of the visible world at the coarsest LOD.",
-      "",
-      "The other half of the fix is in the runtime, not here: ChunkManager",
-      "measures surface distance to the bounding BOX rather than the bounding",
-      "SPHERE (the sphere is the half-diagonal, so it wildly over-credits",
-      "anything elongated). Worth ~a quarter of the total; the BANDS are what",
-      "actually closed the gap."
-    ],
     "tiers": {
       "near": {
         "distance": 50,
@@ -125,55 +50,13 @@
     },
     "cache": {
       "limitChunks": 500,
-      "residentBudgetMB": 256,
-      "_note": "REAL DECODED megabytes of GPU-resident geometry + textures, clamped further by the per-device ceiling in streaming/memory.ts (whichever is lower wins). It was 34, but that counted the manifest ENCODED sizes: at the 13.5x decode ratio measured on this bake it meant ~460 MB and the loop never fired. limitChunks is now only a secondary cap on the CPU cache, which is bounded by bytes (memory.ts > cpuMB) — a count cannot bound a set whose chunk radii span 3.6 m to 692 m, and 500 was reasoned against 816 chunks when the cache is keyed by url, of which there are 816 x 3 tiers = 2,448."
+      "residentBudgetMB": 256
     },
     "fog": {
       "enabled": true,
       "start": "far"
     },
     "aerial": {
-      "_note": [
-        "THE SECOND STRATEGY over the same manifest — for the layout cameras.",
-        "",
-        "Every layout here is a framing shot with `walkable: false`, authored",
-        "54-412 m up and as much as 2.8 km from the terminal. The bands above",
-        "are tuned for a person STANDING in it, so from those cameras almost",
-        "nothing resolved. Measured, box metric, per layout, chunks inside the",
-        "990 m unload radius out of 831:",
-        "",
-        "  L01   2    L02   2    L03   2    L04   4    L05  16",
-        "  L06 150    L07   2    L08 432    L09 263    L10 186",
-        "",
-        "L01/L02/L03/L07 got 2 chunks each — the water plane and the terrain",
-        "plane, the only two whose boxes contain the camera. Everything built",
-        "was 1.5-2.8 km away, i.e. outside the radius, so the shot framed sky.",
-        "",
-        "WHY THIS IS CHEAP. The whole model at the far tier is 831 chunks /",
-        "22.0 MB encoded / 11.02 M tris, and all 70 images at the 128 px rung",
-        "total 0.1 MB. So a radius spanning the entire 15 x 10 km district costs",
-        "about 22 MB resident — under the ground config's own 33 MB ceiling.",
-        "Measured chunks resolved at far 6000: 831 of 831 from every one of the",
-        "ten cameras. Nothing about this needed a second asset set.",
-        "",
-        "far 6000 rather than 4000: 4000 already reaches all ten (826-831), but",
-        "6000 spans the district corner-to-corner for the same 22.0 MB, so the",
-        "radius stops being a number anyone has to re-check when a camera moves.",
-        "",
-        "near/mid are raised because at this altitude nothing is within 150 m of",
-        "the camera anyway — leaving them at 50/250 would have put the whole",
-        "frame on the far tier. 150/800 keeps what the shot is composed around",
-        "on the mid tier and only the district backdrop on far.",
-        "",
-        "limitChunks 900 (> the 831 total) because all 831 are mounted at once",
-        "here: the LRU never evicts a mounted chunk, so a lower ceiling would",
-        "simply sit unenforced. The ground config's 500 takes back over on the",
-        "way down and evicts to it then.",
-        "",
-        "Only the keys that DIFFER are listed. `streaming` and everything else",
-        "not named is inherited from the block above, so a retune there carries",
-        "here on its own."
-      ],
       "enterAboveMetres": 40,
       "exitBelowMetres": 30,
       "tiers": {
@@ -211,7 +94,6 @@
       }
     },
     "dollhouse": {
-      "_note": "ONLY `hide` DIFFERS. The tiers, the forceTier pin, the streaming overrides and the cache ceilings are all inherited from `stream.dollhouse`, so a retune there carries here. The list has to be re-authored because it names things in a DIFFERENT manifest - see the note on each rule.",
       "tiers": {
         "near": {
           "distance": 150,
@@ -253,19 +135,13 @@
       },
       "hide": [
         {
-          "_note": "THE OCEAN, HIDDEN BY NODE NAME - the one rule here that does not address a chunk. On this bake the ocean is ANIMATED, so it was lifted out of the chunk set into animated.glb, which is permanently resident: never banded, never evicted, never culled. No material/radius rule can reach it - M_Ocean_Water.001, the material the object bake on / carries, appears in 0 of 641 chunks here, and the live one is M_Ocean_Water_Animated inside that group - which is why StreamHideRule grew a `node` predicate. `holder_water` is the SCENE ROOT of the water subtree, so hiding it takes the whole thing in one visible=false rather than naming the `water` node under it. THE COST IT REMOVES IS REAL: 573,440 triangles spanning 20 km that never frustum-cull, so from the overview it was both the largest thing in frame and drawn in full every frame. It comes straight back in first person - hiding is visible=false, not an unload, so the geometry never left memory and the clip never stopped: the sea is mid-wave on return, not reset.",
-          "_mesh": "water",
           "node": "holder_water"
         },
         {
-          "_note": "The district ground plane - 14.5 x 8.6 km against a terminal 1.6 x 1.5 km, so from up here it IS the frame and it drags the orbit pivot out to sea. Resolves to c256 (radius 8,427 m) on this manifest. The terminal's own pavement shares its material name at radius 969 m (c549), which is what the minRadiusMetres guard spares - verified against this manifest.",
-          "_mesh": "Land_Mesh",
           "material": "M_Ground_Pavement.001",
           "minRadiusMetres": 2000
         },
         {
-          "_note": "THE BRIDGE AND ITS APPROACH - the Vincent Thomas, which runs west out of the frame. Four chunks (c426 c489 c401 c467, radius 432-932 m) whose boxes reach X -2159 while the terminal stops at -1573, so from the overview it is a long spur pointing at nothing: the shot is composed on the zone, and this drags the eye off it. IT IS NOT A PERFORMANCE RULE - the whole bridge is 6,913 triangles and 48 KB; it is a framing one. NAMED BY ITS SIXTEEN MATERIALS because that is all a chunk rule has to go on, and it is safe to list them: Material1-Material15 and `default material` are the untitled 3ds Max defaults, and all sixteen (indices 88-103) are carried by these four chunks and by NO OTHER chunk in the manifest - verified, so this cannot over-match. THE RAIL FANS ARE DELIBERATELY NOT HERE: they also leave the plan rect (c49 and c262 reach X -60 against the terminal edge at -236), but unlike the bridge they SPAN the boundary - their boxes start at X -1046, inside the yard - so hiding them would take the terminal's own rail with them. No material separates in-zone rail from out-of-zone rail; splitting them needs a re-bake, not a rule.",
-          "_mesh": "bridge",
           "material": [
             "Material1",
             "Material2",
@@ -293,15 +169,13 @@
       "texUpgradesPerTick": 16,
       "adaptiveDpr": true,
       "maxDpr": 1.5
-    },
-    "_assetBaseNote": "WHERE THIS STREAMS FROM IS IN .env, NOT HERE: NEXT_PUBLIC_STREAM_BASE_V2, one variable per bake. It is the COMPLETE published prefix, used verbatim - nothing is appended - and it exists because the published name and the bake's own name diverge (this calls itself portla-c5-v6wo-inst-mo and is published under v6w-inst-mo-01/), so no root + slug can compose it. StreamConfig.assetBase would let a URL be authored here instead and still works, but it is deliberately left unset: two places holding the same URL is two places to drift. UNSET IN .env, this route falls back to NEXT_PUBLIC_ASSET_BASE + `slug` - the local staging copy under public/, which is gitignored - so it 404s loudly rather than quietly streaming another bake."
+    }
   },
   "world": {
     "eyeHeight": 1.8288,
     "fov": 35,
     "shadows": true,
     "grade": {
-      "_note": "COLOUR GRADE, dialled on the ?debug=true panel. NOTE THE COST: `contrast` and `saturation` are non-zero here, so the CSS filter IS emitted (it takes ALL THREE at zero to skip it — `brightness` alone being 0 does not) — that puts the canvas on its own composited layer and runs a full-screen shader over every pixel each frame. Zero all three and that pass disappears entirely (which is not the same as setting them to 1.0). `exposure` stays at 1 and is the free knob; reach for it first and keep these three as a finishing nudge only. Ported from the facet_4 study, which drives the same four knobs. `exposure` is the one to reach for first: it multiplies the scene in HDR BEFORE tone mapping (renderer.toneMappingExposure), so highlights roll off through NeutralToneMapping instead of clipping, and it is free — a uniform in a step three.js already runs. The other three are a CSS `filter` on the canvas, which acts on the 8-bit sRGB image AFTER tone mapping: fine for a finishing nudge, prone to banding if pushed hard, and it costs a full-screen composite pass every frame. NOTE the study renders through ACESFilmicToneMapping while this app uses NeutralToneMapping, so its slider values do NOT transfer numerically — re-dial them here rather than copying. Drive them live with ?debug=true (the GRADE panel under the sky slider) and paste what you settle on; this block is only the seed. One canvas serves both the dollhouse and the walking view, so a grade applies to both, and it never touches the glass UI or the hotspot tooltips — those are siblings of the canvas, not children.",
       "exposure": 0.94,
       "brightness": 0,
       "contrast": 0.04,
@@ -310,7 +184,6 @@
   },
   "cameras": {
     "dollhouse": {
-      "_note": "FRAMED BY HAND in the running app and pasted from the pose log — drag the overview with ?debug=true and DollhouseCamera prints this exact line, the `settled` one being the pose you stopped at (rotation as the YXZ euler seatAtHome applies, NOT the XYZ order a GLB tool prints). It started from cp_dolllhouse in la-port-zone-c5-cp-dollhouse.glb and was worked from there. 1,411 m from the zone centre and aimed straight at it, which is what the orbit keeps doing anyway: once the model's world bounds are published the camera re-aims at that centre every frame, so the rotation here only holds until then while the position sets the orbit's radius and angle for good. At `world.fov` 15 that range frames about 370 m of the terminal vertically; the authoring camera carried a 32 degree yfov, so widening the site fov rather than pulling further back is the other way to open the shot.",
       "position": [
         -2143.7272,
         272.5268,
@@ -323,7 +196,6 @@
       ]
     },
     "spawn": {
-      "_note": "WHERE FIRST PERSON BEGINS, and where the Home button returns to. Authored rather than derived from startLayoutId because every layout here is an aerial framing (walkable: false — schema-wise, not a valid first-person entry point), so there is no walkable checkpoint to derive it from. It is also the point the streamer fills in around while the entry blackout is up, so moving it changes what you land looking at AND what has finished loading when the fade lifts. TAKEN FROM cp_012 in la-port-zone-c5-cp-v3.glb, via /extract-pos. That file ships twelve cameras; cp_001..cp_010 are the layout framings and cp_012 is this one. The tool prints an XYZ euler and this block stores the YXZ one the runtime applies, so the rotation here is the reorder of [3.0925, -0.0976, 3.1368], not those numbers — re-derive it rather than pasting from the tool. NOT ON THE NAVMESH: its XZ is inside the navmesh-v2 AABB but misses every one of the 3,950 triangles, the nearest vertex being 95.3 m away at [-1227.3, 0.16, -149.4] — which is where the previous spawn sat. Home probes the floor at this XZ and teleports there regardless, so walking OUT of it depends on the snap finding an island. cp_011 in the same file IS on the mesh (surface Y 0.160) if this needs to become walkable.",
       "position": [
         -1314.8853,
         25.5548,
@@ -336,7 +208,6 @@
       ]
     },
     "firstPerson": {
-      "_note": "WHERE THE \"First Person\" CIRCLE DROPS YOU — the bottom bar's fifth button. TAKEN FROM cp_011 in la-port-zone-c5-cp-v3.glb. Same file and same /extract-pos convention as `spawn`: the tool prints an XYZ euler and this block stores the YXZ one the runtime applies (camera.rotation.set(..., \"YXZ\") in player/utils/teleport.ts), so this is the reorder of [-3.1024, 0.4744, 3.1237], not those numbers. Re-derive rather than paste. ON THE NAVMESH, and that is the entire point of it: checked against the streamed v5 navmesh (3,950 triangles, node translation baked in), this XZ lands INSIDE a triangle at surface Y 0.153 with the nearest vertex 0.9 m away. `spawn` (cp_012) misses every triangle by 95.3 m, so the player lands there unable to walk; this is the one checkpoint in that GLB that is walkable — the other ten are aerial layout framings, all off-mesh by 14 m to 300 m. The stored Y is the camera's authored height, NOT the ground: the handler probes the floor at this XZ and teleports to the surface, so this number only serves as probeFloorY's expectedY tie-breaker. If this moves, re-run the on-mesh check first — a pose that misses the mesh makes the button land somewhere the player cannot walk out of, which is the exact problem it was added to solve.",
       "position": [
         -1207.8126,
         3.7531,
@@ -370,11 +241,9 @@
     "heroContainerId": "EGHU4829136"
   },
   "sky": {
-    "_note": "The procedural sky dome (see terminal/scene/environment/sky). `mode` picks a stop on the day arc — \"afternoon\" is the default, \"dusk\" the open-sea study's sunset palette, \"day\" a flat midday one, \"off\" restores the plain blue backdrop. `t` overrides the stop with an explicit 0..1, and ?debug=true drives it live from a slider. COLOURS ARE NOT AUTHORED HERE: sun direction, sun tint, ambient tint and the sky-fill pair are all derived from the same palette the sky is drawn from, so they cannot drift from it. `lights` is merged over the `lights` block above and is for INTENSITIES — how strongly the model is lit at this hour, which the study (a shader with no scene lights) has no opinion on. `hemiIntensity` is the sky fill that keeps the away-from-sun side off black; raising `ambientIntensity` instead would flatten the lit side. `sun` (absent by default) takes the sun OFF the arc and parks it at an absolute azimuth/elevation in degrees. The disk in the dome and the shadow-casting light read that one answer, so they are always the same ray. It moves NO colour: every stop is still a function of the elevation `t` gives. That is the only way to turn the shadows without repainting the sky, and the ?debug=true panel prints the block to paste here.",
     "mode": "afternoon",
     "clouds": true,
     "sun": {
-      "_note": "Dialled on the ?debug=true panel. The sun is OFF the day arc and parked here: these two angles place the disk in the dome AND aim the shadow-casting light, which read one answer and so cannot disagree. Colours are untouched by it — every stop, the sun tint and the ambient/fill pair are still functions of the elevation `t` gives (0.55, the afternoon stop), which is why none of them is authored below.",
       "azimuth": -158,
       "elevation": 18
     },
@@ -387,7 +256,6 @@
     }
   },
   "map": {
-    "_note": "TWO LAYERS, both 1:1 with the model and both placed by the SAME world->pixel transform, so they cannot drift apart. `plan` is the terminal render and is still the only layer that defines anything: the letterbox, the click mapping and every overlay resolve against it. `base` is context drawn underneath — an aerial of the surrounding port and city. BASE PROVENANCE: registered against `plan`'s own silhouette, not eyeballed. The source aerial is greyscale everywhere EXCEPT this terminal, so \"any saturation at all\" segments it exactly; that mask was fitted to the plan's alpha by truncated symmetric chamfer (truncated so the parts the two genuinely do not share — the plan's rail spurs and bridge, the aerial's extra wharf — saturate instead of dragging the fit). Six runs across two grid resolutions and three truncation radii agree to +-0.24 deg of rotation, +-0.42% of scale and +-4 m of offset, i.e. ~5 m on a 1550 m terminal. Plain IoU was tried first and REJECTED: it swung 1.5 deg between resolutions because those unshared appendages bias it. Mirrored fit scored 0.74 against 0.88 unmirrored, so the handedness is not in doubt. The aerial sat 3.64 deg off the model's axes and THAT ROTATION IS BAKED INTO THE EXPORTED WEBP — `bounds` is an axis-aligned rect and cannot carry an angle, so a raw north-up aerial dropped in here would skew by ~27 m at the terminal's ends. It was edge-reflected before rotating so the corners the rotation opens up hold plausible imagery rather than grey wedges. Re-deriving it: see the plan note below for the plan's own bounds, then re-run the registration — do not nudge these numbers by hand.",
     "base": {
       "imageUrl": "port-context.webp",
       "bounds": {
@@ -398,7 +266,6 @@
       }
     },
     "plan": {
-      "_note": "ONE LAYER, 1:1 with the model. `plan` is a light top-down render of la-port-zone-c5-model-v4_dollhouse-optimized-optimized.glb, already keyed and already in the same orientation the /admin/bounds export uses (screen right = +X, up = -Z). BOUNDS ARE FITTED, NOT DERIVED — unlike a render straight out of /admin/bounds, this image did not arrive with its camera rect, so it was registered against the dark render whose rect IS exact: IoU 0.9455 unmirrored against 0.4799 mirrored, converging to within 1.5 m when re-fitted on a finer grid, and the fitted spans reproduce the image's own 0.8613 aspect, which is what says the fit is a uniform scale rather than a stretch. Cross-checked against ground truth: 96.9% of the 831 streamed chunk centres land on plan geometry. IT IS A TIGHTER CROP than the dark render — it stops at X -236 and Z -581, so the bridge, the rail fans and a 236 m strip of model east of the yard are outside it. The whole navmesh is inside, so nothing walkable is lost. Re-render from /admin/bounds if that framing ever needs to grow, and paste the bounds it prints rather than keeping these. The renderer letterboxes the image into the canvas (CONTAIN) and clicks resolve against that rect, so the image frame IS the clickable area.",
       "imageUrl": "terminal-plan.webp",
       "bounds": {
         "minX": -1572.871,
@@ -408,7 +275,6 @@
       }
     },
     "zone": {
-      "_note": "THE OPENING FRAME, and where the recenter button goes back to — exactly the navmesh AABB from the streamed bundle's navmesh.glb, because the walkable area is the part worth opening on. Framing only: clicks are gated by `plan`'s letterbox, not by this, so an approximate rect costs a little framing and nothing else. The map fits this rect to the canvas, which is about 1.6x closer than fitting the whole of `plan`; zooming out from there reveals `base`.",
       "minX": -1502.324,
       "maxX": -661.783,
       "minZ": -438.324,

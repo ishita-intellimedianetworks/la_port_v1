@@ -43,7 +43,7 @@ export function useNavmeshSnap({
           camera.position.y        = y;
         }
       }
-    } catch { /* zone not loaded yet */ }
+    } catch {}
 
     state.snapped.current = true;
   }, [enabled, pathfinding, cameraHeight, camera, state.snapped, state.currentZone, state.pos, state.targetY, state.initPos]);

@@ -11,12 +11,9 @@ const RIGHT_IS_POSITIVE_CROSS = navConfig.logic.rightIsPositiveCross;
 
 export interface NavInfo {
   active: boolean;
-  /** Real seconds for a person to walk the remaining route. */
   etaSec: number;
-  /** Real distance left (metres). */
   meters: number;
   turnDir: "left" | "right" | "straight" | "arrive";
-  /** Real distance to the next maneuver (metres). */
   turnMeters: number;
 }
 
@@ -47,8 +44,6 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
         return;
       }
 
-      // Display scale (shared with the destination cards) — NOT the physical
-      // getMetersPerUnit(), so the banner's distance/ETA matches the cards.
       const mpu = navConfig.logic.displayMetersPerUnit;
       const pos = ctrl.getPosition();
       const pts = [{ x: pos.x, z: pos.z }, ...path];
@@ -83,8 +78,6 @@ export function useNavInfo(ctrlRef: RefObject<PlayerControllerHandle | null>, en
       }
 
       const meters = total * mpu;
-      // The speed multiplier (1×/5×/10×) makes the player arrive faster, so the
-      // remaining TIME shrinks by the same factor (distance is unchanged).
       const mult = ctrl.getSpeedMultiplier?.() ?? 1;
       const etaSec = etaSeconds(total, mpu) / mult;
       const turnMeters = turnDist * mpu;

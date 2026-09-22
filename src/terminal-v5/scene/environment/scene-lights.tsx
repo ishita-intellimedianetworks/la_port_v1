@@ -16,8 +16,6 @@ const DEFAULT_LIGHTS = {
   hemiGroundColor: '#ffffff',
   envIntensity: 0.65,
   envFile: '/env.hdr',
-  // No yaw by default — every venue that has not been dialled keeps exactly the
-  // HDRI orientation it shipped with. See `LightsConfig.envRotation`.
   envRotation: 0,
   sunIntensity: 7.9,
   sunColor: '#ffffff',
@@ -36,8 +34,6 @@ const DEFAULT_LIGHTS = {
   spotDecay: 2,
 } as const;
 
-// Shadow-camera geometry
-// Scratch, reused across re-fits so walking allocates nothing.
 const _corner = new THREE.Vector3();
 const _snap = new THREE.Vector3();
 const _casters = new THREE.Box3();
@@ -79,8 +75,6 @@ export default function SceneLights({
   shadows?: boolean;
   lights?: LightsConfig;
   venueKey?: string;
-  /** Interior floor — adds a shadow-casting point light inside the room (the
-   *  sun is blocked by the ceiling) and disables the directional shadow. */
   interior?: boolean;
   follow?: boolean;
   followRadius?: number;
@@ -100,31 +94,23 @@ export default function SceneLights({
   }, [lights]);
   const controlsEnabled = !!lights?.controls;
 
-  // Seed the live store for this venue. Keyed on venueKey so a venue switch
-  // reloads its values; same-venue re-renders keep any live edits.
   const seed = useLightsStore((s) => s.seed);
   useEffect(() => {
     seed(venueKey, base, controlsEnabled, shadows);
   }, [seed, venueKey, base, controlsEnabled, shadows]);
 
-  // When controls are on, render the live (panel-edited) values; otherwise the
-  // static resolved config. Shadows can also be toggled live from the panel.
   const liveValues = useLightsStore((s) => s.values);
   const liveShadows = useLightsStore((s) => s.shadows);
   const override = useLightsStore((s) => s.override);
   const debug = useLightsStore((s) => s.debug);
   const L = useMemo<ResolvedLights>(() => {
     let src = controlsEnabled && liveValues ? liveValues : base;
-    // The sky's own lighting comes first so the live panel (and the /lighting
-    // presets) can still overrule it.
     if (envOverride) src = { ...src, ...envOverride };
     if (override) src = { ...src, ...override };
     return debug ? { ...src, ...debug } : src;
   }, [controlsEnabled, liveValues, base, envOverride, override, debug]);
 
   const publishResolved = useLightsStore((s) => s.publishResolved);
-  // Same precedence as `debug`: the panel's toggle wins outright, and null
-  // means it has not been touched, not "off".
   const debugShadows = useLightsStore((s) => s.debugShadows);
   const effShadows =
     debugShadows ?? (controlsEnabled && liveValues ? liveShadows : shadows);
@@ -163,8 +149,6 @@ export default function SceneLights({
     return { x, y, z };
   }, [lightDir]);
 
-  /** Point the sun at `centre` with a square of +/-`extent`, and fit near/far to
-   *  `casters`. Does NOT redraw the map - the caller decides when. */
   const aimSun = useCallback(
     (centre: THREE.Vector3, extent: number, casters: THREE.Box3, snap: boolean) => {
       const light = lightRef.current;
@@ -183,8 +167,6 @@ export default function SceneLights({
       }
 
       const { lo, hi } = axisRange(casters, _snap, z);
-      // Stand the camera just outside the nearest caster, so near is tiny and
-      // the depth range is only as deep as the geometry actually is.
       const pad = Math.max(1, extent * 0.01);
       const dist = hi + pad;
 
@@ -227,8 +209,6 @@ export default function SceneLights({
     light.target = targetRef.current;
     light.position.copy(center).addScaledVector(lightDir, radius * 2.5);
 
-    // Floors with `shadows: false` (e.g. the stadium) get the sun for lighting but
-    // no shadow map - zero shadow cost. castShadow is driven by the JSX prop below.
     if (!effShadows) return;
     if (followActive) return;
 
@@ -236,8 +216,6 @@ export default function SceneLights({
     let shadow: THREE.LightShadow | null = null;
 
     if (interior && spot) {
-      // Hang the fixture above the room's centre (toward the ceiling) and aim it
-      // straight down at the floor centre.
       spot.position.set(center.x, center.y + L.spotHeight, center.z);
       spotTargetRef.current.position.set(center.x, center.y - radius, center.z);
       spotTargetRef.current.updateMatrixWorld();
@@ -362,15 +340,11 @@ export default function SceneLights({
 
     const count = scene.children.length;
     if (count === sampleCount.current) return;
-    // Rate limit WITHOUT recording the count, so a change that arrives inside
-    // the window is redrawn on the next sample rather than dropped.
     if (clock.elapsedTime < sampleNext.current) return;
 
     sampleCount.current = count;
     sampleNext.current = clock.elapsedTime + RESTREAM_MIN_INTERVAL;
 
-    // Whichever light is actually casting here — indoors the sun is blocked by
-    // the ceiling and the spot is the caster.
     const shadow = interior ? spotRef.current?.shadow : lightRef.current?.shadow;
     if (shadow) shadow.needsUpdate = true;
   });
@@ -378,8 +352,6 @@ export default function SceneLights({
   return (
     <>
       <ambientLight intensity={L.ambientIntensity} color={L.ambientColor} />
-      {/* Sky fill — keeps the side facing away from the sun off black without
-          flattening the lit side. Casts nothing; skipped entirely at 0. */}
       {L.hemiIntensity > 0 && (
         <hemisphereLight
           intensity={L.hemiIntensity}
@@ -391,8 +363,6 @@ export default function SceneLights({
         ref={lightRef}
         intensity={L.sunIntensity}
         color={L.sunColor}
-        // Indoors the sun lights the model but does NOT cast — the point light
-        // below is the interior shadow caster (the sun can't reach inside).
         castShadow={effShadows && !interior}
         shadow-mapSize-width={L.shadowMapSize}
         shadow-mapSize-height={L.shadowMapSize}

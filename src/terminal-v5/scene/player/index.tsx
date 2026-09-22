@@ -101,8 +101,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
 
     useImperativeHandle(ref, () => ({
       navigateToPoint: (pos, targetZone, onDone) => {
-        // A committed walk supersedes any preview route — and any fly-over
-        // yaw-only look lock (walking resumes normal ground look control).
         clearPreview();
         state.pitchLock.current = false;
         return navigateToPoint(pos, targetZone, onDone);
@@ -166,8 +164,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
         state.idleAcc.current = 0;
       },
       stopIdleDrift: () => {
-        // Same single flag every other cancel path clears; the accumulator is
-        // reset by the next `startIdleDrift`, so there is nothing else to undo.
         state.idleOn.current = false;
       },
       lookAtPoint: (target) => {

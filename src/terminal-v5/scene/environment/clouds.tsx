@@ -10,15 +10,11 @@ useTexture.preload('/cloud.png');
 
 const WIND_SPEED = 1;
 const BASE_OPACITY = [0.6, 0.52, 0.48, 0.5] as const;
-// Reference clouds were authored within roughly ±550 around a scene of this
-// scale; we scale the whole layer by radius / REF_SCALE to match our model.
 const REF_SCALE = 300;
 
 const WRAP_EDGE = 550;
 const FADE_BAND = 200;
 
-// Mount fade: the cloud layer only mounts on the dollhouse → first-person
-// switch — ease it in alongside the Sky dome instead of popping.
 const FADE_IN_SEC = 1.5;
 
 const edgeFade = (x: number) =>
@@ -60,8 +56,6 @@ export default function Clouds() {
       g.position.x += delta * speed * WIND_SPEED;
       if (g.position.x > WRAP_EDGE) g.position.x = -WRAP_EDGE;
       g.position.y = baseY + Math.sin(t / phase) * amp;
-      // Fade out near the wrap edge so the teleport is never seen; fadeK
-      // eases the whole layer in after mount (dollhouse → first-person).
       if (mat) mat.opacity = BASE_OPACITY[i] * edgeFade(g.position.x) * fadeK;
     };
     drift(c1.current, m1.current, 0, 7, 140, 5, 9);

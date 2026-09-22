@@ -1,19 +1,10 @@
 import type { Vec3 } from "@/config/schema";
 
 export interface GroundView {
-  /** Standpoint as a FOOT position on the navmesh — see the note above. */
   position: Vec3;
-  /** YXZ euler `[pitch, yaw, 0]`, looking from that standpoint's eye at the
-   *  marker. Positive pitch looks up. */
   rotation: Vec3;
-  /** What this shot is for. Shown nowhere; it is the reason the numbers are
-   *  what they are, and the thing to re-check if a bake moves the geometry. */
   intent: string;
-  /** Ground distance to the marker, metres — recorded so a later edit can tell
-   *  whether it is still framing the same subject. */
   range: number;
-  /** The CAMERA's upward pitch in degrees — already lifted off the marker by
-   *  rule 3, so it is a few degrees shallower than the angle to the bead. */
   pitch: number;
   sunDot: number;
   walk: number;
@@ -99,8 +90,6 @@ export const GROUND_VIEW_BY_HOTSPOT: Record<string, GroundView> = {
   },
 };
 
-/** True when this resource can be looked at from the ground — i.e. the
- *  Resources row should offer the walk affordance. */
 export function hasGroundView(hotspotId: string): boolean {
   return hotspotId in GROUND_VIEW_BY_HOTSPOT;
 }

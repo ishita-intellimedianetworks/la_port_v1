@@ -14,8 +14,6 @@ export interface SingleModelProps {
   onBounds?: (bbox: THREE.Box3) => void;
   url: string;
   sharedUniforms?: SharedUniforms;
-  /** When false, scene is mounted into R3F's tree but not rendered. Used for
-   *  invisible "material library" GLBs (e.g. unit unfurnished textures). */
   visible?: boolean;
   scale?: number | [number, number, number];
   interior?: boolean;
@@ -56,19 +54,16 @@ export function SingleModelContent({
                 if (typeof ImageBitmap !== "undefined" && img instanceof ImageBitmap) {
                   img.close();
                 }
-              } catch { /* best-effort — keeping the bitmap is only a memory cost */ }
+              } catch {}
             }
           }
         });
       } catch {
-        /* warm-up is best-effort — worst case is the old lazy compile */
       }
     })();
     return () => { cancelled = true; };
   }, [gl, camera, rootScene, scene, visible]);
 
-  // Autoplay every baked clip on a forever loop while a visible model is
-  // mounted. Invisible helper GLBs are skipped.
   useEffect(() => {
     if (!visible || !animations.length) return;
 
@@ -100,8 +95,6 @@ export function SingleModelContent({
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      // Interior models load with their authored materials untouched — skip the
-      // refraction-drop tweak (no extra material changes inside a room).
       if (interior || !mesh.material) return;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const mat of mats) {

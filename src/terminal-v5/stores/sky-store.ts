@@ -7,21 +7,12 @@ import {
 } from "../scene/environment/sky/palette";
 
 export type SkyState = {
-  /** The sky this model asked for. `off` disables the dome entirely. */
   mode: SkyMode;
-  /** Time of day, 0..1 — 0 is the sun on the horizon, 1 is high midday. */
   t: number;
-  /** Where the slider starts: an explicit `sky.t`, else the mode's own stop. */
   tSeed: number;
-  /** The horizon cloud band. Toggling it recompiles the sky shader (it is a
-   *  `#define`), which is why it is a debug control and not a per-frame one. */
   clouds: boolean;
   sunUnlinked: boolean;
-  /** Compass angle of the sun, DEGREES. 0 puts it toward −Z, positive swings
-   *  toward +X. Only read while `sunUnlinked`. */
   sunAzimuth: number;
-  /** Height of the sun above the horizon, DEGREES. Clamped to 15°..85° by the
-   *  palette. Only read while `sunUnlinked`. */
   sunElevation: number;
   setT: (t: number) => void;
   setClouds: (clouds: boolean) => void;
@@ -29,7 +20,6 @@ export type SkyState = {
   setSunAzimuth: (deg: number) => void;
   setSunElevation: (deg: number) => void;
   matchSunToSky: () => void;
-  /** Back to whatever this model's file authored. */
   reset: () => void;
 };
 
@@ -65,7 +55,6 @@ export const useSkyStore = createSeededStore<SkyState, Site>("sky-store", (site)
   });
 });
 
-/** The arc's angles for `t`, named the way the store stores them. */
 function anglesFor(t: number) {
   const { azimuth, elevation } = sunAnglesForT(t);
   return { sunAzimuth: azimuth, sunElevation: elevation };

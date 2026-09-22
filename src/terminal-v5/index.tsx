@@ -11,7 +11,6 @@ import SceneGraph from "./scene-graph";
 import Overlays from "./overlays";
 
 interface TerminalExperienceProps {
-  /** The engine's node id. Optional — one site projects to one node. */
   nodeId?: string;
   onReady?: () => void;
   site?: SiteId;
@@ -22,8 +21,6 @@ export default function TerminalExperienceV5({
   onReady,
   site = "v5",
 }: TerminalExperienceProps) {
-  // Before anything below renders: the stores that seed from the site file get
-  // THIS model's numbers. See `initStores`.
   initStores(getSite(site));
   return (
     <SiteProvider id={site}>

@@ -9,12 +9,8 @@ import type { PlayerControllerHandle } from "../player/types";
 import { navConfig } from "../../navigation-config";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 
-// Max polyline vertices the pre-allocated ribbon buffer supports. Three-
-// pathfinding routes are sparse (one vertex per corner) so this is plenty.
 const MAX_POINTS = 256;
 
-// Scratch for the floor raycast (route points → visible-ground Y). Reused so
-// the per-frame ground sampling doesn't allocate.
 const _ray = new THREE.Raycaster();
 const _down = new THREE.Vector3(0, -1, 0);
 const _origin = new THREE.Vector3();
@@ -25,15 +21,12 @@ const MAX_GROUND_PROBES_PER_FRAME = 12;
 
 const yKey = (x: number, z: number) => `${Math.round(x * 4)},${Math.round(z * 4)}`;
 
-/** Densified polyline scratch (module-level — single NavPath3D instance). */
 const _px = new Float32Array(MAX_POINTS);
 const _py = new Float32Array(MAX_POINTS);
 const _pz = new Float32Array(MAX_POINTS);
 
 const SUBDIV_M = 3;
 
-// How far (world units) the foot must move before the per-frame ground raycast
-// is run again. Between probes the last ground-Y is reused.
 const FOOT_REPROBE_DIST = 0.4;
 
 const GROUND_SNAP_BAND = 2.5;
@@ -56,11 +49,8 @@ function groundYAt(scene: THREE.Scene, x: number, z: number, fallbackY: number):
   return bestY !== null ? bestY : fallbackY;
 }
 
-// Real-world sizes (metres) — all tunable in nav-config.ts. Converted to world
-// units at runtime via mpu.
 const { lineWidthM: M_LINE_W, liftM: M_LIFT, pinHeadM: M_PIN, pinFloatM: M_FLOAT, pinBobM: M_BOB, ringOuterM: M_RING } = navConfig.scene3d;
 
-/** "#rrggbb" → "r, g, b" for composing rgba() gradient stops. */
 function hexRgb(hex: string): string {
   const n = parseInt(hex.replace("#", ""), 16);
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
@@ -72,8 +62,6 @@ const TURN_MIN_DEG = navConfig.logic.turnMinDeg;
 const RIGHT_IS_POSITIVE_CROSS = navConfig.logic.rightIsPositiveCross;
 const TURN_ARROW_TILT = 0.55;
 
-/** A sleek slim arrow (head + thin shaft) pointing +Y, ~1 unit tall (scaled by
- *  W per frame). */
 function buildArrowGeom(): THREE.ShapeGeometry {
   const s = new THREE.Shape();
   s.moveTo(0, 1.05);
@@ -94,8 +82,6 @@ interface NavSetup {
   arrowGeom: THREE.ShapeGeometry;
 }
 
-/** Cross-width gradient: solid blue band (bright core + darker casing edges)
- *  with soft anti-aliased margins — the SAME blue as the 2D minimap route. */
 function makeRouteTexture(): THREE.Texture {
   const c = document.createElement("canvas");
   c.width = 4;
@@ -121,7 +107,6 @@ function makeRouteTexture(): THREE.Texture {
   return t;
 }
 
-/** Build the route geometry + material once (lazy, client-only). */
 function buildSetup(): NavSetup {
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 2 * 3), 3));
@@ -155,15 +140,12 @@ interface FrameOpts {
   ribbon: THREE.Mesh | null;
   pin: THREE.Group | null;
   ring: THREE.Mesh | null;
-  /** Floating, camera-facing turn arrow placed at the next bend. */
   turnArrow: THREE.Group | null;
   camera: THREE.Camera;
   scene: THREE.Scene;
   floorCache: FloorCache;
 }
 
-// Plain function — parameters exempt from react-hooks/immutability. All the
-// per-frame buffer mutation happens here.
 function paintNavFrame(o: FrameOpts, elapsed: number): void {
   const { ctrl, setup, ribbon, pin, ring, turnArrow, camera, scene, floorCache } = o;
   if (!ctrl || !ribbon) return;
@@ -181,7 +163,7 @@ function paintNavFrame(o: FrameOpts, elapsed: number): void {
   }
 
   const mpu = ctrl.getMetersPerUnit() || 0.5;
-  const W = 1 / mpu; // 1 metre in world units
+  const W = 1 / mpu;
   const width = M_LINE_W * W;
   const lift = M_LIFT * W;
 
@@ -342,13 +324,10 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
     );
   });
 
-  // `raycast={() => null}` on the route's own meshes so the ground raycast in
-  // paintNavFrame never hits them (it must hit the model floor, not the route).
   const noRaycast = () => null;
 
   return (
     <>
-      {/* Route line — depth-tested; sits on the raycast ground. */}
       <mesh ref={ribbonRef} geometry={setup.geom} material={setup.routeMat} frustumCulled={false} renderOrder={998} visible={false} raycast={noRaycast} />
 
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} renderOrder={999} frustumCulled={false} visible={false} raycast={noRaycast}>
@@ -357,7 +336,6 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
       </mesh>
 
       <group ref={pinRef} frustumCulled={false} visible={false}>
-        {/* ghost (through-walls hint) */}
         <mesh position={[0, 0.75, 0]} rotation={[Math.PI, 0, 0]} renderOrder={998} frustumCulled={false} raycast={noRaycast}>
           <coneGeometry args={[0.62, 1.5, 28]} />
           <meshBasicMaterial color={navConfig.color.destRed} transparent opacity={0.18} depthWrite={false} depthTest={false} toneMapped={false} />
@@ -366,7 +344,6 @@ export function NavPath3D({ ctrlRef }: { ctrlRef: RefObject<PlayerControllerHand
           <sphereGeometry args={[1, 28, 28]} />
           <meshBasicMaterial color={navConfig.color.destRed} transparent opacity={0.18} depthWrite={false} depthTest={false} toneMapped={false} />
         </mesh>
-        {/* solid (at its place, depth-tested) */}
         <mesh position={[0, 0.75, 0]} rotation={[Math.PI, 0, 0]} renderOrder={999} frustumCulled={false} raycast={noRaycast}>
           <coneGeometry args={[0.62, 1.5, 28]} />
           <meshStandardMaterial color={navConfig.color.destRed} emissive="#7a1410" emissiveIntensity={0.35} roughness={0.35} metalness={0} transparent depthWrite={false} depthTest />

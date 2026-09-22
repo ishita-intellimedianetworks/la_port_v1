@@ -6,8 +6,6 @@ type Stops = {
   zenith: [number, number, number];
   horizon: [number, number, number];
   sun: [number, number, number];
-  /** Multiplier on `sun` before it reaches the shader — dusk runs hotter so the
-   *  low sun still burns through a dark sky. */
   intensity: number;
   deep: [number, number, number];
 };
@@ -34,18 +32,14 @@ export const T_FOR_MODE: Record<Exclude<SkyMode, "off">, number> = {
   day: 0.8,
 };
 
-/** The sun's arc across `t`, in radians — the study's numbers. */
 const ELEVATION = [-0.05, 0.62] as const;
 const AZIMUTH = [-0.9, 0.9] as const;
 
 export type SunAim = {
-  /** Compass angle, radians. 0 puts the sun toward −Z; positive swings to +X. */
   azimuth: number;
   elevation: number;
 };
 
-/** Highest the sun may be placed — straight overhead casts shadows directly
- *  under everything, which reads as no shadows at all. */
 const SUN_MAX_ELEVATION = Math.PI / 2 - 0.05;
 
 export function sunElevationDeg(t: number): number {
@@ -58,7 +52,6 @@ export function sunAnglesForT(t: number): { azimuth: number; elevation: number }
   return { azimuth: a.azimuth * deg, elevation: a.elevation * deg };
 }
 
-/** The study's own names for the arc, used by the debug slider's readout. */
 export function labelForT(t: number): string {
   if (t < 0.12) return "Dusk";
   if (t < 0.3) return "Golden Hour";
@@ -81,8 +74,6 @@ function sunAngles(t: number, aim?: SunAim | null) {
   };
 }
 
-/** The study's world-space sun ray for a given elevation/azimuth (Y up, −Z
- *  forward). Split out so `sunAngles` has one place to turn into a vector. */
 function sunRay(elevation: number, azimuth: number): THREE.Vector3 {
   const ce = Math.cos(elevation);
   return new THREE.Vector3(
@@ -111,17 +102,11 @@ const color = (rgb: [number, number, number]) =>
   new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.LinearSRGBColorSpace);
 
 export type SkySample = {
-  /** Normalised sun direction in world space (Y up, −Z forward). */
   sunDir: THREE.Vector3;
   zenith: THREE.Color;
   horizon: THREE.Color;
-  /** Sun colour ALREADY multiplied by the palette intensity — the shader wants
-   *  the emissive value, not a base tint. */
   sun: THREE.Color;
-  /** The same colour UNMULTIPLIED. This is the sun's actual tint, and so what
-   *  a scene light should be coloured with (three keeps intensity separate). */
   sunBase: THREE.Color;
-  /** Below-horizon haze, so rays under the horizon never reach black. */
   haze: THREE.Color;
 };
 
@@ -163,14 +148,9 @@ const hex = (c: THREE.Color) => `#${c.getHexString(THREE.SRGBColorSpace)}`;
 
 export type SkyLighting = {
   sunDirection: [number, number, number];
-  /** The palette's sun tint. */
   sunColor: string;
-  /** The sky's own colour at mid-elevation. */
   ambientColor: string;
-  /** Sky fill from above — the same mid-sky colour. */
   hemiSkyColor: string;
-  /** Ground bounce from below: the study's below-horizon haze, which is the
-   *  colour its own downward rays returned. */
   hemiGroundColor: string;
 };
 

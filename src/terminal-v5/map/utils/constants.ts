@@ -3,12 +3,8 @@ import { navConfig } from "../../navigation-config";
 export const DEFAULT_MAP_SIZE = 330;
 export const MOBILE_MAP_SIZE = 150;
 
-// The map opens as a resizable floating window (canvas size, in CSS px). The
-// user drags the bottom-right corner to grow/shrink between MIN and the viewport.
 export const MAP_WINDOW_DEFAULT = { w: 410, h: 260 };
 export const MAP_WINDOW_MIN = { w: 380, h: 240 };
-// Reserved space when clamping the window to the viewport: the left anchor
-// (~88px) + right margin, and the top anchor + header + bottom margin.
 export const MAP_WINDOW_INSET_X = 112;
 export const MAP_WINDOW_INSET_Y = 150;
 export const MAP_FULL_INSET_X = 104;
@@ -17,7 +13,6 @@ export const SIDE_LEGEND_W = 176;
 export const ZOOM_FACTOR = 1.18;
 
 export const ZOOM_OUT_MARGIN = 1.06;
-/** Hard floor, in case a site authors a context layer absurdly larger than its plan. */
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 8;
 

@@ -7,8 +7,6 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime";
 import { useDebugStore } from "../../../stores/debug-store";
 
-// Room zone: one named mesh in the navmesh GLB
-// Convention: mesh.name in the GLB matches the LayoutsConfig.id in scene-config
 export interface RoomZone {
   id: string;
   mesh: THREE.Mesh;
@@ -63,19 +61,12 @@ function extractGeo(scene: THREE.Group): {
 interface SingleNavmeshProps {
   floorId: string;
   url: string;
-  /** Fired once with the merged geometry for this floor. */
   onGeometry: (floorId: string, geo: THREE.BufferGeometry) => void;
-  /** Fired once with the first-mesh bbox — used for minimap bounds. */
   onFloorBounds?: (floorId: string, bounds: FloorBounds) => void;
-  /** Fired once with named-mesh room zones for room detection. */
   onRoomZones?: (floorId: string, zones: RoomZone[]) => void;
-  /** Fired after geometry has been delivered to the parent. */
   onLoaded?: () => void;
   debug?: boolean;
-  /** Actually draw the overlay. The debug panel's "show navmesh" switch. */
   show?: boolean;
-  /** Let the world occlude the overlay. Off, it is drawn straight through —
-   *  see `navmeshDepth` in the debug store for why that is the default. */
   depthTest?: boolean;
 }
 

@@ -17,15 +17,11 @@ const ZOOM_MIN = 2;
 const ZOOM_MAX = 80;
 const DOLLHOUSE_START_SCALE = 1.0;
 
-// Polar (tilt) bounds — between near-top-down and just above the horizon, so the
-// camera never flips under the model while orbiting its centre.
 const TILT_MIN = degToRad(5);
 const TILT_MAX = degToRad(85);
 
 const FLY_DURATION_SEC = 1.6;
 
-// Fire the blackout cue so its fade-in finishes right as the fly-in ends.
-// Lead time = FadeScreen's FADE_MS so the curves align.
 const BLACKOUT_LEAD_SEC = FADE_MS / 1000;
 const BLACKOUT_CUE_FRAC = 1 - BLACKOUT_LEAD_SEC / FLY_DURATION_SEC;
 
@@ -41,8 +37,6 @@ interface DollhouseCameraProps {
     position: [number, number, number],
     rotation: [number, number, number],
   ) => void;
-  /** Fires during the last ~240ms of fly-in so TerminalExperience can raise the
-   *  blackout while the camera completes its arc. */
   onTransitionCue?: () => void;
   interactive?: boolean;
 }
@@ -85,8 +79,6 @@ export default function DollhouseCamera({
   const lastPointer = useRef({ x: 0, y: 0 });
   const dragMoved   = useRef(false);
   const downPointer = useRef({ x: 0, y: 0 });
-  // Ref-mirrored so the (stable) canvas listeners see the live value without
-  // re-binding on every interactive flip.
   const interactiveRef = useRef(interactive);
   useEffect(() => {
     interactiveRef.current = interactive;
@@ -136,8 +128,6 @@ export default function DollhouseCamera({
     seatAtHome();
   }, [dollHousePosition, dollHouseRotation, seatAtHome]);
 
-  // Just captures start/end pose and flips the transition flag. The actual
-  // motion happens in useFrame below — one position lerp + one slerp per frame.
   const startFlyIn = useCallback(
     (targetPos: [number, number, number], targetRot: [number, number, number]) => {
       if (isTransitioning.current) return;
@@ -169,8 +159,6 @@ export default function DollhouseCamera({
     [camera, cameraHeight],
   );
 
-  // Scale the orbit radius (distance from the model centre) by `factor`, clamped
-  // to [ZOOM_MIN, ZOOM_MAX]. factor < 1 = zoom in, > 1 = zoom out.
   const zoomBy = useCallback((factor: number) => {
     sphTarget.current.radius = Math.max(
       zoomMin.current, Math.min(zoomMax.current, sphTarget.current.radius * factor),
@@ -218,7 +206,7 @@ export default function DollhouseCamera({
 
     const onPointerUp = (e: PointerEvent) => {
       isDragging.current = false;
-      try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
 
       if (isTransitioning.current || !interactiveRef.current) return;
       const touch = e.pointerType === "touch";
@@ -249,8 +237,6 @@ export default function DollhouseCamera({
       }
     };
 
-    // FIX 2: normalise wheel delta so trackpad and mouse wheel feel the same.
-    // deltaMode 0 = pixels (trackpad), 1 = lines, 2 = pages
     const onWheel = (e: WheelEvent) => {
       if (isTransitioning.current || !interactiveRef.current) return;
       e.preventDefault();
@@ -262,16 +248,12 @@ export default function DollhouseCamera({
       poseDirty.current = true;
     };
 
-    // A cancelled pointer (OS gesture, tab switch, palm rejection) must not
-    // count as a tap — just drop the drag state.
     const onPointerCancel = (e: PointerEvent) => {
       isDragging.current = false;
       lastTapTime = 0;
-      try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
     };
 
-    // Touch — single-finger orbit + two-finger pinch zoom
-    // Without these handlers the dollhouse view has NO zoom path on mobile.
     let pinchLastDist = 0;
     let pinchActive = false;
 
@@ -285,8 +267,6 @@ export default function DollhouseCamera({
         const dy = t1.clientY - t0.clientY;
         pinchLastDist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
         pinchActive = true;
-        // Cancel any orbit drag that may have started with the first finger,
-        // and any pending tap — these fingers are zooming, not double-tapping.
         isDragging.current = false;
         lastTapTime = 0;
       }
@@ -301,8 +281,6 @@ export default function DollhouseCamera({
         const dx = t1.clientX - t0.clientX;
         const dy = t1.clientY - t0.clientY;
         const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-        // Pinch out → fingers further apart → scale > 1 → zoom IN (smaller
-        // radius), so divide the radius by the finger-distance ratio.
         const scale = dist / pinchLastDist;
         pinchLastDist = dist;
         zoomBy(1 / scale);
@@ -314,8 +292,6 @@ export default function DollhouseCamera({
       if (e.touches.length < 2 && pinchActive) {
         pinchActive = false;
         pinchLastDist = 0;
-        // The pointerups from lifting the pinch fingers land right after this
-        // — remember when, so they aren't mistaken for double-tap taps.
         lastPinchEnd = performance.now();
       }
     };
@@ -355,8 +331,6 @@ export default function DollhouseCamera({
       camera.position.lerpVectors(flyStartPos.current, flyEndPos.current, k);
       camera.quaternion.slerpQuaternions(flyStartQuat.current, flyEndQuat.current, k);
 
-      // Fire the blackout cue once when we cross the threshold — TerminalExperience
-      // starts the FadeScreen so it reaches full opacity right at fly-in end.
       if (!blackoutCued.current && t >= BLACKOUT_CUE_FRAC) {
         blackoutCued.current = true;
         onCueRef.current?.();
@@ -398,8 +372,6 @@ export default function DollhouseCamera({
       zoomMin.current = sphTarget.current.radius * 0.5;
       zoomMax.current = sphTarget.current.radius * 1.5;
 
-      // Position the camera from the scaled spherical (not the raw authored pose)
-      // so the closer framing is applied on the first frame with no jump.
       orbitOffset.current.setFromSpherical(sphCurrent.current);
       camera.position.copy(orbitCenter.current).add(orbitOffset.current);
       camera.lookAt(orbitCenter.current);
@@ -416,16 +388,12 @@ export default function DollhouseCamera({
     camera.position.copy(orbitCenter.current).add(orbitOffset.current);
     camera.lookAt(orbitCenter.current);
 
-    // Is the view still moving — either a finger/pointer is down, or the
-    // damping is still closing the gap to the target?
     const settling =
       Math.abs(sphTarget.current.theta - sphCurrent.current.theta) >= 1e-3 ||
       Math.abs(sphTarget.current.phi - sphCurrent.current.phi) >= 1e-3 ||
       Math.abs(sphTarget.current.radius - sphCurrent.current.radius) >= 1e-2;
 
     if (isDragging.current || settling) {
-      // Live readout at 5 Hz — a line per frame would be unreadable and would
-      // cost more than the orbit itself.
       const now = performance.now();
       if (now - liveLogAt.current >= 200) {
         liveLogAt.current = now;

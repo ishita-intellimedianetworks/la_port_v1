@@ -20,7 +20,6 @@ interface UseSceneNavigationOptions {
   activeFloor: FloorConfig;
   setActiveFloorIndex: (i: number) => void;
   setNavigateFromMinimap: (fn: (x: number, z: number) => void) => void;
-  /** Floor-selector blackout: fade to black, run swap callback at peak, fade back. */
   triggerFloorTransition: (
     onBlack: () => void,
     opts?: { waitForModel?: boolean; expectedKey?: string },
@@ -59,8 +58,6 @@ export function useSceneNavigation({
     zoneName: string,
   ) => {
     if (zoneName !== ctrl.getCurrentZone()) return;
-    // Map clicks + 3D double-clicks both route through here — these are "manual"
-    // walks, so suppress the turn HUD (only label/directions Start raises it).
     useNavUiStore.getState().setNavHud(false);
     ctrl.navigateToPoint({ x: pt.x, y: pt.y, z: pt.z });
   }, []);
@@ -100,8 +97,6 @@ export function useSceneNavigation({
     ctrl.stopNavigation();
     ctrl.setCurrentZone(newZone);
 
-    // Snap Y to the navmesh surface on the new floor — the configured Y may
-    // not perfectly match the navmesh mesh height, causing the player to float.
     const snappedP: [number, number, number] = [p[0], p[1], p[2]];
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -113,7 +108,7 @@ export function useSceneNavigation({
           if (node) snappedP[1] = node.centroid.y;
         }
       }
-    } catch { /* zone not yet registered — use config Y */ }
+    } catch {}
 
     ctrl.teleportTo(snappedP, r);
   }, [activeFloor, startPosition, startRotation, playerControllerRef, pathfinding, floors, cinematicActive, navReady, pendingLayoutEntryRef]);

@@ -17,8 +17,6 @@ export function buildTeleportFn({ state, camera, cameraHeight, stopNavigation }:
   ) => {
     stopNavigation();
     state.transition.tween.current?.kill();
-    // Every teleport resets the fly-over yaw-only look lock; the caller
-    // re-arms it (setPitchLock) when the destination is a fly pose.
     state.pitchLock.current = false;
 
     const y = p[1] + cameraHeight;

@@ -166,7 +166,7 @@ export function useDoubleClickNav({
         }
         if (!end) return;
         target = end;
-      } catch { /* validation is best-effort — fall through to the walk */ }
+      } catch {}
 
       navigateToFloorRef.current(ctrl, target, match.zoneName);
     };

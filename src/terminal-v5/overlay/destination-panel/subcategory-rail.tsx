@@ -11,7 +11,6 @@ import {
 export interface SubcatSegment {
   id: string;
   label: string;
-  /** Optional count badge (destinations under this sub-category). */
   count?: number;
 }
 
@@ -21,8 +20,6 @@ interface SubcategoryRailProps {
   onSelect: (id: string) => void;
 }
 
-/** Keyword → icon, so each sub-category gets a fitting glyph without per-option
- *  config. First match wins; falls back to a location pin. */
 const ICON_RULES: [RegExp, LucideIcon][] = [
   [/entrance|entry/i, DoorOpen],
   [/gate/i, DoorOpen],
@@ -104,7 +101,6 @@ export function SubcategoryRail({ segments, active, onSelect }: SubcategoryRailP
         />
       </button>
 
-      {/* Menu — portaled to <body> so the panel's overflow-hidden can't clip it. */}
       {open && rect && typeof document !== "undefined" &&
         createPortal(
           <div
@@ -128,8 +124,6 @@ export function SubcategoryRail({ segments, active, onSelect }: SubcategoryRailP
                   type="button"
                   onClick={() => { onSelect(s.id); setOpen(false); }}
                   className="nav-display flex w-full shrink-0 cursor-pointer items-center gap-2.5 rounded-[10px] px-3 py-[9px] text-left transition-colors hover:bg-white/[0.06] short:gap-2 short:px-2.5 short:py-1.5"
-                  // Active row matches the Village SegmentRow: solid accent
-                  // fill + white icon/label/check.
                   style={on ? { background: "var(--nav-accent)" } : undefined}
                 >
                   <Icon size={15} strokeWidth={2.2} color={on ? "#ffffff" : "var(--nav-text-2)"} className="shrink-0 short:h-[13px] short:w-[13px]" />

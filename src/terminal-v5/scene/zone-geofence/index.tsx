@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime/dispose-gltf";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 import { useSecurityStore } from "../../stores/security-store";
 
-const GEOFENCE_COLOR = new THREE.Color("#30d158");
+const GEOFENCE_COLOR = "#30d158";
 
 export function ZoneGeofence() {
   const hotspotById = useSecurityStore((s) => s.hotspotById);
@@ -15,13 +15,14 @@ export function ZoneGeofence() {
   const openId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
 
   const id = openId ?? selectedId;
-  const url = id ? hotspotById[id]?.geofence?.url : undefined;
-  if (!url) return null;
-  return <Geofence url={url} />;
+  const geofence = id ? hotspotById[id]?.geofence : undefined;
+  if (!geofence) return null;
+  return <Geofence url={geofence.url} color={geofence.color ?? GEOFENCE_COLOR} />;
 }
 
-function Geofence({ url }: { url: string }) {
+function Geofence({ url, color }: { url: string; color: string }) {
   const { scene } = useGLTF(url);
+  const tint = useMemo(() => new THREE.Color(color), [color]);
 
   useLayoutEffect(() => {
     scene.traverse((o) => {
@@ -31,12 +32,12 @@ function Geofence({ url }: { url: string }) {
         if (!(m instanceof THREE.Material)) continue;
         m.depthWrite = false;
         if (m instanceof THREE.MeshStandardMaterial) {
-          m.color.copy(GEOFENCE_COLOR);
-          m.emissive.copy(GEOFENCE_COLOR);
+          m.color.copy(tint);
+          m.emissive.copy(tint);
         }
       }
     });
-  }, [scene]);
+  }, [scene, tint]);
 
   useEffect(() => {
     acquireGLTF(url);

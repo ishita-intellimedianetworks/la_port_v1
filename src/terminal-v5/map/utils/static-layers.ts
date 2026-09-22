@@ -2,15 +2,12 @@ import type { ImageRect } from "./draw";
 
 export interface StaticLayerInput {
   plan: HTMLImageElement | null;
-  /** Where the plan goes, in logical canvas px (the letterbox rect). */
   planRect: ImageRect | null;
   base: HTMLImageElement | null;
-  /** Where the aerial goes, in the same logical px. Null = no context layer. */
   baseRect: ImageRect | null;
 }
 
 export interface StaticLayerView {
-  /** Canvas size in logical (CSS) px. */
   w: number;
   h: number;
   dpr: number;
@@ -24,7 +21,6 @@ const MARGIN = 0.18;
 const MAX_PX = 8_000_000;
 const MAX_PX_LOW_POWER = 1_500_000;
 
-/** Scale drift tolerated before rebuilding mid-gesture. */
 const SCALE_LO = 0.8;
 const SCALE_HI = 1.25;
 
@@ -39,12 +35,8 @@ export function createStaticLayers(lowPower = false) {
   let c: HTMLCanvasElement | null = null;
   let cx: CanvasRenderingContext2D | null = null;
   let cov: Cov | null = null;
-  /** Device px per logical px the cache was built at. */
   let scale = 0;
-  /** Identity of what was drawn INTO it — sources and their placement. */
   let key = "";
-  /** Was the last build at the exact scale the view wanted? Drives the settle
-   *  rebuild: an approximate cache is refreshed as soon as the view stops. */
   let exact = false;
   let lastView = "";
 
@@ -63,11 +55,7 @@ export function createStaticLayers(lowPower = false) {
       cx.setTransform(1, 0, 0, 1, 0, 0);
       cx.clearRect(0, 0, pxW, pxH);
     }
-    // Map the covered logical rect onto the cache's pixels, so both layers can
-    // be drawn with the very same rects the frame loop would have used.
     cx.setTransform(s, 0, 0, s, -want.x * s, -want.y * s);
-    // The expensive filter belongs HERE — once per rebuild — and not on the
-    // per-frame blit, which is 1:1 and has nothing to interpolate.
     cx.imageSmoothingEnabled = true;
     cx.imageSmoothingQuality = "high";
     if (src.base && src.baseRect) {
@@ -118,8 +106,6 @@ export function createStaticLayers(lowPower = false) {
 
       const nextKey =
         `${src.plan.src}|${src.base?.src ?? "-"}|${rectKey(src.planRect)}|${rectKey(src.baseRect)}`;
-      // "The view has not moved since last frame" — the cue to spend one
-      // rebuild getting back to exact after a gesture ends.
       const viewKey = `${v.w}x${v.h}@${v.dpr}|${v.zoom}|${v.ox}|${v.oy}`;
       const settled = viewKey === lastView;
       lastView = viewKey;
@@ -146,7 +132,6 @@ export function createStaticLayers(lowPower = false) {
       ctx.drawImage(c, cov.x, cov.y, cov.w, cov.h);
     },
 
-    /** Drop the backing store — a canvas this size is worth releasing early. */
     dispose() {
       if (c) {
         c.width = 0;

@@ -13,7 +13,6 @@ export interface FloorMatch {
 
 export interface FindFloorOptions {
   currentFloorIndex?: number;
-  /** Minimum improvement (in metres) required to switch floors. Default 0.6m. */
   hysteresisM?: number;
 }
 
@@ -66,7 +65,7 @@ export function findBestFloorForPoint(
         closestPoint: new THREE.Vector3(bestNode.centroid.x, bestNode.centroid.y, bestNode.centroid.z),
         score: bestScore,
       });
-    } catch { /* zone not loaded yet */ }
+    } catch {}
   }
 
   if (candidates.length === 0) return null;
@@ -74,8 +73,6 @@ export function findBestFloorForPoint(
   candidates.sort((a, b) => a.score - b.score);
   let best = candidates[0];
 
-  // Hysteresis: refuse to switch off the current floor unless the new winner
-  // is at least hysteresisM closer.
   if (currentFloorIndex >= 0 && best.floorIndex !== currentFloorIndex) {
     const current = candidates.find(c => c.floorIndex === currentFloorIndex);
     if (current && current.score - best.score < hysteresisM) {

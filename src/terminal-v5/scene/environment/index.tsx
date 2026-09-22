@@ -23,27 +23,19 @@ export default function SceneEnvironment({
   showEnvMap?: boolean;
   shadows?: boolean;
   interior?: boolean;
-  /** Where the streamed world stops being visible - forwarded to SceneLights,
-   *  which sizes the sun's follow square from it. */
   followRadius?: number;
-  /** Per-venue lighting overrides — forwarded to SceneLights. */
   lights?: LightsConfig;
-  /** Active venue id — keys the live lights store. */
   venueKey?: string;
 }) {
   const skyLights = useSite().scene.sky?.lights;
   const cloudsHidden = useLightsStore((s) => s.cloudsHidden);
   const skyVisible = showEnvMap && !cloudsHidden;
-  // Which sky THIS model asked for — the seed is per site file now, so it is
-  // read off the store rather than off a module constant.
   const skyMode = useSkyStore((s) => s.mode);
   const t = useSkyStore((s) => s.t);
   const sunUnlinked = useSkyStore((s) => s.sunUnlinked);
   const sunAzimuth = useSkyStore((s) => s.sunAzimuth);
   const sunElevation = useSkyStore((s) => s.sunElevation);
 
-  // Up at a `layouts[]` framing camera (54–412 m). Same authored thresholds the
-  // streamer swaps its bands on — one answer to "how high is the camera".
   const aloft = useCameraAloft();
 
   const envOverride = useMemo<Partial<ResolvedLights> | undefined>(() => {

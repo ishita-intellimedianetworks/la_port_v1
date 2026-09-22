@@ -9,7 +9,6 @@ import { navConfig } from "../../navigation-config";
 
 export interface DestinationRow {
   dest: Destination;
-  /** Real-world metres along the navmesh, or null when unreachable. */
   meters: number | null;
   distLabel: string;
   etaLabel: string;
@@ -29,8 +28,6 @@ export function useDestinations(
   dests: Destination[],
   ctrlRef: RefObject<PlayerControllerHandle | null>,
   active: boolean,
-  /** The player is standing at a teleport-only spot — every destination
-   *  becomes teleport-only, so skip all measures. */
   fromTeleportOnly = false,
 ): { rows: DestinationRow[]; refresh: () => void } {
   const [rows, setRows] = useState<DestinationRow[]>([]);
@@ -42,8 +39,6 @@ export function useDestinations(
     return p ? `${Math.round(p.x / CACHE_CELL)},${Math.round(p.z / CACHE_CELL)}` : "";
   }, [ctrlRef]);
 
-  // Measure every destination in one batch and return the sorted rows, or
-  // null when the controller isn't mounted yet.
   const computeRows = useCallback((): DestinationRow[] | null => {
     const ctrl = ctrlRef.current;
     if (!ctrl) return null;
@@ -91,8 +86,6 @@ export function useDestinations(
       return;
     }
 
-    // Cache miss — show every row immediately (distance pending), then fill
-    // them all in one deferred batch measure (single Dijkstra, ~a frame).
     setRows(dests.map((dest) => ({ dest, meters: null, distLabel: "…", etaLabel: "" })));
     setTimeout(() => {
       if (runId !== runIdRef.current) return;

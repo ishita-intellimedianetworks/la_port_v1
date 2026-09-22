@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /** The models that have a file, and the only values that may reach a path. */
-const SITE_IDS = ["v1", "v2", "v3"] as const;
+const SITE_IDS = ["v1", "v2", "v3", "v4", "v5"] as const;
 type SiteId = (typeof SITE_IDS)[number];
 
 /** Where one model's document lives, relative to the dev server's cwd. */
@@ -14,13 +14,24 @@ type Vec3 = [number, number, number];
 interface CameraRow {
   id: string;
   name?: string;
+  position?: Vec3;
+  rotation?: Vec3;
   camera?: { position: Vec3; rotation?: Vec3; target?: Vec3 };
 }
 
 interface SiteDoc {
   layouts: CameraRow[];
   hotspots: CameraRow[];
+  securityHotspots?: CameraRow[];
 }
+
+const TABLE_BY_KIND = {
+  layout: "layouts",
+  hotspot: "hotspots",
+  security: "securityHotspots",
+} as const;
+
+type Kind = keyof typeof TABLE_BY_KIND;
 
 function vec3(value: unknown): Vec3 | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
@@ -53,7 +64,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Body is not JSON" }, { status: 400 });
   }
 
-  const { site, kind, id, position, rotation } = (body ?? {}) as Record<string, unknown>;
+  const { site, kind, id, position, rotation, field } = (body ?? {}) as Record<string, unknown>;
 
   if (typeof site !== "string" || !(SITE_IDS as readonly string[]).includes(site)) {
     return Response.json(
@@ -64,14 +75,27 @@ export async function POST(request: Request) {
   const siteFile = siteFileFor(site as SiteId);
   const siteName = `sites/${site}.json`;
 
-  if (kind !== "layout" && kind !== "hotspot") {
+  if (typeof kind !== "string" || !(kind in TABLE_BY_KIND)) {
     return Response.json({ ok: false, error: `Unknown kind "${String(kind)}"` }, { status: 400 });
   }
+  const table_kind = kind as Kind;
+
+  const what = field === undefined ? "camera" : field;
+  if (what !== "camera" && what !== "position") {
+    return Response.json({ ok: false, error: `Unknown field "${String(field)}"` }, { status: 400 });
+  }
+  if (what === "position" && table_kind === "layout") {
+    return Response.json(
+      { ok: false, error: "A layout has no anchor position — it is a camera and a name" },
+      { status: 400 },
+    );
+  }
+
   if (typeof id !== "string" || !id) {
     return Response.json({ ok: false, error: "Missing id" }, { status: 400 });
   }
   const pos = vec3(position);
-  const rot = vec3(rotation);
+  const rot = what === "camera" ? vec3(rotation) : pos;
   if (!pos || !rot) {
     return Response.json(
       { ok: false, error: "position and rotation must each be three finite numbers" },
@@ -99,16 +123,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const table = kind === "layout" ? doc.layouts : doc.hotspots;
+  const tableName = TABLE_BY_KIND[table_kind];
+  const table = doc[tableName];
   const index = Array.isArray(table) ? table.findIndex((r) => r.id === id) : -1;
   if (index < 0) {
-    return Response.json({ ok: false, error: `No ${kind} "${id}" in ${siteName}` }, { status: 404 });
+    return Response.json(
+      { ok: false, error: `No ${kind} "${id}" in ${siteName} › ${tableName}` },
+      { status: 404 },
+    );
   }
-  const row = table[index];
+  const rows = table as CameraRow[];
+  const row = rows[index];
 
-  const previous = row.camera ?? null;
+  const previous = what === "camera" ? (row.camera ?? null) : (row.position ?? null);
 
-  table[index] = withCamera(row, { position: pos, rotation: rot });
+  if (what === "camera") {
+    rows[index] = withCamera(row, { position: pos, rotation: rot });
+  } else {
+    row.position = pos;
+  }
 
   const next = JSON.stringify(doc, null, 2) + "\n";
   try {
@@ -122,7 +155,7 @@ export async function POST(request: Request) {
 
   return Response.json({
     ok: true,
-    path: `${siteName} › ${kind === "layout" ? "layouts" : "hotspots"}[${id}].camera`,
+    path: `${siteName} › ${tableName}[${id}].${what}`,
     created: previous === null,
     previous,
   });

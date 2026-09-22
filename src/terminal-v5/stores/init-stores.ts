@@ -8,7 +8,5 @@ export function initStores(site: Site) {
   useCameraStore.init(site);
   useGradeStore.init(site);
   useSkyStore.init(site);
-  // Seeds the security layer from `securityHotspots[]` and then owns it: the
-  // demo mutates readings and raises incidents, which no file can hold.
   useSecurityStore.init(site);
 }

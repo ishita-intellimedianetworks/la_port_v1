@@ -24,9 +24,7 @@ export interface SceneContextValue {
       waitUntil?: () => boolean;
     },
   ) => void;
-  /** Manually raise the fade — for sequenced cinematics that control blackout timing themselves. */
   fadeRaise: () => void;
-  /** Manually lower the fade — pairs with `fadeRaise`. */
   fadeLower: () => void;
   showFurniture: boolean;
   setShowFurniture: (v: boolean) => void;

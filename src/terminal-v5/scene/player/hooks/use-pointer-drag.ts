@@ -35,8 +35,6 @@ export function usePointerDrag({ gl, state }: UsePointerDragOptions) {
       if (dragging && !state.moving.current) {
         state.rot.current.y -= dx * 0.005;
         state.yawT.current   = state.rot.current.y;
-        // Fly-over pose: yaw-only — the pitch stays frozen (straight down) so
-        // the drag spins the aerial view without tilting it off-axis.
         if (!state.pitchLock.current) {
           state.rot.current.x = Math.max(PITCH_MIN, Math.min(PITCH_MAX, state.rot.current.x - dy * 0.004));
         }

@@ -5,7 +5,8 @@ import { useFrame } from "@react-three/fiber";
 import { useSite } from "@/config/context";
 import { useScene } from "../../context/scene-context";
 import { useNavUiStore } from "../../stores/nav-ui-store";
-import { isFieldHotspot, useSecurityStore } from "../../stores/security-store";
+import { useSecurityStore } from "../../stores/security-store";
+import { useDebugStore } from "../../stores/debug-store";
 import { Hotspot } from "./hotspot";
 
 const GROUND_EPS = 1.5;
@@ -14,9 +15,9 @@ const NEARBY_UNITS = 150;
 
 const NEARBY_SAMPLE = 0.25;
 
+const SECURITY_MINOR_BEAD = 0.55;
+
 interface HotspotMarkersProps {
-  /** Base marker radius in world units (FloorConfig.hsSize). Markers draw at a
-   *  constant screen size; this is what that scaling starts from and clamps to. */
   hsSize?: number;
 }
 
@@ -29,6 +30,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
   const openHotspotId = useNavUiStore((s) => s.hotspotInfo?.hotspotId ?? null);
   const securityHotspots = useSecurityStore((s) => s.hotspots);
   const securityHotspotById = useSecurityStore((s) => s.hotspotById);
+  const anchorDraft = useDebugStore((s) => s.anchorDraft);
 
   const [ground, setGround] = useState<{ on: boolean; ids: string[] }>({ on: false, ids: [] });
   const sinceSample = useRef(0);
@@ -51,11 +53,9 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
     const ids = [
       ...site.hotspots.filter((h) => within(h.position)).map((h) => h.id),
       ...securityHotspots
-        .filter((h) => h.enabled !== false && isFieldHotspot(h.id) && within(h.position))
+        .filter((h) => h.enabled !== false && within(h.position))
         .map((h) => h.id),
     ];
-    // Only on a CHANGE of set: this runs four times a second and a new object
-    // every time would re-render the whole marker tree for nothing.
     setGround((prev) =>
       prev.on && prev.ids.length === ids.length && prev.ids.every((id, i) => id === ids[i])
         ? prev
@@ -68,15 +68,14 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
     : currentLayoutId
       ? (site.layoutById[currentLayoutId]?.hotspots ?? [])
       : [];
-  // A picked resource shows that disc alone — but not on the ground, where the
-  // pick came with a standpoint and the point is to look around from it.
   const picked = selectedHotspotId && !ground.on ? [selectedHotspotId] : own;
+
+  const securityPicked =
+    !ground.on && !!selectedHotspotId && !!securityHotspotById[selectedHotspotId];
 
   const alwaysOn = useMemo(
     () =>
-      securityHotspots
-        .filter((h) => h.enabled !== false && isFieldHotspot(h.id))
-        .map((h) => h.id),
+      securityHotspots.filter((h) => h.enabled !== false).map((h) => h.id),
     [securityHotspots],
   );
 
@@ -96,15 +95,18 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
           : securityHotspots.map((h) => h.id);
 
         const isSelected = id === selectedHotspotId;
+        const isSecurity = !site.hotspotById[id];
         return (
           <Hotspot
             key={id}
-            position={hotspot.position}
+            position={anchorDraft?.id === id ? anchorDraft.position : hotspot.position}
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            // Markers are all white; the pulse alone marks the selection.
             pulse={isSelected}
+            beadScale={isSecurity && !isSelected ? SECURITY_MINOR_BEAD : 1}
+            still={isSecurity && securityPicked && !isSelected}
+            screenLocked={isSecurity}
             onHotspotClick={() =>
               setHotspotInfo({
                 destId: layout.id,
