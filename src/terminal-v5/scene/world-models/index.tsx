@@ -5,12 +5,13 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { useSite } from "@/config/context";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime/dispose-gltf";
+import { isConstrainedDevice } from "@/streaming/config";
 
 const DRACO_PATH = "/draco/";
 
 export function WorldModels() {
   const urls = useSite().worldModels;
-  if (!urls.length) return null;
+  if (!urls.length || isConstrainedDevice()) return null;
   return (
     <>
       {urls.map((url) => (

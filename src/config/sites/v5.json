@@ -56,7 +56,6 @@
       "enabled": true,
       "start": "far"
     },
-    "mobileFarScale": 0.9,
     "aerial": {
       "enterAboveMetres": 40,
       "exitBelowMetres": 30,

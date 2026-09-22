@@ -1,4 +1,5 @@
 import type { Site } from "@/config";
+import { isConstrainedDevice } from "@/streaming/config";
 import type { HotspotConfig, HotspotField } from "@/config/schema";
 import { createSeededStore } from "@/shared/stores/create-store";
 
@@ -65,7 +66,7 @@ export interface SecurityEventGroup {
   variants: SecurityEventDef[];
 }
 
-export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
+const AUTHORED_EVENT_GROUPS: SecurityEventGroup[] = [
   {
     hotspotId: "S01",
     title: "Access Control",
@@ -671,6 +672,15 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
   },
 ];
 
+const OMITTED_ON_CONSTRAINED: readonly string[] = ["S03"];
+
+const OMITTED: ReadonlySet<string> = new Set(
+  isConstrainedDevice() ? OMITTED_ON_CONSTRAINED : [],
+);
+
+export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] =
+  AUTHORED_EVENT_GROUPS.filter((g) => !OMITTED.has(g.hotspotId));
+
 export const SECURITY_SOURCES: { hotspotId: string; label: string }[] =
   SECURITY_EVENT_GROUPS.map((g) => ({ hotspotId: g.hotspotId, label: g.title }));
 
@@ -1066,6 +1076,30 @@ const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
     .map((e, i) => ({ ...e, seq: i + 1 }));
 })();
 
+const OMITTED_INCIDENT_IDS: ReadonlySet<string> = new Set(
+  OMITTED.size
+    ? [...OPEN_INCIDENTS, ...HISTORICAL_INCIDENTS]
+        .filter((i) => OMITTED.has(i.sourceHotspotId))
+        .map((i) => i.id)
+    : [],
+);
+
+const SEED_INCIDENTS: SecurityIncident[] = OMITTED.size
+  ? OPEN_INCIDENTS.filter((i) => !OMITTED.has(i.sourceHotspotId))
+  : OPEN_INCIDENTS;
+
+const SEED_HISTORY: SecurityIncident[] = OMITTED.size
+  ? HISTORICAL_INCIDENTS.filter((i) => !OMITTED.has(i.sourceHotspotId))
+  : HISTORICAL_INCIDENTS;
+
+const SEED_AUDIT: SecurityAuditEntry[] = OMITTED.size
+  ? SEEDED_AUDIT.filter(
+      (e) =>
+        !(e.incidentId && OMITTED_INCIDENT_IDS.has(e.incidentId)) &&
+        !(e.hotspotId && OMITTED.has(e.hotspotId)),
+    ).map((e, i) => ({ ...e, seq: i + 1 }))
+  : SEEDED_AUDIT;
+
 const INCIDENT_ID_START = 41;
 
 const incidentIdFor = (n: number) => `SEC-DEMO-${String(n).padStart(4, "0")}`;
@@ -1113,10 +1147,12 @@ function patchIncident(
 export const useSecurityStore = createSeededStore<SecurityState, Site>(
   "security-store",
   (site) => {
-    const seedHotspots: HotspotConfig[] = (site.securityHotspots ?? []).map((h) => ({
-      ...h,
-      fields: h.fields.map((f: HotspotField) => ({ ...f })),
-    }));
+    const seedHotspots: HotspotConfig[] = (site.securityHotspots ?? [])
+      .filter((h) => !OMITTED.has(h.id))
+      .map((h) => ({
+        ...h,
+        fields: h.fields.map((f: HotspotField) => ({ ...f })),
+      }));
 
     return (set, get) => ({
       mode: false,
@@ -1129,14 +1165,14 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
       seedHotspots,
       seedHotspotById: byId(seedHotspots),
 
-      incidents: OPEN_INCIDENTS,
+      incidents: SEED_INCIDENTS,
       selectedIncidentId: null,
       incidentFields: {},
       viewingIncidentId: null,
       categories: ALL_CATEGORIES,
       firedEventIds: NO_FIRED,
-      audit: SEEDED_AUDIT,
-      history: HISTORICAL_INCIDENTS,
+      audit: SEED_AUDIT,
+      history: SEED_HISTORY,
 
       setMode: (value, returnLayoutId = null, securityLayoutId = null) =>
         set({
@@ -1317,7 +1353,7 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
         set((s) => ({
           hotspots: seedHotspots,
           hotspotById: byId(seedHotspots),
-          incidents: OPEN_INCIDENTS,
+          incidents: SEED_INCIDENTS,
           selectedIncidentId: null,
           incidentFields: {},
           viewingIncidentId: null,
@@ -1337,14 +1373,14 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
           managementOpen: false,
           hotspots: seedHotspots,
           hotspotById: byId(seedHotspots),
-          incidents: OPEN_INCIDENTS,
+          incidents: SEED_INCIDENTS,
           selectedIncidentId: null,
           incidentFields: {},
           viewingIncidentId: null,
           categories: ALL_CATEGORIES,
           firedEventIds: NO_FIRED,
-          audit: SEEDED_AUDIT,
-          history: HISTORICAL_INCIDENTS,
+          audit: SEED_AUDIT,
+          history: SEED_HISTORY,
         }),
     });
   },

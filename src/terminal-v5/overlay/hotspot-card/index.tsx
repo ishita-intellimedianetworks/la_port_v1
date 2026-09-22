@@ -22,7 +22,7 @@ import type { HotspotConfig, HotspotField, Tone } from "@/config/schema";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 import { PanelHeader } from "../destination-panel/panel-header";
 import { useLayoutNavigation } from "../use-layout-navigation";
-import { useMediaQuery } from "@/shared/responsive";
+import { useIsHandheld } from "@/shared/responsive";
 
 const CARD_TEXT_SHADOW = "0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)";
 
@@ -352,7 +352,7 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
             className={cn(
               "mt-3 min-h-0 flex-1 max-sm:mt-2 short:mt-2",
               isSecurityCentre
-                ? "ui-scrollbar flex flex-col overflow-hidden max-sm:block max-sm:overflow-y-auto max-sm:overflow-x-hidden"
+                ? "ui-scrollbar flex flex-col overflow-hidden max-sm:block max-sm:overflow-y-auto max-sm:overflow-x-hidden short:block short:overflow-y-auto short:overflow-x-hidden"
                 : "ui-scrollbar overflow-y-auto overflow-x-hidden",
             )}
           >
@@ -1101,7 +1101,7 @@ function SecurityIncidentCentre() {
 
   const activeId = rows.some((i) => i.id === selectedId) ? selectedId : (rows[0]?.id ?? null);
   const active = rows.find((i) => i.id === activeId) ?? null;
-  const phone = useMediaQuery("(max-width: 639px)");
+  const phone = useIsHandheld();
   const scrolls = tab === "past" || phone;
   const shown = scrolls ? rows : rows.slice(0, MAX_QUEUE_ROWS);
   const overflow = rows.length - shown.length;

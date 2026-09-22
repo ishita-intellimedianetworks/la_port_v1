@@ -301,6 +301,13 @@ export function detectProfile(): DeviceProfile {
   return "desktop";
 }
 
+let _constrained: boolean | null = null;
+
+export function isConstrainedDevice(): boolean {
+  if (_constrained === null) _constrained = detectProfile() !== "desktop";
+  return _constrained;
+}
+
 export function resolveStreamConfig(
   variant: StreamVariantId,
   profile?: DeviceProfile,

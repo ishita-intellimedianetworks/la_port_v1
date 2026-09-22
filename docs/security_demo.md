@@ -170,7 +170,9 @@ demonstrated. The operational layouts keep their own order below it.
 ### The layer opens with two incidents open
 
 `OPEN_INCIDENTS` replaces the empty seed. Two, matching what the two alarm
-screens already claim:
+screens already claim - **on a desktop.** On `mobile` and `low` the first row
+is dropped with its hotspot and the layer opens with one; see *S03 is not on a
+phone*.
 
 | | source | severity | |
 |---|---|---|---|
@@ -180,7 +182,8 @@ screens already claim:
 **Because the command view derives, it does not need authoring.**
 `commandViewFields` reads the store, so it now says `Waterside - 1 alert · HIGH`
 and `Video Analytics - 1 alert · MEDIUM`, with counters at 2 active / 1 high /
-1 medium / 0 critical. Hard-coding those numbers would have left two places to
+1 medium / 0 critical. It is also why a phone needs no second set of numbers:
+with S03's row gone the same code reads `Waterside - Normal` and 1 active. Hard-coding those numbers would have left two places to
 keep in step; this way it cannot disagree with S03's DANGER banner or S06's
 FLAGGED FOR REVIEW, because it is reading the same rows they describe.
 
@@ -207,6 +210,11 @@ command view is now purely a readout, which is what the other six are.
 
 No `enabled: false` remains in `v5.json`. `v4.json` carries it on S03-S08,
 which is the whole of what separates the two routes.
+
+**Seven is the desktop count.** On `mobile` and `low` S03 is dropped from the
+table before anything reads it, so a phone has six reachable and five with
+markers - see *S03 is not on a phone*. That is a device gate in
+`security-store.ts`, not an `enabled` flag, and it is the only row it applies to.
 
 **S07 draws a marker like the other six, and opens the same way.** It did not:
 `hotspot-markers` filtered on `isFieldHotspot`, which is true only for S01-S06 -
@@ -794,32 +802,139 @@ would put it inside the zone it is supposed to be looking at.
 
 **`stream.mobileFarScale`**, then: an optional per-site replacement for
 `MOBILE.farScale`, read in `mobileProfile` and defaulting to it when unset.
-`v5.json` carries **0.9**; `v1` to `v4` carry nothing and are untouched.
+`v5.json` carried **0.9** for a while; `v1` to `v4` carry nothing.
 
 | | far band | unload | fog | anchor 589 | ship 634 |
 |---|---|---|---|---|---|
 | mobile, before | 495 | 545 | 374 -> 534 | 100% fog | 100% fog |
-| **mobile, now** | 810 | 891 | 611 -> 873 | **0%** | **9%** |
+| mobile, with 0.9 | 810 | 891 | 611 -> 873 | 0% | 9% |
 
-**The budget says this is affordable, and the budget is measured, not guessed.**
-`LOW.farScale` is already **1** - the full 900 m - and its own comment records
-what that costs: *"82 MB median / 114 MB p90 against a 192 MB budget"*. Mobile
-runs a **240 MB** `residentBudgetMB`, and 810 m is 90% of the distance LOW
-carries on a smaller one. The phone profile's savings were never the far band:
-they are `nearScale` 0.5, `midScale` 0.4, the per-tier rung caps and a 15 MB
-wire budget, all untouched. `residencyClamp` still backstops it.
+**THIS CRASHED PHONES, AND THE KEY IS GONE AGAIN.** See *The resident ceiling
+was never the device's ceiling* below for the mechanism and *S03 is not on a
+phone* for what replaced it. The lever still exists and is still read by
+`mobileProfile`; no site file sets it, so every profile is back on
+`MOBILE.farScale`.
 
-It is one number in the site file, so dial it down if a device disagrees: 0.8
-leaves the ship 39% fogged, 0.7 leaves it 78%.
+**The reasoning that justified 0.9 was wrong in one specific place.** It ran:
+`LOW.farScale` is already 1 at *"82 MB median / 114 MB p90 against a 192 MB
+budget"*, mobile runs a **240 MB** `residentBudgetMB`, 810 m is 90% of what LOW
+carries on a smaller budget, so *"`residencyClamp` still backstops it"*.
 
-**Between them these two settled it, but by treating symptoms.** The anchor went
-from 706 to 589 when S03's camera was re-aimed and moved, `fog={false}` kept the
-marker out of the fade, and `mobileFarScale` pushed the horizon past the ship.
-S03 still opens on a **589-unit** shot where the other five sit 5 to 14 units
-from their anchors, and it is the only row in the layer whose phone profile had
-to be widened to make its own subject visible. A re-authored `cp_016` - see
-*S03 has no viewpoint in cp-v7* - would let all three of these go back to what
-they were.
+It does not. `residencyClamp` sets `residentBudgetMB` to 240 and nothing checks
+that number against the device. `updateResident` is the mobile ground path and
+it caps against `residentCapBytes()` alone, while `resolveBudget` had already
+priced a phone at `gpuMB: 120-160, texMB: 40-56` - **160 to 216 MB all in**. The
+backstop was 240 MB on a device the streamer itself had costed at 160. At 545 m
+the set never reached either number, so v4 was fine and the hole was invisible;
+at 891 m - **2.67x the area**, since `residentRadius()` on mobile *is*
+`unloadDist` and `evictCache()` returns early in `resident` mode, so the disc is
+the whole footprint - it reached 240 and the tab died first.
+
+Two separate mistakes, worth keeping apart: the distance was a judgement call
+that can be re-made, and the missing budget check was a bug that made any such
+call unsafe. Only the second is fixed by code.
+
+**These treated symptoms, and the last of them cost more than it bought.** The
+anchor went from 706 to 589 when S03's camera was re-aimed and moved,
+`fog={false}` kept the marker out of the fade, and `mobileFarScale` pushed the
+horizon past the ship until it was taken out again. S03 still opens on a
+**589-unit** shot where the other five sit 5 to 14 units from their anchors, and
+it is the only row in the layer that ever needed the phone profile widened to
+make its own subject visible. A re-authored `cp_016` - see *S03 has no viewpoint
+in cp-v7* - is now the only thing that would put S03 back on a phone.
+
+### The resident ceiling was never the device's ceiling
+
+**`residentCapBytes()` now takes the lower of the two budgets it always had.**
+
+`resolveBudget` prices the device: `cpuMB`, `gpuMB`, `texMB`, chosen from the
+profile, `deviceMemory` and the GPU string. `residentBudgetMB` is a different
+number - what the *bake* asks to keep resident - and `residencyClamp` pins it to
+240 on every non-desktop profile whatever the site file said.
+
+The streamed path already reconciled them. `gpuCapBytes()` is
+`min(budget.gpuMB, cfg.residentBudgetMB)`, so `sync()` evicts against whichever
+is smaller. The **resident** path did not: `updateResident` and
+`retierResident` both cap against `residentCapBytes()`, which read
+`cfg.residentBudgetMB` and nothing else. v5's ground stream is
+`"geometry": "resident"`, so on a phone the only ceiling in force was 240 MB on
+hardware priced at 160.
+
+```
+residentCapBytes()  =  min(
+  residentBudgetMB,                    // 240 on mobile, via residencyClamp
+  budget.gpuMB + budget.texMB          // 160 (tight) / 216, via resolveBudget
+) * currentGpuScale()
+```
+
+`gpuMB + texMB` because `residentBytes()` prices one figure covering both -
+mounted geometry plus `textureBytesTotal()` - so the ceiling has to cover both
+too. `currentGpuScale()` still applies, so a context loss halves it as before.
+
+**What changes, by profile.** Desktop: nothing. Its `residentBudgetMB` is 256
+and its device budget is 272 (weak GPU) or 448, so the authored number stays the
+binding one - and `residentRadius()` is `Infinity` there regardless. `low`:
+nothing. It takes `resolveBudget`'s desktop branch, 272 or 448 against 240.
+**mobile only**, 240 -> 160 or 216.
+
+**The failure it replaces was a crash, and what it does instead is visible.**
+Past the ceiling `updateResident` stops mounting and warns once, so the far edge
+of the model goes missing rather than the tab going down. The warning names
+which budget bound - `residentCapSource()` - because "raise residentBudgetMB"
+is the wrong advice when the device is what is binding, and that was exactly the
+advice the old string gave.
+
+### S03 is not on a phone
+
+**The waterside row and everything it drags in are desktop-only.**
+`isConstrainedDevice()` in `streaming/config.ts` is `detectProfile() !==
+"desktop"` memoised, so it covers **`mobile` and `low`** - the same two profiles
+`residencyClamp` constrains, not a media query. `security-store.ts` holds the
+list it feeds, `OMITTED_ON_CONSTRAINED`, currently `["S03"]`.
+
+S03 is the most expensive row in the layer and the one with the least left to
+show once its subject is gone:
+
+| | cost | gone on a phone because |
+|---|---|---|
+| the craft | 1.6 MB, **91 primitives over 91 materials, 38 images** | `WorldModels` returns null |
+| the geofence | 2 KB, but a second transparent pass | S03 is not in `hotspotById`, so `ZoneGeofence` finds no `geofence` |
+| the horizon | 2.67x the resident disc | `mobileFarScale` removed |
+
+**It is filtered once, at the table, not at each consumer.** `OMITTED` is built
+at module scope and the store's seed drops the row from `seedHotspots`; markers
+(`s.hotspots`), the flap list and `ZoneGeofence` all read the store and need no
+rule of their own. `SECURITY_EVENT_GROUPS` is filtered from the authored
+`AUTHORED_EVENT_GROUPS`, which carries `SECURITY_SOURCES`, `SECURITY_EVENTS` and
+`isFieldHotspot` with it.
+
+**The incidents go too, which is the part with a visible consequence.**
+`SEC-DEMO-0043` is S03's, so *the layer opens with two incidents open* is a
+desktop sentence: **a phone opens with one.** `SEED_INCIDENTS`, `SEED_HISTORY`
+and `SEED_AUDIT` are the filtered seeds, used by the initial state and by both
+`reset` and `resetToSeed`. Audit rows are dropped by `incidentId` as well as
+`hotspotId`, because only the first two rows of an incident carry the hotspot,
+and the survivors are **re-sequenced** so `seq` has no gaps.
+
+**Two things are deliberately NOT filtered.** `DEMO_TIME_SHIFT_MS` is computed
+from the authored tables, so the demo clock reads the same on both - a device
+should not move the hour. And `CATEGORY_BY_HOTSPOT` keeps its S03 row: the S07
+dashboard derives `waterside_status` from open incidents, so with none it says
+`Normal` in the healthy tone, which is what a phone should say.
+
+**Hydration is safe because none of this is in the first paint.**
+`isConstrainedDevice()` is false during SSR - `detectProfile()` has no `window`
+and answers `desktop` - so the server builds the full tables. Nothing
+S03-derived reaches the DOM before `isReady`, which is client-only state, and
+the markers and the craft are scene children rather than markup. A future caller
+that gates DOM on it needs its own client-only gate.
+
+**`worldModels` is now gated on the device, though still not on S03.** See *The
+unauthorised craft is world furniture*: the craft is in the water whether or not
+anyone is looking at the waterside hotspot, and that is still true on a desktop.
+On a phone the list is skipped wholesale, so a second entry added later would be
+skipped with it - which is right while the list is one ship, and the thing to
+revisit if it stops being.
 
 **THE ENABLED SET IS ALWAYS UP.** No row carries an `enabled` flag in
 `v5.json`. The six field anchors are unioned into the marker set after every rule
@@ -1735,6 +1850,35 @@ ordinary `min(620px, 100vw - 32px)` - no clip-specific width, no four-column
 rule - with the feed centred at 440 x 248 inside 572 of body. About **556px**
 tall, so nothing scrolls above a 720px window.
 
+### S07 could not scroll on a phone on its side
+
+The dashboard card is the one popup that does **not** scroll as a whole: its
+body is `flex flex-col overflow-hidden` so the capability lines and counters
+stay put while the incident list scrolls inside itself. Two things decided that,
+and both asked the same width-only question:
+
+- the body carried a `max-sm:block max-sm:overflow-y-auto` escape - `max-sm` is
+  `max-width: 640px`
+- the list chose its own overflow from
+  `const phone = useMediaQuery("(max-width: 639px)")`
+
+**A phone on its side is 844px wide.** Neither test fired, so the body could not
+scroll and the list did not think it had to either - with the `Current` tab and
+a handful of rows, `scrolls` is false and the list is `overflow-hidden`. Nothing
+scrolled, and anything past the fold was unreachable. It is the primary way this
+experience is watched.
+
+**A hand-held screen is narrow OR short.** `HANDHELD_MEDIA_QUERY` in
+`shared/responsive.ts` is `(max-width: 639px), (max-height: 540px)` - a media
+query list, so either matches - with `useIsHandheld()` over it. The list uses
+that hook now, and the body gained `short:` alongside its `max-sm:` escape.
+
+This is the same blind spot the type scale had: `max-sm` and `short` describe
+one device from two sides, and a rule written with only the first is a rule that
+does not apply in landscape. Anything asking "is this a phone" should ask
+`useIsHandheld()`; `useIsMobile()` is a different question (below 1024) and is
+left alone.
+
 ### Every popup size has a phone size
 
 The readability pass that took the cards up a step was written for a desktop
@@ -1932,6 +2076,11 @@ hotspot; the boundary is an overlay that answers to the selection. That split
 is also why the two are separate GLBs - the combined bake would have put the
 ship inside `ZoneGeofence`, where the material pass would have painted all 91
 of its materials green.
+
+**It IS gated on the device.** `WorldModels` returns null when
+`isConstrainedDevice()` - so the whole list is skipped on `mobile` and `low`,
+and 91 primitives, 91 materials and 38 images never reach a phone. See *S03 is
+not on a phone*: the row that gave the craft its meaning is not there either.
 
 `WorldModels` takes the draco path, stubs `raycast` on every mesh, and refcounts
 through `acquireGLTF`/`releaseGLTF` like every other loader here.
@@ -2838,6 +2987,19 @@ Tracked here so the gap is explicit:
   `still` is undefined and their fields simply spread across both columns -
   which reads, but it is not the card the studies chose. Four renders, one per
   capability, is the whole of the gap.
+
+- **S03 has no phone equivalent, only an absence.** It is dropped on `mobile`
+  and `low` because its 589-unit shot needs a horizon a phone cannot afford -
+  see *S03 is not on a phone*. A re-authored `cp_016` standing near the quay
+  would make the craft visible inside the stock 545 m disc, at which point the
+  row, the geofence and `worldModels` could all come back and
+  `OMITTED_ON_CONSTRAINED` would empty. Until then a phone is a five-marker,
+  one-incident demo and the two do not match.
+
+- **`stream.mobileFarScale` is now a lever nothing pulls.** Still read by
+  `mobileProfile` and still in the schema; no site file sets it. It is safe to
+  author again now that `residentCapBytes()` bounds the result - the far edge
+  thins instead of the tab dying - but nothing needs it.
 
 - **VIEW EVENT.** Every other S07 action works. This one needs a camera move to
   the event itself rather than to its parent layout, and nothing marks where

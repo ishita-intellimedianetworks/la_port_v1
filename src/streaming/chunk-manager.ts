@@ -482,9 +482,10 @@ export class ChunkManager {
               this.capReported = true;
               console.warn(
                 `[stream] resident ceiling reached at ${(projected / 1048576).toFixed(0)} MB ` +
-                  `of ${(cap / 1048576).toFixed(0)} MB (residentBudgetMB). Further chunks are ` +
-                  "not being mounted; the far edge of the model will be missing. Raise " +
-                  "residentBudgetMB, or drop residentTier, if this is biting in normal use.",
+                  `of ${(cap / 1048576).toFixed(0)} MB (${this.residentCapSource()}). Further ` +
+                  "chunks are not being mounted; the far edge of the model will be missing. " +
+                  "Shorten the profile's far band, raise residentBudgetMB, or drop " +
+                  "residentTier, if this is biting in normal use.",
               );
             }
             break;
@@ -707,9 +708,25 @@ export class ChunkManager {
     return n;
   }
 
+  private residentCapsMB(): { scene: number; device: number } {
+    return {
+      scene: this.cfg.residentBudgetMB > 0 ? this.cfg.residentBudgetMB : Infinity,
+      device:
+        this.budget.gpuMB > 0 && this.budget.texMB > 0
+          ? this.budget.gpuMB + this.budget.texMB
+          : Infinity,
+    };
+  }
+
+  private residentCapSource(): string {
+    const { scene, device } = this.residentCapsMB();
+    return device < scene ? `device budget, ${this.profile}` : "residentBudgetMB";
+  }
+
   private residentCapBytes(): number {
-    const mb = this.cfg.residentBudgetMB;
-    if (!(mb > 0)) return Infinity;
+    const { scene, device } = this.residentCapsMB();
+    const mb = Math.min(scene, device);
+    if (mb === Infinity) return Infinity;
     return mb * currentGpuScale() * 1048576;
   }
 
