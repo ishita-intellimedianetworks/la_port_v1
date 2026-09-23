@@ -68,10 +68,22 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
     : currentLayoutId
       ? (site.layoutById[currentLayoutId]?.hotspots ?? [])
       : [];
-  const picked = selectedHotspotId && !ground.on ? [selectedHotspotId] : own;
 
-  const securityPicked =
-    !ground.on && !!selectedHotspotId && !!securityHotspotById[selectedHotspotId];
+  // A picked security anchor leaves the rest of the security row drawn, so a
+  // picked operational one brings its own layout's siblings with it. Both
+  // answer the same question: what else belongs to the thing being looked at.
+  const pickedLayoutId =
+    !ground.on && selectedHotspotId ? (site.hotspotById[selectedHotspotId]?.layoutId ?? null) : null;
+  const picked = ground.on
+    ? own
+    : selectedHotspotId
+      ? (pickedLayoutId
+          ? (site.layoutById[pickedLayoutId]?.hotspots ?? [selectedHotspotId])
+          : [selectedHotspotId])
+      : own;
+
+  // Anything picked quiets the security row, not only a security pick.
+  const anyPicked = !ground.on && !!selectedHotspotId;
 
   const alwaysOn = useMemo(
     () =>
@@ -96,6 +108,7 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
 
         const isSelected = id === selectedHotspotId;
         const isSecurity = !site.hotspotById[id];
+        const inPickedLayout = !isSecurity && !!pickedLayoutId && hotspot.layoutId === pickedLayoutId;
         return (
           <Hotspot
             key={id}
@@ -103,9 +116,9 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            pulse={isSelected}
+            pulse={isSelected || inPickedLayout}
             beadScale={isSecurity && !isSelected ? SECURITY_MINOR_BEAD : 1}
-            still={isSecurity && securityPicked && !isSelected}
+            still={isSecurity && anyPicked && !isSelected}
             screenLocked={isSecurity}
             onHotspotClick={() =>
               setHotspotInfo({

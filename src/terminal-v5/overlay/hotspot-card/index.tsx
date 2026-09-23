@@ -110,14 +110,14 @@ function Field({
       style={{ borderColor: "var(--nav-divider)" }}
     >
       <h3
-        className="nav-body text-[11.5px] font-semibold uppercase tracking-[0.08em] max-sm:text-[11px] short:text-[11px]"
+        className="nav-body text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
         style={{ color: "var(--nav-text-faint)" }}
       >
         {field.label}
       </h3>
       <h2
         className={cn(
-          "nav-display mt-[3px] text-[19px] font-bold leading-snug max-sm:text-[16px] short:text-[16px]",
+          "nav-display mt-[3px] text-[length:var(--fs-value,19px)] font-bold leading-snug",
           wrap ? "break-words" : "truncate",
           flag && "uppercase tracking-[0.02em]",
         )}
@@ -292,8 +292,10 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
           WebkitBackdropFilter: CARD_FROST,
           border: "1.5px solid var(--nav-border)",
           textShadow: CARD_TEXT_SHADOW,
-          ...(isSecurity && { "--hs-row-y": "13px", "--hs-gap-x": "40px", ...CARD_SCALE }),
-          ...(isSecurity && { padding: "var(--sp-pad)" }),
+          "--hs-row-y": "13px",
+          "--hs-gap-x": "40px",
+          ...CARD_SCALE,
+          ...(!hotspot.poster && { padding: "var(--sp-pad)" }),
         } as React.CSSProperties}
         className={cn(
           "pointer-events-auto flex flex-col rounded-[14px] short:rounded-[10px]",

@@ -1412,6 +1412,30 @@ standing there is to look around.
 hover - a minor bead still answers the pointer, because hover is a question the
 operator asked rather than an idle animation.
 
+### A picked layout reads the way a picked anchor does
+
+The security row already had a rule for being picked: the chosen bead is full
+size and pulses, every other security bead drops to `SECURITY_MINOR_BEAD` and
+goes `still`. An operational pick had half of it - the chosen bead pulsed, but
+`picked` was `[selectedHotspotId]` alone, so its own layout's siblings were not
+drawn at all, and `still` was gated on `securityPicked`, so the security row
+kept oscillating underneath it. Two different answers to the same question.
+
+**`picked` follows the layout now.** A selected operational anchor resolves to
+`site.layoutById[its layoutId].hotspots`, the way a selected security anchor
+leaves the rest of the security row on screen. `pickedLayoutId` is null when the
+pick is a security one, so that path is untouched.
+
+**`pulse` covers the picked layout, not just the picked bead.** `isSelected ||
+inPickedLayout`, where `inPickedLayout` is an operational hotspot sharing the
+selection's `layoutId`. The layout moves together; the security row does not.
+
+**`still` is gated on anything being picked.** `securityPicked` became
+`anyPicked` - `!ground.on && !!selectedHotspotId`. A security bead that is not
+the selection is small and static whenever *something* is picked, whichever
+table that something came from. Standing on the ground (`ground.on`) still
+overrides all of it, because proximity is a different question from selection.
+
 ### A bead is the same size from every CP
 
 **`MAX_SCALE` was making the far anchors nearly invisible.** The sizer solves
