@@ -82,10 +82,10 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
           : [selectedHotspotId])
       : own;
 
-  // Whatever layout is being looked at, whether it got there by picking one of
-  // its anchors or by being the current destination. Its children move; nothing
-  // else does.
-  const activeLayoutId = pickedLayoutId ?? currentLayoutId;
+  // A layout's children move while the layout is what is being looked at. The
+  // moment one of them is picked it becomes the subject on its own and the rest
+  // settle, so this is gated on nothing being selected.
+  const layoutMoves = !ground.on && !selectedHotspotId ? currentLayoutId : null;
 
   const alwaysOn = useMemo(
     () =>
@@ -110,8 +110,8 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
 
         const isSelected = id === selectedHotspotId;
         const isSecurity = !site.hotspotById[id];
-        const inActiveLayout =
-          !isSecurity && !!activeLayoutId && hotspot.layoutId === activeLayoutId;
+        const inMovingLayout =
+          !isSecurity && !!layoutMoves && hotspot.layoutId === layoutMoves;
         return (
           <Hotspot
             key={id}
@@ -119,9 +119,9 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            pulse={isSelected || inActiveLayout}
+            pulse={isSelected || inMovingLayout}
             beadScale={isSecurity && !isSelected ? SECURITY_MINOR_BEAD : 1}
-            still={isSecurity && !isSelected}
+            still={!isSelected && !inMovingLayout}
             screenLocked={isSecurity}
             onHotspotClick={() =>
               setHotspotInfo({

@@ -1426,20 +1426,31 @@ kept oscillating underneath it. Two different answers to the same question.
 leaves the rest of the security row on screen. `pickedLayoutId` is null when the
 pick is a security one, so that path is untouched.
 
-**`pulse` covers the active layout, not just the picked bead.** `isSelected ||
-inActiveLayout`, where `activeLayoutId` is `pickedLayoutId ?? currentLayoutId` -
-the layout being looked at, whether it got there by one of its anchors being
-picked or by being the current destination. So arriving at a layout moves its
-children, not only clicking one of them.
+**`pulse` is the subject, and the subject narrows.** `isSelected ||
+inMovingLayout`, where `layoutMoves` is `currentLayoutId` **only while nothing
+is selected**. Arriving at a layout moves its children, because the layout is
+what is being looked at. Picking one of them makes that anchor the subject on
+its own, and the siblings settle - they stay drawn, they stop moving. One thing
+moves at a time, and it is whatever the viewer has most recently narrowed to.
 
-**`still` is unconditional for the security row.** It was gated first on
-`securityPicked`, then on anything being picked; it is now `isSecurity &&
-!isSelected`, full stop. The whole rule is two lines and reads as one sentence:
+**`pulse` was never the switch that stops a bead moving.** `Hotspot` reads it as
+`alwaysPulse` and picks one of three presets from it - hovered, `alwaysPulse`,
+and a third for everything else at `[2.1, 2.2, 0.26, 1.6, 0.055]`. That last one
+is slower and smaller but it still pings and still breathes, which is why an
+unselected sibling read as *oscillating less* rather than as stopped. Only
+`still` returns early, zeroes the ping opacity and resets the core scale.
+
+**So `still` is the complement of the subject, not a security rule.** It was
+`isSecurity && !isSelected`; it is `!isSelected && !inMovingLayout` - anything
+that is not the thing being looked at is frozen, whichever table it came from.
+`hovered` still overrides it, because a bead answering the pointer is feedback
+rather than noise. The whole rule is two lines and reads as one sentence:
 
 - **the selected bead always moves**, whichever table it came from
-- **the active layout's children move with it**
-- **nothing else moves** - every unselected security bead is small and static,
-  at every distance, in every view
+- **a layout's children move while the layout is the subject**, which is to say
+  while nothing inside it has been picked yet
+- **nothing else moves at all** - not gently, not slowly; unselected beads are
+  frozen, and unselected security beads are small as well
 
 The `ground.on` exception went with the gating. Proximity decides what is
 *drawn*, which is what `own` is for; it no longer decides what oscillates,
