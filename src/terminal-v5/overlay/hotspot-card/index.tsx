@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Pause, Play, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, Pause, Play, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { useSite } from "@/config/context";
 import {
   CATEGORY_BY_HOTSPOT,
-  DEMO_TIME_SHIFT_MS,
   SECURITY_SOURCES,
   incidentCounts,
   isFieldHotspot,
@@ -15,20 +14,43 @@ import {
   type IncidentSeverity,
   type IncidentStatus,
   type SecurityActor,
-  type SecurityAuditEntry,
   type SecurityIncident,
 } from "../../stores/security-store";
 import type { HotspotConfig, HotspotField, Tone } from "@/config/schema";
 import { NAV_GLASS_PANEL } from "../glass-theme";
 import { PanelHeader } from "../destination-panel/panel-header";
 import { useLayoutNavigation } from "../use-layout-navigation";
-import { useIsHandheld } from "@/shared/responsive";
+import { useIsHandheld, useIsMobile } from "@/shared/responsive";
 
 const CARD_TEXT_SHADOW = "0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)";
 
 const FIELDS_BESIDE_STILL = 4;
 
-const STILL_SIZES = "250px";
+const STILL_SIZES = "280px";
+const STILL_PANEL_SIZES = "(max-width: 1440px) 42vw, 640px";
+const fluid = (phone: number, desktop: number) => {
+  const slope = (desktop - phone) / 510;
+  return `clamp(${phone}px, ${(phone - slope * 390).toFixed(2)}px + ${(slope * 100).toFixed(3)}vmin, ${desktop}px)`;
+};
+
+const CARD_SCALE = {
+  "--fs-title": fluid(12.5, 22),
+  "--fs-sub": fluid(9.5, 13.5),
+  "--fs-label": fluid(8, 11.5),
+  "--fs-value": fluid(10.5, 17),
+  "--fs-hero": fluid(13, 28),
+  "--fs-stat": fluid(16, 38),
+  "--fs-ident": fluid(10.5, 18),
+  "--fs-row": fluid(10, 15),
+  "--fs-meta": fluid(8.5, 12),
+  "--sp-pad": fluid(10, 28),
+  "--sp-gap": fluid(7, 20),
+  "--sp-tile": fluid(7, 20),
+  "--sp-row": fluid(4, 12),
+} as React.CSSProperties;
+
+const TIME_FIELDS = new Set(["event_time", "detection_time", "duration"]);
+const HERO_FIELDS = ["security_status", "risk_state", "incident_status", "event_type", "zone_status"];
 const POSTER_SIZES = "(max-width: 892px) 100vw, 860px";
 const TONE_COLOR: Record<Tone, string> = {
   ok: "var(--tone-ok, #30d158)",
@@ -84,7 +106,7 @@ function Field({
 
   return (
     <div
-      className="flex min-w-0 flex-col justify-start border-b py-[9px] max-sm:py-[6px] short:py-[6px]"
+      className="flex min-w-0 flex-col justify-start border-b py-[var(--hs-row-y,9px)] max-sm:py-[6px] short:py-[6px]"
       style={{ borderColor: "var(--nav-divider)" }}
     >
       <h3
@@ -153,14 +175,14 @@ function SectionLabel({
   return (
     <div className={cn("mb-2.5 mt-5 flex items-baseline justify-between gap-3", className)}>
       <span
-        className="nav-body text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+        className="nav-body text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
         style={{ color: "var(--nav-text-dim)" }}
       >
         {children}
       </span>
       {aside && (
         <span
-          className="nav-body shrink-0 tabular-nums text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-medium"
+          className="nav-body shrink-0 tabular-nums text-[length:var(--fs-label,11.5px)] font-medium"
           style={{ color: "var(--nav-text-faint)" }}
         >
           {aside}
@@ -188,6 +210,12 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
   const hotspot = hotspotId
     ? (site.hotspotById[hotspotId] ?? securityById[hotspotId])
     : undefined;
+  const isSecurity = !!hotspotId && !!securityById[hotspotId];
+  const handheld = useIsHandheld();
+  const mobile = useIsMobile();
+  const stacked = handheld || mobile;
+  const designed = isSecurity && !isSecurityCentre;
+  const centreWide = isSecurityCentre && !stacked;
 
   const incidents = useSecurityStore((s) => s.incidents);
   const incidentFields = useSecurityStore((s) => s.incidentFields);
@@ -207,7 +235,9 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
         : [];
     const live = mine.length > 0;
     const shown = (rows: HotspotField[]) =>
-      rows.filter((f) => (live || !f.eventOnly) && !isBlank(f));
+      rows.filter(
+        (f) => (live || !f.eventOnly) && !isBlank(f) && !(isSecurity && TIME_FIELDS.has(f.name)),
+      );
     const chosen =
       mine.length > 1
         ? (mine.find((i) => i.id === selectedIncidentId) ?? mine[0])
@@ -226,7 +256,7 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               : f,
         color: undefined,
       }));
-  }, [hotspot, hotspotId, incidents, incidentFields, selectedIncidentId, seedById]);
+  }, [hotspot, hotspotId, isSecurity, incidents, incidentFields, selectedIncidentId, seedById]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -262,25 +292,24 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
           WebkitBackdropFilter: CARD_FROST,
           border: "1.5px solid var(--nav-border)",
           textShadow: CARD_TEXT_SHADOW,
-        }}
+          ...(isSecurity && { "--hs-row-y": "13px", "--hs-gap-x": "40px", ...CARD_SCALE }),
+          ...(isSecurity && { padding: "var(--sp-pad)" }),
+        } as React.CSSProperties}
         className={cn(
-          "pointer-events-auto flex flex-col rounded-[14px] short:origin-center short:scale-[0.85] short:rounded-[10px]",
+          "pointer-events-auto flex flex-col rounded-[14px] short:rounded-[10px]",
+          hotspot.poster && "short:origin-center short:scale-[0.85]",
           hotspot.poster ? "overflow-visible" : "overflow-hidden",
           "max-sm:rounded-[12px]",
           hotspot.poster
             ? "relative p-2.5 max-sm:p-1.5"
             : cn(
                 "p-6 short:p-4 max-sm:p-4",
-                isSecurityCentre
-                  ? "w-[min(720px,calc(100vw-32px))] max-sm:w-[min(360px,calc(100vw-32px))]"
-                  : hotspot.clip
-                    ? "w-[min(620px,calc(100vw-32px))] max-sm:w-[min(340px,calc(100vw-40px))] short:w-[calc(100vw-24px)]"
-                    : "w-[min(620px,calc(100vw-32px))] max-sm:w-[min(340px,calc(100vw-40px))]",
+                isSecurity && "p-7",
+                hotspot.clip && !isSecurity && "short:w-[calc(100vw-24px)]",
+                "w-[80vw] min-w-[80vw] max-w-[80vw]",
               ),
           !hotspot.poster &&
-            (isSecurityCentre
-              ? "h-[min(80dvh,calc(100dvh-32px))] short:h-[calc(100dvh-16px)]"
-              : "max-h-[min(80dvh,calc(100dvh-32px))] max-sm:max-h-[72dvh] short:max-h-[calc(100dvh-16px)]"),
+            "h-[80vh] max-h-[80vh] supports-[height:100dvh]:h-[80dvh] supports-[height:100dvh]:max-h-[80dvh]",
         )}
       >
         {hotspot.poster ? (
@@ -341,18 +370,38 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
           </>
         ) : (
           <>
-          <PanelHeader
-            dense
-            title={hotspot.popupTitle}
-            subtitle={layout.name}
-            onClose={onClose}
-          />
+          {isSecurity ? (
+            <CardHeader
+              title={hotspot.popupTitle}
+              subtitle={layout.name}
+              badge={`${hotspot.id} · ${hotspot.name}`}
+              onClose={onClose}
+            />
+          ) : (
+            <PanelHeader
+              dense
+              title={hotspot.popupTitle}
+              subtitle={layout.name}
+              onClose={onClose}
+            />
+          )}
 
+          {designed && hotspotId ? (
+            <HotspotBody
+              hotspot={hotspot}
+              hotspotId={hotspotId}
+              fields={fields}
+              stacked={stacked}
+            />
+          ) : (
           <div
             className={cn(
               "mt-3 min-h-0 flex-1 max-sm:mt-2 short:mt-2",
-              isSecurityCentre
-                ? "ui-scrollbar flex flex-col overflow-hidden max-sm:block max-sm:overflow-y-auto max-sm:overflow-x-hidden short:block short:overflow-y-auto short:overflow-x-hidden"
+              isSecurity && "mt-4",
+              centreWide
+                ? "mt-5 grid grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] grid-rows-[minmax(0,1fr)] gap-8 overflow-hidden"
+                : isSecurityCentre
+                ? "ui-scrollbar block overflow-y-auto overflow-x-hidden"
                 : "ui-scrollbar overflow-y-auto overflow-x-hidden",
             )}
           >
@@ -414,10 +463,11 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               </div>
             )}
 
+
             {hotspotId === SECURITY_CENTRE_ID && (
               <>
-                <SecurityCommandView fields={fields} />
-                <SecurityIncidentCentre />
+                <SecurityCommandView fields={fields} wide={centreWide} />
+                <SecurityIncidentCentre flush={centreWide} />
               </>
             )}
 
@@ -429,13 +479,14 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               className={cn(
                 "border-t pt-1",
                 hotspot.clip ? "mt-3 short:mt-2" : "mt-4 short:mt-3",
+                isSecurity && (hotspot.clip ? "mt-4 short:mt-2" : "mt-5 short:mt-3"),
               )}
               style={{ borderColor: "var(--nav-divider)" }}
               hidden={hotspotId === SECURITY_CENTRE_ID}
             >
               <div
                 className={cn(
-                  "grid gap-x-8 max-sm:gap-x-5 short:gap-x-5",
+                  "grid gap-x-[var(--hs-gap-x,32px)] max-sm:gap-x-5 short:gap-x-5",
                   "grid-cols-2",
                   !hotspot.clip && "max-[560px]:grid-cols-1",
                 )}
@@ -445,11 +496,11 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                 )}
                 {still && (
                   <div
-                    className="hidden [perspective:1100px] sm:block"
+                    className="hidden overflow-hidden p-2 [perspective:1100px] sm:block"
                     style={{ gridColumn: 1, gridRow: `1 / span ${FIELDS_BESIDE_STILL}` }}
                   >
                     <figure
-                      className="relative m-0 aspect-[5/4] w-[250px] short:w-[196px]"
+                      className="relative m-0 aspect-[5/4] w-[280px] short:w-[196px]"
                       style={{
                         transform: "rotateY(13deg) rotateX(2deg)",
                         transformOrigin: "right center",
@@ -472,9 +523,345 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               </div>
             </div>
           </div>
+          )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function CardHeader({
+  title,
+  subtitle,
+  badge,
+  onClose,
+}: {
+  title: string;
+  subtitle: string;
+  badge: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <h2
+          className="nav-display break-words text-[length:var(--fs-title)] font-bold leading-tight"
+          style={{ color: "var(--nav-text)", letterSpacing: "-0.2px" }}
+        >
+          {title}
+        </h2>
+        {subtitle && (
+          <p
+            className="nav-body mt-0.5 text-[length:var(--fs-sub)] font-medium"
+            style={{ color: "var(--nav-text-2)" }}
+          >
+            {subtitle}
+          </p>
+        )}
+      </div>
+      <span
+        className="nav-display shrink-0 self-center rounded-full px-2.5 py-1 text-[length:var(--fs-label)] font-bold tracking-[0.06em] max-md:hidden"
+        style={{
+          color: "var(--nav-text-2)",
+          background: "rgba(255,255,255,0.06)",
+          border: "1.5px solid var(--nav-border)",
+        }}
+      >
+        {badge}
+      </span>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-white/[0.22]"
+        style={{ background: "rgba(255,255,255,0.14)", border: "1.5px solid rgba(255,255,255,0.22)" }}
+      >
+        <X size={14} strokeWidth={2.4} color="#E6EAEF" />
+      </button>
+    </div>
+  );
+}
+
+function heroOf(
+  hotspot: HotspotConfig,
+  fields: { field: HotspotField; color?: string }[],
+): { field: HotspotField; color?: string } | null {
+  if (hotspot.alert) return null;
+  for (const name of HERO_FIELDS) {
+    const hit = fields.find((f) => f.field.name === name);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function HotspotBody({
+  hotspot,
+  hotspotId,
+  fields,
+  stacked,
+}: {
+  hotspot: HotspotConfig;
+  hotspotId: string;
+  fields: { field: HotspotField; color?: string }[];
+  stacked: boolean;
+}) {
+  const hero = heroOf(hotspot, fields);
+  const rest = fields.filter((f) => f !== hero);
+
+  if (hotspot.clip || hotspot.image) {
+    const media = hotspot.clip ? (
+      <ClipBlock clip={hotspot.clip} camera={cameraIdOf(hotspot)} panel />
+    ) : (
+      <StillPanel src={hotspot.image!} alt={hotspot.name} tag={hotspot.name} />
+    );
+    return (
+      <div
+        className={cn(
+          "mt-[var(--sp-gap)] grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-[calc(var(--sp-gap)*1.4)]",
+          stacked
+            ? "grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]"
+            : "grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]",
+        )}
+      >
+        {media}
+        <div className="flex min-h-0 flex-col gap-[var(--sp-gap)]">
+          {hero && <HeroTile {...hero} />}
+          <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            {rest.map(({ field, color }) => (
+              <ReadingRow key={field.name} field={field} color={color} />
+            ))}
+          </div>
+          <FieldAlerts hotspotId={hotspotId} />
+        </div>
+      </div>
+    );
+  }
+
+  const stats = rest.filter((f) => typeof f.field.value === "number");
+  const idents = rest.filter((f) => typeof f.field.value !== "number");
+
+  return (
+    <div className="ui-scrollbar mt-[var(--sp-gap)] flex min-h-0 flex-1 flex-col gap-[var(--sp-gap)] overflow-y-auto overflow-x-hidden">
+      {hotspot.alert && <AlertBanner alert={hotspot.alert} className="mb-0 max-sm:mb-0 short:mb-0" />}
+      {hero && <HeroTile {...hero} />}
+      {idents.length > 0 && (
+        <div
+          className="grid shrink-0 gap-x-[calc(var(--sp-gap)*1.2)] gap-y-[var(--sp-row)] rounded-[12px] p-[var(--sp-tile)]"
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            background: "rgba(255,255,255,0.03)",
+            border: "1.5px solid var(--nav-divider)",
+          }}
+        >
+          {idents.map(({ field, color }) => (
+            <IdentCell key={field.name} field={field} color={color} />
+          ))}
+        </div>
+      )}
+      {stats.length > 0 && (
+        <div
+          className="grid shrink-0 gap-[calc(var(--sp-gap)*0.8)]"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))" }}
+        >
+          {stats.map(({ field, color }) => (
+            <StatTile key={field.name} field={field} color={color} />
+          ))}
+        </div>
+      )}
+      <FieldAlerts hotspotId={hotspotId} />
+    </div>
+  );
+}
+
+function StillPanel({ src, alt, tag }: { src: string; alt: string; tag: string }) {
+  return (
+    <div className="relative min-h-0">
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes={STILL_PANEL_SIZES}
+        className="object-contain"
+        draggable={false}
+      />
+      <span
+        className="nav-display absolute left-3 top-3 rounded-[7px] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em]"
+        style={{
+          color: "var(--nav-text)",
+          background: "rgba(8,11,16,0.72)",
+          border: "1.5px solid var(--nav-border)",
+        }}
+      >
+        {tag}
+      </span>
+    </div>
+  );
+}
+
+function HeroTile({ field, color }: { field: HotspotField; color?: string }) {
+  const tone = useSite().toneFor(field.value, field.tone);
+  const ink = field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color);
+  return (
+    <div
+      className="flex shrink-0 items-center gap-[calc(var(--sp-tile)*0.8)] rounded-[12px] p-[var(--sp-tile)]"
+      style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid var(--nav-border)" }}
+    >
+      <span
+        className="h-3 w-3 shrink-0 rounded-full"
+        style={{ background: ink, boxShadow: `0 0 10px ${ink}` }}
+      />
+      <div className="min-w-0 flex-1">
+        <h3
+          className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
+          style={{ color: "var(--nav-text-faint)" }}
+        >
+          {field.label}
+        </h3>
+        <h2
+          className="nav-display mt-1 break-words text-[length:var(--fs-hero)] font-bold uppercase leading-[1.1] tracking-[0.02em]"
+          style={{ color: ink }}
+        >
+          {formatValue(field)}
+        </h2>
+      </div>
+    </div>
+  );
+}
+
+function ReadingRow({ field, color }: { field: HotspotField; color?: string }) {
+  const tone = useSite().toneFor(field.value, field.tone);
+  return (
+    <div
+      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b py-[var(--sp-row)]"
+      style={{ borderColor: "var(--nav-divider)" }}
+    >
+      <h3
+        className="nav-body shrink-0 text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
+        style={{ color: "var(--nav-text-faint)" }}
+      >
+        {field.label}
+      </h3>
+      <h2
+        className="nav-display min-w-0 break-words text-right text-[length:var(--fs-value)] font-bold"
+        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+      >
+        {formatValue(field)}
+      </h2>
+    </div>
+  );
+}
+
+function IdentCell({ field, color }: { field: HotspotField; color?: string }) {
+  const tone = useSite().toneFor(field.value, field.tone);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <h3
+        className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
+        style={{ color: "var(--nav-text-faint)" }}
+      >
+        {field.label}
+      </h3>
+      <h2
+        className="nav-display break-words text-[length:var(--fs-ident)] font-bold"
+        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+      >
+        {formatValue(field)}
+      </h2>
+    </div>
+  );
+}
+
+function StatTile({ field, color }: { field: HotspotField; color?: string }) {
+  const tone = useSite().toneFor(field.value, field.tone);
+  const meter =
+    field.render === "meter" && typeof field.value === "number"
+      ? Math.max(0, Math.min(1, field.value / (field.max ?? 100)))
+      : null;
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded-[12px] p-[var(--sp-tile)]"
+      style={{ background: "rgba(255,255,255,0.045)", border: "1.5px solid rgba(255,255,255,0.1)" }}
+    >
+      <h3
+        className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
+        style={{ color: "var(--nav-text-faint)" }}
+      >
+        {field.label}
+      </h3>
+      <h2
+        className="nav-display text-[length:var(--fs-stat)] font-bold tabular-nums leading-none"
+        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+      >
+        {formatValue(field)}
+      </h2>
+      {meter !== null && (
+        <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${meter * 100}%`,
+              background: tone ? TONE_COLOR[tone] : "var(--nav-accent-bright)",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FieldAlerts({ hotspotId }: { hotspotId: string }) {
+  const incidents = useSecurityStore((s) => s.incidents);
+  const history = useSecurityStore((s) => s.history);
+  const selectedId = useSecurityStore((s) => s.selectedIncidentId);
+  const setSelected = useSecurityStore((s) => s.setSelectedIncidentId);
+
+  const open = useMemo(
+    () =>
+      incidents.filter((i) => i.sourceHotspotId === hotspotId && i.status !== "RESOLVED"),
+    [incidents, hotspotId],
+  );
+  const lastClosed = useMemo(
+    () =>
+      [...incidents.filter((i) => i.status === "RESOLVED"), ...history]
+        .filter((i) => i.sourceHotspotId === hotspotId)
+        .sort((a, b) => b.eventTime.localeCompare(a.eventTime))[0] ?? null,
+    [incidents, history, hotspotId],
+  );
+
+  const activeId = open.some((i) => i.id === selectedId) ? selectedId : (open[0]?.id ?? null);
+
+  return (
+    <div className="mt-auto flex shrink-0 flex-col">
+      <SectionLabel
+        className="mt-0"
+        aside={open.length ? `${open.length} open` : lastClosed ? "Resolved" : "None open"}
+      >
+        {open.length || !lastClosed ? "Alerts" : "Recent alerts"}
+      </SectionLabel>
+      {open.length > 0 ? (
+        <div className="ui-scrollbar flex max-h-[152px] max-sm:max-h-[96px] short:max-h-[96px] flex-col gap-[calc(var(--sp-row)*0.7)] overflow-y-auto">
+          {open.map((i) => (
+            <IncidentLine
+              key={i.id}
+              incident={i}
+              active={i.id === activeId}
+              onSelect={() => setSelected(i.id)}
+            />
+          ))}
+        </div>
+      ) : lastClosed ? (
+        <IncidentLine incident={lastClosed} active={false} onSelect={noop} />
+      ) : (
+        <div
+          className="flex items-center justify-center rounded-[9px] border border-dashed py-3.5"
+          style={{ borderColor: "var(--nav-divider)" }}
+        >
+          <p className="nav-body text-[length:var(--fs-row,13px)]" style={{ color: "var(--nav-text-faint)" }}>
+            No open alerts
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -486,15 +873,57 @@ function cameraIdOf(hotspot: HotspotConfig): string | null {
   return f && typeof f.value === "string" ? f.value : null;
 }
 
+const clipBlobs = new Map<string, string>();
+const clipLoads = new Map<string, Promise<string>>();
+
+function warmClip(url: string): Promise<string> {
+  const held = clipLoads.get(url);
+  if (held) return held;
+  const load = fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`${res.status} ${url}`);
+      return res.blob();
+    })
+    .then((blob) => {
+      const local = URL.createObjectURL(blob);
+      clipBlobs.set(url, local);
+      return local;
+    });
+  load.catch(() => clipLoads.delete(url));
+  clipLoads.set(url, load);
+  return load;
+}
+
+function useClipSrc(url: string): string | undefined {
+  const [src, setSrc] = useState(() =>
+    clipBlobs.get(url) ?? (clipLoads.has(url) ? undefined : url),
+  );
+  useEffect(() => {
+    if (clipBlobs.has(url) || !clipLoads.has(url)) return;
+    let live = true;
+    warmClip(url).then(
+      (local) => live && setSrc(local),
+      () => live && setSrc(url),
+    );
+    return () => {
+      live = false;
+    };
+  }, [url]);
+  return src;
+}
+
 function ClipBlock({
   clip,
   camera,
+  panel,
 }: {
   clip: NonNullable<HotspotConfig["clip"]>;
   camera: string | null;
+  panel?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(true);
+  const src = useClipSrc(clip.url);
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
@@ -506,23 +935,30 @@ function ClipBlock({
   return (
     <div
       className={cn(
-        "relative col-span-2 mx-auto mb-3 w-full max-w-[440px] overflow-hidden rounded-[10px]",
-        "aspect-[var(--clip-aspect)] max-sm:max-w-full",
-        "short:col-span-1 short:col-start-1 short:row-start-1 short:row-span-4",
-        "short:mx-0 short:mb-0 short:aspect-auto short:h-full short:max-w-none",
+        "relative overflow-hidden",
+        panel
+          ? "h-full min-h-0 w-full rounded-[12px]"
+          : cn(
+              "col-span-2 mx-auto mb-4 w-full max-w-[520px] rounded-[10px] max-sm:mb-3",
+              "aspect-[var(--clip-aspect)] max-sm:max-w-full",
+              "short:col-span-1 short:col-start-1 short:row-start-1 short:row-span-4",
+              "short:mx-0 short:mb-0 short:aspect-auto short:h-full short:max-w-none",
+            ),
       )}
       style={
         {
           "--clip-aspect": `${clip.width} / ${clip.height}`,
-          background: "rgba(8,11,16,0.55)",
-          border: "1.5px solid var(--nav-border)",
+          ...(!panel && {
+            background: "rgba(8,11,16,0.55)",
+            border: "1.5px solid var(--nav-border)",
+          }),
         } as React.CSSProperties
       }
     >
       <video
         ref={videoRef}
-        src={clip.url}
-        className="h-full w-full object-cover"
+        src={src}
+        className={cn("h-full w-full", panel ? "object-contain" : "object-cover")}
         autoPlay
         loop
         muted
@@ -652,13 +1088,22 @@ function PosterViewer({
   );
 }
 
-function AlertBanner({ alert }: { alert: NonNullable<HotspotConfig["alert"]> }) {
+function AlertBanner({
+  alert,
+  className,
+}: {
+  alert: NonNullable<HotspotConfig["alert"]>;
+  className?: string;
+}) {
   const danger = alert.level === "danger";
   const ink = danger ? TONE_COLOR.alert : TONE_COLOR.warn;
   return (
     <div
       role="status"
-      className="mb-4 flex items-center gap-3 overflow-hidden rounded-[10px] border-l-[4px] px-3.5 py-3 max-sm:mb-3 max-sm:gap-2.5 max-sm:px-3 max-sm:py-2.5 short:mb-3 short:py-2.5"
+      className={cn(
+        "mb-5 flex shrink-0 items-center gap-3.5 overflow-hidden rounded-[10px] border-l-[4px] px-4 py-3.5 max-sm:mb-3 max-sm:gap-2.5 max-sm:px-3 max-sm:py-2.5 short:mb-3 short:gap-3 short:px-3.5 short:py-2.5",
+        className,
+      )}
       style={{
         background: danger ? ALERT_SURFACE : CAUTION_SURFACE,
         borderColor: ink,
@@ -719,6 +1164,16 @@ function StillPreload({ ready }: { ready?: boolean }) {
     }
     return [...seen.values()];
   }, [rows]);
+
+  const clips = useMemo(
+    () => [...new Set(rows.map((h) => h.clip?.url).filter((u): u is string => !!u))],
+    [rows],
+  );
+
+  useEffect(() => {
+    if (!ready) return;
+    for (const url of clips) void warmClip(url).catch(() => undefined);
+  }, [ready, clips]);
 
   const warmPosters = ready && posters.length > 0;
   if (!stills.length && !warmPosters) return null;
@@ -827,17 +1282,26 @@ const SEVERITY_RANK: Record<IncidentSeverity, number> = {
 
 const ROLLUP_FIELD = "security_systems_status";
 
+const COUNTER_FIELDS = [
+  "active_incidents",
+  "critical_incidents",
+  "high_incidents",
+  "medium_incidents",
+];
+
 function SecurityCommandView({
   fields,
+  wide,
 }: {
   fields: { field: HotspotField; color?: string }[];
+  wide?: boolean;
 }) {
   const systems = fields.filter((f) => f.field.name.endsWith("_status"));
   const real = systems.filter((f) => f.field.name !== ROLLUP_FIELD);
   const reporting = real.filter((f) => !!f.color).length;
 
   return (
-    <div className="shrink-0 pt-1">
+    <div className={cn("shrink-0 pt-1", wide && "flex min-h-0 flex-col")}>
       <SectionLabel
         className="mt-0"
         aside={
@@ -853,11 +1317,25 @@ function SecurityCommandView({
       >
         Systems
       </SectionLabel>
-      <div className="grid grid-cols-3 gap-x-[18px] max-[560px]:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-x-[26px] max-sm:gap-x-[18px] short:gap-x-[18px] max-[560px]:grid-cols-2",
+          wide ? "grid-cols-2" : "grid-cols-3",
+        )}
+      >
         {systems.map(({ field, color }) => (
           <SystemCell key={field.name} field={field} color={color} />
         ))}
       </div>
+      {wide && (
+        <div className="mt-auto grid grid-cols-2 gap-3 pt-5">
+          {COUNTER_FIELDS.map((name) => fields.find((f) => f.field.name === name))
+            .filter((f): f is { field: HotspotField; color?: string } => !!f)
+            .map(({ field, color }) => (
+              <StatTile key={field.name} field={field} color={color} />
+            ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -866,17 +1344,17 @@ function SystemCell({ field, color }: { field: HotspotField; color?: string }) {
   const tone = useSite().toneFor(field.value, field.tone);
   return (
     <div
-      className="flex min-w-0 flex-col gap-[3px] border-b py-[9px]"
+      className="flex min-w-0 flex-col gap-[4px] border-b py-[var(--sp-row,13px)]"
       style={{ borderColor: "var(--nav-divider)" }}
     >
       <span
-        className="nav-body truncate text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+        className="nav-body break-words text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
         style={{ color: "var(--nav-text-faint)" }}
       >
         {field.label}
       </span>
       <span
-        className="nav-display truncate text-[17px] max-sm:text-[15px] short:text-[15px] font-bold leading-[1.25] tracking-[0.02em]"
+        className="nav-display break-words text-[length:var(--fs-value,17px)] font-bold leading-[1.25] tracking-[0.02em]"
         style={{ color: valueColor(field, tone, color) }}
       >
         {formatValue(field)}
@@ -884,8 +1362,6 @@ function SystemCell({ field, color }: { field: HotspotField; color?: string }) {
     </div>
   );
 }
-
-const MAX_QUEUE_ROWS = 5;
 
 function IncidentLine({
   incident,
@@ -901,7 +1377,7 @@ function IncidentLine({
       type="button"
       onClick={onSelect}
       aria-pressed={active}
-      className="flex w-full shrink-0 cursor-pointer items-center gap-3.5 rounded-[9px] px-3.5 py-[10px] text-left transition-[background-color,border-color] duration-200"
+      className="flex w-full shrink-0 cursor-pointer items-center gap-[calc(var(--sp-tile,16px)*0.8)] rounded-[9px] px-[calc(var(--sp-tile,20px)*0.8)] py-[var(--sp-row,13px)] text-left transition-[background-color,border-color] duration-200"
       style={{
         background: active ? "color-mix(in srgb, var(--nav-accent) 16%, transparent)" : "rgba(255,255,255,0.05)",
         border: active
@@ -910,25 +1386,19 @@ function IncidentLine({
       }}
     >
       <span
-        className="nav-display w-[64px] shrink-0 tabular-nums text-[12.5px] max-sm:text-[11px] short:text-[11px] font-semibold"
-        style={{ color: active ? "var(--nav-text-2)" : "var(--nav-text-faint)" }}
-      >
-        {formatClock(incident.eventTime)}
-      </span>
-      <span
-        className="nav-display min-w-0 flex-1 truncate text-[15px] max-sm:text-[13px] short:text-[13px] font-semibold leading-[1.25]"
+        className="nav-display min-w-0 flex-1 break-words text-[length:var(--fs-row,15px)] font-semibold leading-[1.25]"
         style={{ color: "var(--nav-text)" }}
       >
         {incident.type}
       </span>
       <span
-        className="nav-body w-[132px] shrink-0 truncate text-[12px] max-sm:text-[11px] short:text-[11px] font-medium max-[560px]:hidden"
+        className="nav-body w-[132px] shrink-0 break-words text-[length:var(--fs-meta,12px)] font-medium max-md:hidden"
         style={{ color: "var(--nav-text-faint)" }}
       >
         {incident.sourceId || incident.source}
       </span>
       <span
-        className="nav-display w-[74px] shrink-0 rounded-[6px] py-[3px] text-center text-[11px] max-sm:text-[10px] short:text-[10px] font-bold tracking-[0.06em]"
+        className="nav-display w-[6.5em] shrink-0 rounded-[6px] py-[3px] text-center text-[length:var(--fs-label,11px)] font-bold tracking-[0.06em]"
         style={{
           color: SEVERITY_COLOR[incident.severity],
           background: `color-mix(in srgb, ${SEVERITY_COLOR[incident.severity]} 18%, transparent)`,
@@ -962,12 +1432,12 @@ function IncidentDetailStrip({
 
   return (
     <div
-      className="mt-2.5 shrink-0 rounded-[10px] px-3.5 py-3"
+      className="mt-3 shrink-0 rounded-[10px] px-4 py-4 max-sm:mt-2.5 max-sm:px-3.5 max-sm:py-3 short:mt-2.5 short:px-3.5 short:py-3"
       style={{ background: "rgba(255,255,255,0.05)", border: "1.5px solid var(--nav-border)" }}
     >
       <div className="flex items-baseline justify-between gap-3">
         <span
-          className="nav-display min-w-0 truncate text-[13.5px] max-sm:text-[12px] short:text-[12px] font-bold tracking-[0.02em]"
+          className="nav-display min-w-0 break-words text-[13.5px] max-sm:text-[12px] short:text-[12px] font-bold tracking-[0.02em]"
           style={{ color: "var(--nav-text)" }}
         >
           {incident.id} · {incident.type}
@@ -980,14 +1450,14 @@ function IncidentDetailStrip({
         </span>
       </div>
 
-      <dl className="mt-2.5 grid grid-cols-4 gap-x-4 max-[560px]:grid-cols-2">
+      <dl className="mt-3 grid grid-cols-4 gap-x-5 max-sm:mt-2.5 max-sm:gap-x-4 short:mt-2.5 short:gap-x-4 max-[560px]:grid-cols-2">
         <DetailRow label="Acknowledged" value={incident.acknowledged ? "Yes" : "No"} />
         <DetailRow label="Location" value={incident.locationLabel} />
         <DetailRow label="Source" value={incident.source} />
         <DetailRow label="Assigned" value={incident.assignedTeam} />
       </dl>
 
-      <div className="flex flex-wrap items-center gap-2 pt-3">
+      <div className="flex flex-wrap items-center gap-2 pt-3.5 max-sm:pt-3 short:pt-3">
         <RowAction label={auditLabel(mine.length)} onClick={onShowLog} />
         {canTravel && (
           <RowAction
@@ -1023,7 +1493,7 @@ function SourceIncidents({ hotspotId }: { hotspotId: string }) {
   return (
     <div className="flex flex-col">
       <SectionLabel aside={`${open.length} open`}>Alerts</SectionLabel>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2 max-sm:gap-1.5 short:gap-1.5">
         {open.map((i) => (
           <IncidentRow
             key={i.id}
@@ -1041,7 +1511,72 @@ function SourceIncidents({ hotspotId }: { hotspotId: string }) {
   );
 }
 
-function SecurityIncidentCentre() {
+function noop() {}
+
+function QueueBody({
+  rows,
+  activeId,
+  phone,
+  narrowed,
+  tab,
+  onSelect,
+  onShowLog,
+}: {
+  rows: SecurityIncident[];
+  activeId: string | null;
+  phone: boolean;
+  narrowed: boolean;
+  tab: "current" | "past";
+  onSelect: (id: string) => void;
+  onShowLog: (incident: SecurityIncident) => void;
+}) {
+  if (rows.length === 0) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-[10px] border border-dashed py-6"
+        style={{ borderColor: "var(--nav-divider)" }}
+      >
+        <p
+          className="nav-body text-[13px] max-sm:text-[11.5px] short:text-[11.5px]"
+          style={{ color: "var(--nav-text-faint)" }}
+        >
+          {narrowed
+            ? "Nothing matches these filters."
+            : tab === "current"
+              ? "Nothing open."
+              : "Nothing closed yet."}
+        </p>
+      </div>
+    );
+  }
+
+  const shown = rows;
+  const active = rows.find((i) => i.id === activeId) ?? null;
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-2 max-sm:gap-1.5 short:gap-1.5",
+          phone ? "overflow-visible" : "ui-scrollbar overflow-y-auto overflow-x-hidden pr-1",
+        )}
+      >
+        {shown.map((i) => (
+          <IncidentLine
+            key={i.id}
+            incident={i}
+            active={i.id === activeId}
+            onSelect={() => onSelect(i.id)}
+          />
+        ))}
+      </div>
+
+      {active && <IncidentDetailStrip incident={active} onShowLog={() => onShowLog(active)} />}
+    </>
+  );
+}
+
+function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
   const incidents = useSecurityStore((s) => s.incidents);
   const history = useSecurityStore((s) => s.history);
   const selectedId = useSecurityStore((s) => s.selectedIncidentId);
@@ -1068,21 +1603,27 @@ function SecurityIncidentCentre() {
   const tab = hasCurrent ? wantedTab : "past";
 
   const bySeverity = sort[0] === "severity";
-  const rows = useMemo(() => {
-    const base = tab === "current" ? current : past;
-    const filtered = base.filter(
-      (i) =>
-        (severities.length === 0 || severities.includes(i.severity)) &&
-        (sources.length === 0 || sources.includes(i.sourceHotspotId)),
-    );
-    return [...filtered].sort((a, b) =>
-      bySeverity
-        ?
-          SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
-          b.eventTime.localeCompare(a.eventTime)
-        : b.eventTime.localeCompare(a.eventTime),
-    );
-  }, [tab, current, past, severities, sources, bySeverity]);
+  const queueOf = useCallback(
+    (base: SecurityIncident[]) => {
+      const filtered = base.filter(
+        (i) =>
+          (severities.length === 0 || severities.includes(i.severity)) &&
+          (sources.length === 0 || sources.includes(i.sourceHotspotId)),
+      );
+      return [...filtered].sort((a, b) =>
+        bySeverity
+          ?
+            SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
+            b.eventTime.localeCompare(a.eventTime)
+          : b.eventTime.localeCompare(a.eventTime),
+      );
+    },
+    [severities, sources, bySeverity],
+  );
+  const rows = useMemo(
+    () => queueOf(tab === "current" ? current : past),
+    [queueOf, tab, current, past],
+  );
 
   const severityCounts = useMemo(() => {
     const out: Record<IncidentSeverity, number> = {
@@ -1100,15 +1641,16 @@ function SecurityIncidentCentre() {
   const narrowed = severities.length > 0 || sources.length > 0;
 
   const activeId = rows.some((i) => i.id === selectedId) ? selectedId : (rows[0]?.id ?? null);
-  const active = rows.find((i) => i.id === activeId) ?? null;
   const phone = useIsHandheld();
-  const scrolls = tab === "past" || phone;
-  const shown = scrolls ? rows : rows.slice(0, MAX_QUEUE_ROWS);
-  const overflow = rows.length - shown.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mt-4 flex shrink-0 items-center justify-between gap-3 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-2">
+      <div
+        className={cn(
+          "mt-5 flex shrink-0 items-center justify-between gap-3 max-sm:mt-4 short:mt-4 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-2",
+          flush && "mt-0",
+        )}
+      >
         <div className="flex shrink-0 items-center gap-2">
           <span
             className="nav-body text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-semibold uppercase tracking-[0.08em]"
@@ -1161,53 +1703,19 @@ function SecurityIncidentCentre() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="mt-2.5 flex flex-1 items-center justify-center rounded-[10px] border border-dashed" style={{ borderColor: "var(--nav-divider)" }}>
-          <p className="nav-body text-[13px] max-sm:text-[11.5px] short:text-[11.5px]" style={{ color: "var(--nav-text-faint)" }}>
-            {narrowed
-              ? "Nothing matches these filters."
-              : tab === "current"
-                ? "Nothing open."
-                : "Nothing closed yet."}
-          </p>
+      <div className="mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] max-sm:mt-2.5 short:mt-2.5">
+        <div className="col-start-1 row-start-1 flex min-h-0 flex-col">
+          <QueueBody
+            rows={rows}
+            activeId={activeId}
+            phone={phone}
+            narrowed={narrowed}
+            tab={tab}
+            onSelect={setSelected}
+            onShowLog={setLogFor}
+          />
         </div>
-      ) : (
-        <>
-          <div
-            className={cn(
-              "mt-2.5 flex min-h-0 flex-1 flex-col gap-1.5",
-              phone
-                ? "overflow-visible"
-                : scrolls
-                  ? "ui-scrollbar overflow-y-auto overflow-x-hidden pr-0.5"
-                  : "overflow-hidden",
-            )}
-          >
-            {shown.map((i) => (
-              <IncidentLine
-                key={i.id}
-                incident={i}
-                active={i.id === activeId}
-                onSelect={() => setSelected(i.id)}
-              />
-            ))}
-            {overflow > 0 && (
-              <button
-                type="button"
-                onClick={() => setQueueOpen(true)}
-                className="nav-body flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-[9px] border border-dashed py-[9px] text-[12px] max-sm:text-[11px] short:text-[11px] font-semibold"
-                style={{ borderColor: "var(--nav-divider)", color: "var(--nav-text-faint)" }}
-              >
-                {overflow} more {overflow === 1 ? "record" : "records"} · show the full queue
-              </button>
-            )}
-          </div>
-
-          {active && (
-            <IncidentDetailStrip incident={active} onShowLog={() => setLogFor(active)} />
-          )}
-        </>
-      )}
+      </div>
 
       {queueOpen && (
         <IncidentQueueDialog
@@ -1308,7 +1816,7 @@ function FilterSelect({
         }}
       >
         {label && <span style={{ opacity: 0.7 }}>{label}</span>}
-        <span className="max-w-[150px] truncate">{summary}</span>
+        <span className="max-w-[150px] break-words text-left">{summary}</span>
         <ChevronDown
           size={13}
           style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 200ms" }}
@@ -1347,7 +1855,7 @@ function FilterSelect({
                     style={{ background: i.dot }}
                   />
                 )}
-                <span className="min-w-0 flex-1 truncate">{i.label}</span>
+                <span className="min-w-0 flex-1 break-words">{i.label}</span>
                 <Check
                   size={13}
                   className="shrink-0"
@@ -1435,31 +1943,6 @@ function Avatar({ actor }: { actor: SecurityActor }) {
   );
 }
 
-function formatAgo(value: string): string {
-  const d = parseDemoTime(value);
-  if (!d) return value;
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
-}
-
-function formatClock(value: string): string {
-  const d = parseDemoTime(value);
-  if (!d) return value;
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function parseDemoTime(value: string): Date | null {
-  const authored = !value.includes("T");
-  const d = new Date(authored ? value.replace(" ", "T") : value);
-  if (Number.isNaN(d.getTime())) return null;
-  return authored ? new Date(d.getTime() + DEMO_TIME_SHIFT_MS) : d;
-}
-
 const SEVERITY_ORDER_UI: IncidentSeverity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
 const SEVERITY_SHORT: Record<IncidentSeverity, string> = {
@@ -1541,13 +2024,11 @@ function IncidentRow({
   const { goToHotspot, goToLayout, find: findLayout } = useLayoutNavigation();
   const site = useSite();
   const audit = useSecurityStore((s) => s.audit);
-  const closed = incident.status === "RESOLVED";
 
   const mine = useMemo(
     () => audit.filter((e) => e.incidentId === incident.id),
     [audit, incident.id],
   );
-  const closedIn = useMemo(() => (closed ? closedDuration(mine) : null), [mine, closed]);
 
   const target = incident.navigationTarget;
   const anchor = site.securityHotspotById[incident.sourceHotspotId];
@@ -1574,21 +2055,15 @@ function IncidentRow({
         aria-pressed={compact ? !!selected : undefined}
         className="flex w-full min-w-0 cursor-pointer items-center gap-3 px-3.5 py-2.5 text-left"
       >
-        <span
-          className="nav-body shrink-0 tabular-nums text-[12.5px] max-sm:text-[11px] short:text-[11px] font-medium"
-          style={{ color: "var(--nav-text-faint)" }}
-        >
-          {formatAgo(incident.eventTime)}
-        </span>
         <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
           <span
-            className="nav-display truncate text-[14px] max-sm:text-[12.5px] short:text-[12.5px] font-semibold"
+            className="nav-display break-words text-[14px] max-sm:text-[12.5px] short:text-[12.5px] font-semibold"
             style={{ color: "var(--nav-text)" }}
           >
             {incident.type}
           </span>
           <span
-            className="nav-body truncate text-[12px] max-sm:text-[11px] short:text-[11px]"
+            className="nav-body break-words text-[12px] max-sm:text-[11px] short:text-[11px]"
             style={{ color: "var(--nav-text-faint)" }}
           >
             {incident.source} · {incident.locationLabel}
@@ -1638,12 +2113,10 @@ function IncidentRow({
               <DetailRow label="Source" value={incident.source} />
               {incident.sourceId && <DetailRow label="Source ID" value={incident.sourceId} />}
               <DetailRow label="Location" value={incident.locationLabel} />
-              <DetailRow label="Event time" value={formatAgo(incident.eventTime)} />
               <DetailRow label="Assigned team" value={incident.assignedTeam} />
-              {closedIn && <DetailRow label="Closed in" value={closedIn} />}
             </dl>
 
-            <div className="flex flex-wrap items-center gap-2 pt-3">
+            <div className="flex flex-wrap items-center gap-2 pt-3.5 max-sm:pt-3 short:pt-3">
               <RowAction label={auditLabel(mine.length)} onClick={onShowLog} />
               {canTravel && (
                 <RowAction
@@ -1675,19 +2148,6 @@ function SeverityPill({ severity }: { severity: IncidentSeverity }) {
   );
 }
 
-function closedDuration(entries: SecurityAuditEntry[]): string | null {
-  const first = entries[0];
-  const resolved = [...entries].reverse().find((e) => e.action === "incident_resolved");
-  if (!first || !resolved) return null;
-  const ms = Date.parse(resolved.at) - Date.parse(first.at);
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  const total = Math.round(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  return h ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`;
-}
-
 function auditLabel(count: number): string {
   return `Audit · ${count}`;
 }
@@ -1713,7 +2173,7 @@ function DetailRow({
         {label}
       </dt>
       <dd
-        className="nav-display mt-[2px] truncate text-[14px] max-sm:text-[12.5px] short:text-[12.5px] font-semibold"
+        className="nav-display mt-[2px] break-words text-[14px] max-sm:text-[12.5px] short:text-[12.5px] font-semibold"
         style={{ color: color ?? "var(--nav-text)" }}
       >
         {value}
@@ -1795,7 +2255,7 @@ function IncidentQueueDialog({
           border: "1.5px solid var(--nav-border)",
           textShadow: CARD_TEXT_SHADOW,
         }}
-        className="pointer-events-auto flex max-h-[min(70dvh,calc(100dvh-32px))] w-[min(620px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] p-5 short:max-h-[calc(100dvh-16px)] short:scale-[0.85] short:rounded-[10px] short:p-4"
+        className="pointer-events-auto flex max-h-[min(70dvh,calc(100dvh-32px))] w-[min(620px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] p-6 short:max-h-[calc(100dvh-16px)] short:scale-[0.85] short:rounded-[10px] short:p-4"
       >
         <PanelHeader
           title="Incident queue"
@@ -1803,7 +2263,7 @@ function IncidentQueueDialog({
           onClose={onClose}
         />
 
-        <div className="ui-scrollbar mt-3 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+        <div className="ui-scrollbar mt-4 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden max-sm:mt-3 max-sm:gap-1.5 short:mt-3 short:gap-1.5">
           {rows.map((i) => (
             <IncidentLine
               key={i.id}
@@ -1866,7 +2326,7 @@ function IncidentLogDialog({
           border: "1.5px solid var(--nav-border)",
           textShadow: CARD_TEXT_SHADOW,
         }}
-        className="pointer-events-auto flex max-h-[min(70dvh,calc(100dvh-32px))] w-[min(460px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] p-5 short:max-h-[calc(100dvh-16px)] short:scale-[0.85] short:rounded-[10px] short:p-4"
+        className="pointer-events-auto flex max-h-[min(70dvh,calc(100dvh-32px))] w-[min(460px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] p-6 short:max-h-[calc(100dvh-16px)] short:scale-[0.85] short:rounded-[10px] short:p-4"
       >
         <PanelHeader title="Incident log" subtitle={incident.id} onClose={onClose} />
 
@@ -1883,12 +2343,6 @@ function IncidentLogDialog({
                   className="flex min-w-0 items-center gap-2.5 border-b py-[9px] last:border-b-0"
                   style={{ borderColor: "var(--nav-divider)" }}
                 >
-                  <span
-                    className="nav-body w-[68px] shrink-0 tabular-nums text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-medium"
-                    style={{ color: "var(--nav-text-faint)" }}
-                  >
-                    {formatAgo(e.at)}
-                  </span>
                   <span
                     className="nav-body min-w-0 flex-1 text-[12.5px] max-sm:text-[11px] short:text-[11px] leading-snug"
                     style={{ color: "var(--nav-text-2)" }}

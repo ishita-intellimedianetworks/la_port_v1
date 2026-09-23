@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useSite } from "@/config/context";
 import type { Destination, DestinationCategory } from "@/shared/types";
+import { isMobileDevice } from "@/streaming/config";
 import { useScene } from "../context/scene-context";
 import { GROUND_VIEW_BY_HOTSPOT } from "../ground-views";
 import { useNavUiStore } from "../stores/nav-ui-store";
@@ -71,7 +72,7 @@ export function useLayoutNavigation() {
       if (!controller || !hotspot || !layout) return;
 
       const entry = find(layout.id);
-      const pose = site.poseForHotspot(hotspotId);
+      const pose = site.poseForHotspot(hotspotId, isMobileDevice());
 
       useNavUiStore.getState().setHotspotInfo(null);
 

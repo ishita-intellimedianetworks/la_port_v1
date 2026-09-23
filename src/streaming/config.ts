@@ -308,6 +308,13 @@ export function isConstrainedDevice(): boolean {
   return _constrained;
 }
 
+let _mobile: boolean | null = null;
+
+export function isMobileDevice(): boolean {
+  if (_mobile === null) _mobile = detectProfile() === "mobile";
+  return _mobile;
+}
+
 export function resolveStreamConfig(
   variant: StreamVariantId,
   profile?: DeviceProfile,

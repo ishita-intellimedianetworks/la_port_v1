@@ -141,6 +141,20 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
   const selectionSeq = useNavUiStore((s) => s.selectionSeq);
 
+  // The dollhouse dresses the whole model at its own `far` rung and then holds
+  // while the tour plays, and the drop to first person re-dresses every chunk
+  // at once — a download the viewer watches land as the labels sharpen. The
+  // wait is spent up here instead, from the pose the ground view opens at, at
+  // low priority so the dollhouse's own chunks keep the bandwidth.
+  const warmed = useRef(false);
+  useEffect(() => {
+    if (warmed.current || viewMode !== "dollhouse") return;
+    const m = mgr.current;
+    if (!m) return;
+    warmed.current = true;
+    m.warmTextures(variant.ground, new THREE.Vector3(...site.startPose.position));
+  }, [viewMode, managerBorn, variant, site]);
+
   const claimed = useMemo(() => {
     const rows = [...site.hotspots, ...site.securityHotspots];
     return rows.map((h) => h.animation?.clip).filter((c): c is string => !!c);

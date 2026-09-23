@@ -149,6 +149,10 @@ export type SceneConfig = {
     eyeHeight: number;
     fov: number;
     shadows: boolean;
+    /** The renderer's tone-mapping operator. Omitted → `"neutral"`. `"none"`
+     *  is three's `NoToneMapping`, which also makes `grade.exposure` inert:
+     *  `toneMappingExposure` is only read by an operator. */
+    toneMapping?: "neutral" | "none";
     grade?: {
       /** Multiplier, 1 = untouched. Applied before tone mapping. */
       exposure?: number;
@@ -351,6 +355,7 @@ export type HotspotConfig = {
   /** This hotspot's own viewpoint — the pose travelling to it lands on.
    *  Optional; an unauthored hotspot falls back to its layout's camera. */
   camera?: LayoutCamera;
+  mobileCamera?: LayoutCamera;
   image?: string;
   enabled?: boolean;
   animation?: {

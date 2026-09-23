@@ -77,6 +77,9 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
   // One sun, shadow map frozen after a single render (see SceneLights). Off on
   // low-power devices.
   const lowPower = isLowPower();
+  const maxDpr = site.scene.stream.render.maxDpr;
+  const toneMapping =
+    site.scene.world.toneMapping === "none" ? THREE.NoToneMapping : THREE.NeutralToneMapping;
   const brightness = useGradeStore((s) => s.brightness);
   const contrast = useGradeStore((s) => s.contrast);
   const saturation = useGradeStore((s) => s.saturation);
@@ -90,8 +93,10 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
           // PCFSoftShadowMap, which warns every frame.
           shadows={lowPower ? false : { type: THREE.PCFShadowMap }}
           // Cap render resolution: the default is the full device pixel ratio,
-          // up to 3× on phones, which with MSAA is ~4-9× the framebuffer.
-          dpr={lowPower ? [1, 1.25] : [1, 1.5]}
+          // up to 3× on phones, which with MSAA is ~4-9× the framebuffer. The
+          // ceiling is the site's `stream.render.maxDpr`, so a bake that can
+          // afford native pixels gets them; low-power clamps below it.
+          dpr={lowPower ? [1, Math.min(1.25, maxDpr)] : [1, maxDpr]}
           camera={{
             fov: site.scene.world.fov,
             near: 0.1,
@@ -111,7 +116,7 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
           gl={{
             antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
-            toneMapping: lowPower ? THREE.NoToneMapping : THREE.NeutralToneMapping
+            toneMapping: lowPower ? THREE.NoToneMapping : toneMapping
           }}
           frameloop="demand"
           id="canvas-wrapper"

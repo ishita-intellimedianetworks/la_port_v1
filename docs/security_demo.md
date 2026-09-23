@@ -170,9 +170,8 @@ demonstrated. The operational layouts keep their own order below it.
 ### The layer opens with two incidents open
 
 `OPEN_INCIDENTS` replaces the empty seed. Two, matching what the two alarm
-screens already claim - **on a desktop.** On `mobile` and `low` the first row
-is dropped with its hotspot and the layer opens with one; see *S03 is not on a
-phone*.
+screens already claim, on every device - see *S03 is back on a phone, from
+closer*.
 
 | | source | severity | |
 |---|---|---|---|
@@ -182,8 +181,9 @@ phone*.
 **Because the command view derives, it does not need authoring.**
 `commandViewFields` reads the store, so it now says `Waterside - 1 alert · HIGH`
 and `Video Analytics - 1 alert · MEDIUM`, with counters at 2 active / 1 high /
-1 medium / 0 critical. It is also why a phone needs no second set of numbers:
-with S03's row gone the same code reads `Waterside - Normal` and 1 active. Hard-coding those numbers would have left two places to
+1 medium / 0 critical. It is also why a device gate needs no second set of
+numbers: with a row dropped the same code reads `Waterside - Normal` and 1
+active. Hard-coding those numbers would have left two places to
 keep in step; this way it cannot disagree with S03's DANGER banner or S06's
 FLAGGED FOR REVIEW, because it is reading the same rows they describe.
 
@@ -211,10 +211,10 @@ command view is now purely a readout, which is what the other six are.
 No `enabled: false` remains in `v5.json`. `v4.json` carries it on S03-S08,
 which is the whole of what separates the two routes.
 
-**Seven is the desktop count.** On `mobile` and `low` S03 is dropped from the
-table before anything reads it, so a phone has six reachable and five with
-markers - see *S03 is not on a phone*. That is a device gate in
-`security-store.ts`, not an `enabled` flag, and it is the only row it applies to.
+**Seven on every device.** S03 was dropped on `mobile` and `low` for a while;
+it is back since its camera moved inside the phone's fog - see *S03 is back on
+a phone, from closer*. The device gate in `security-store.ts` is still there,
+with an empty list.
 
 **S07 draws a marker like the other six, and opens the same way.** It did not:
 `hotspot-markers` filtered on `isFieldHotspot`, which is true only for S01-S06 -
@@ -512,7 +512,7 @@ the merged S07, and it takes `cp_010` from the `hs_s08` row - see §1.
 |---|---|---|---|---|---|---|
 | S01 | `cp_015` | 10 | +5.6 | -177.2 | 0.0 | 17.1 h / 4.6 v |
 | S02 | `cp_015` | 14 | +5.6 | -177.2 | 0.0 | 2.8 h / 12.5 v |
-| S03 | `cp_016`* | **706** | +3.3 | -177.3 | 0.0 | 17.9 h / 4.8 v |
+| S03 | authored* | **589** / 200 | +4.6 / -6.5 | -174.5 / +173.3 | 0.0 | desktop / `mobileCamera` |
 | S04 | `cp_017` | 9 | +3.4 | +93.4 | 0.0 | 7.6 h / 7.4 v |
 | S05 | `cp_013` | 14 | -2.0 | +152.8 | 0.0 | 0.3 h / 0.6 v |
 | S06 | `cp_018` | 5 | +4.0 | -57.6 | 0.0 | 1.2 h / 0.9 v |
@@ -520,7 +520,12 @@ the merged S07, and it takes `cp_010` from the `hs_s08` row - see §1.
 
 `cp_005` was the sheet's `hs_s07` pairing and is unused by the layer now.
 
-\* **S03's rotation is hand-aimed, not `cp_016`'s.** The node's own euler
+\* **S03 has two cameras.** `camera` is the 589-unit shot below, kept for
+`desktop` and `low`; `mobileCamera` is the closer pose described in *S03 is back
+on a phone, from closer*: 22 up, 200 back along the same bearing, aimed at the
+centre of the unauthorised craft. The history below is `camera`'s.
+
+**Before that, S03's rotation was hand-aimed, not `cp_016`'s.** The node's own euler
 `[3.0918, -0.1961, 3.1319]` left the anchor 26.4 degrees off-centre; the
 authored `[3.0847, -0.0463, 3.139]` swings the yaw 8.6 degrees onto it and gets
 that to 17.9, inside S01's worst case. The position is `cp_016`'s, untouched.
@@ -558,11 +563,12 @@ authored rotation that puts the anchor 17.9 degrees off-centre instead of 26.4.
 That is the symptom treated, not the cause: 706 units is still 706 units, and
 the anchor is a speck whichever way the camera points.
 
-**What fixes it is a re-authored `cp_016`**, near
-`[-1626.1896, 10.3445, 421.6853]` and looking at it, the way the other five sit
-5 to 14 units from their anchors. One node, and this section comes out. The
-debug panel's camera editor will write it straight into `v5.json` once someone
-stands where the shot should be - see *Moving a CP or an HS from the app*.
+**What fixed it was not a re-authored `cp_016`.** A ground node close to the
+anchor would have stood inside the water geofence, which runs x -1658 to -1088
+and z -510 to 471. A phone uses an authored pose low over the water instead -
+see *S03 is back on a phone, from closer*. If a CP is ever authored for it, the debug
+panel's camera editor writes it straight into `v5.json` - see *Moving a CP or
+an HS from the app*.
 
 **Roll is 0.0 on all seven.** That is the independent check that the pipeline is
 right: a camera pose has no roll, the file stores XYZ, `poseForCamera` reorders
@@ -826,9 +832,24 @@ it caps against `residentCapBytes()` alone, while `resolveBudget` had already
 priced a phone at `gpuMB: 120-160, texMB: 40-56` - **160 to 216 MB all in**. The
 backstop was 240 MB on a device the streamer itself had costed at 160. At 545 m
 the set never reached either number, so v4 was fine and the hole was invisible;
-at 891 m - **2.67x the area**, since `residentRadius()` on mobile *is*
-`unloadDist` and `evictCache()` returns early in `resident` mode, so the disc is
-the whole footprint - it reached 240 and the tab died first.
+at 891 m it reached 240 and the tab died first. `residentRadius()` on mobile
+*is* `unloadDist` and `evictCache()` returns early in `resident` mode, so the
+disc is the whole footprint.
+
+**Measured against the 674-chunk manifest, not assumed.** The disc grows by
+where you are standing, because the bake is finite - at the middle you already
+reach most of it at 545 m:
+
+| standing at | chunks @545 | chunks @891 | textures @545 | textures @891 |
+|---|---|---|---|---|
+| port centre | 291 | 340 (1.17x) | ~55 MB | ~66 MB |
+| S03's CP | 194 | 305 (1.57x) | ~42 MB | **~65 MB** |
+| truck gate (L08) | 94 | 238 (**2.53x**) | ~12 MB | ~40 MB |
+
+Textures at the 128 px far rung, priced RGBA + mips over the distinct materials
+in range. The phone texture budget is **40-56 MB**, so 891 m is over it from the
+waterside and at the edge of it from the middle. Geometry is the small half:
+9 MB against 11-12 MB compressed over the same discs.
 
 Two separate mistakes, worth keeping apart: the distance was a judgement call
 that can be re-made, and the missing budget check was a bug that made any such
@@ -840,8 +861,9 @@ anchor went from 706 to 589 when S03's camera was re-aimed and moved,
 horizon past the ship until it was taken out again. S03 still opens on a
 **589-unit** shot where the other five sit 5 to 14 units from their anchors, and
 it is the only row in the layer that ever needed the phone profile widened to
-make its own subject visible. A re-authored `cp_016` - see *S03 has no viewpoint
-in cp-v7* - is now the only thing that would put S03 back on a phone.
+make its own subject visible. What put it back was moving the camera inside
+the phone's fog rather than pushing the fog out - see *S03 is back on a phone,
+from closer*.
 
 ### The resident ceiling was never the device's ceiling
 
@@ -877,6 +899,16 @@ binding one - and `residentRadius()` is `Infinity` there regardless. `low`:
 nothing. It takes `resolveBudget`'s desktop branch, 272 or 448 against 240.
 **mobile only**, 240 -> 160 or 216.
 
+**NOT MOUNTING IS THE ONLY LEVER, WHICH IS WHY THE CEILING HAS TO BE RIGHT.**
+There is a texture evictor - `evictTextures()` caps against `budget.texMB` - but
+it can only free keys in `texIdle`, and a texture enters `texIdle` only when its
+**last referencing chunk unmounts**. Anything a mounted chunk still holds is
+skipped. So when the whole disc is mounted and every texture in it is in use,
+the evictor scans, frees nothing, and returns still over budget. `texMB` is not
+a ceiling it can enforce on its own; it only trims what has already been let go.
+The mount decision in `updateResident` is the real ceiling, and before this it
+was reading the wrong number.
+
 **The failure it replaces was a crash, and what it does instead is visible.**
 Past the ceiling `updateResident` stops mounting and warns once, so the far edge
 of the model goes missing rather than the tab going down. The warning names
@@ -884,22 +916,376 @@ which budget bound - `residentCapSource()` - because "raise residentBudgetMB"
 is the wrong advice when the device is what is binding, and that was exactly the
 advice the old string gave.
 
-### S03 is not on a phone
+### Soft decals up close are the bake, not the stream
 
-**The waterside row and everything it drags in are desktop-only.**
-`isConstrainedDevice()` in `streaming/config.ts` is `detectProfile() !==
-"desktop"` memoised, so it covers **`mobile` and `low`** - the same two profiles
-`residencyClamp` constrains, not a media query. `security-store.ts` holds the
-list it feeds, `OMITTED_ON_CONSTRAINED`, currently `["S03"]`.
+**The rungs are unchanged: near 1024, mid 256, far 128, the same as v3 and v4.**
+512 was tried and put back, 2048 was costed and refused. This section is the
+record of why, because the symptom that prompted it will come back.
 
-S03 is the most expensive row in the layer and the one with the least left to
-show once its subject is gone:
+**The symptom looks like a streaming fault and is not one.** Stand next to a
+container and its markings are mush; back away and they sharpen. They do not
+sharpen - they shrink. Near and far chunks request the *same file*: on a desktop
+`residentTier` is `near` and `rungBand` exempts desktop from distance banding,
+so every mounted chunk asks for the near rung and gets it. All that changes with
+distance is how many screen pixels the same texels have to cover.
 
-| | cost | gone on a phone because |
+**The ladder cannot go above what the bake holds.** `pickTex` takes the largest
+rung that exists - `avail.find((p) => p <= px)` - and `assets/tex.json` is
+`["orig", 2048, 1024, 512, 256, 128]` over 149 images, of which **47 top out at
+256 or below**, every one of them `kind: "color"`:
+
+| source size | what it is |
+|---|---|
+| 256 x 128 (x14) | placards and door markings |
+| 117 x 56, 190 x 67, 200 x 104, 400 x 91 | logos and signage |
+| 58 x 89, 48 x 98, 128 x 27 | the smallest decals |
+
+Image 15 is 117 x 56 and its top rung **is** 117. Asking for 1024 gets 117.
+Asking for 2048 gets 117. The 43 images baked at 1024 and the 20 that carry a
+2048 or 4096 rung are the hulls, the pavement and the cranes, which is why the
+surfaces *around* a blurry decal look fine. **No value of `texture.px` fixes
+this.** It is a re-bake of the source art, an asset job, and it is in "Not built
+yet".
+
+**512 costs the big atlases and buys nothing back where it hurts.** It halves
+the resident footprint of every 1024-and-up image and leaves all 47 small ones
+exactly where they were, so the trade is "the hulls get softer, the decals do
+not get better". Reverted.
+
+**2048 does not fit the budget.** Priced RGBA + mips, one image is 5.6 MB at
+1024 and **22.4 MB** at 2048. Twenty images carry a 2048 rung; six of them
+resident at once is 34 MB at the current setting and **134 MB** at 2048, past
+the desktop `texMB` of 128 (`resolveBudget`, 80 on a weak GPU) before the other
+129 images are counted. And per "The resident ceiling was never the device's
+ceiling", `evictTextures` can only free a key whose last referencing chunk has
+unmounted - so going over with everything mounted means the evictor scans and
+frees nothing. Refused.
+
+**Any of this is desktop-only whether or not it is written that way.** On a
+phone `rungFor` returns `Math.min(want, WEBP_RUNG_CAP)` - 256 - *because*
+`this.ktx2` is null, so the near rung never reaches the GPU there at any
+configured value. Which leads to the finding underneath all of it:
+
+**An earlier bake is not a way back: the sharp version never existed.** v3
+streams `v8w-inst-mo-1`, v4 and v5 stream `v9w-inst-mo`, and the two were
+compared image for image. The tiny signage is **identical in both** - the same
+four 117 x 56 fence meshes, the same 48 x 98, 128 x 27, 200 x 104, 211 x 67,
+255 x 200. They were never sharp in v3. What v9w *added* is 77 images, and the
+blurry container livery is in that block: the **`acmat_*` set, 25 images, every
+one 256 x 128 or 256 x 256**, new in v9w and with no larger ancestor anywhere.
+Pointing v5 at v8w would not sharpen a label, it would delete the containers.
+
+| | v5-obj (v1) | v6w (v2) | v8w (v3) | v9w (v4) | v9w-01 (v5) |
+|---|---|---|---|---|---|
+| images | 69 | 71 | 72 | 149 | **153** |
+| capped at <=256 | 24 | 24 | 25 | 47 | **47** |
+| rungs with a KTX2 file | 223 | 0 | 233 | **0** | **508** |
+
+**That last row is why v5 has its own asset base.** `NEXT_PUBLIC_STREAM_BASE_V5`
+points at `v9w-inst-mo-01`; v4 stays on `v9w-inst-mo`, so the stable demo does
+not move. `assetBaseFor` reads `STREAM_BASE_V5 ?? STREAM_BASE_V4`, which is why
+v5 inherited v4's bake until the variable existed.
+
+**It is the same world, checked before switching.** `worldMin` and `worldMax`
+are identical to the digit - `[-1733.276, -0.1, -558.288]` to
+`[-187.738, 81.193, 960.015]` - and `animated.glb` carries the same seven clips
+in the same order. So every CP, every anchor, S05's corridor and S03's zone are
+all still where they were authored. What changed is the chunking, 674 -> 652,
+and the KTX2.
+
+| | v9w-inst-mo (v4) | v9w-inst-mo-01 (v5) |
 |---|---|---|
-| the craft | 1.6 MB, **91 primitives over 91 materials, 38 images** | `WorldModels` returns null |
-| the geofence | 2 KB, but a second transparent pass | S03 is not in `hotspotById`, so `ZoneGeofence` finds no `geofence` |
-| the horizon | 2.67x the resident disc | `mobileFarScale` removed |
+| bake | `portla-c5-v9o-inst-mo` | `portla-c5-v9-003-inst-mo` |
+| chunks | 674 | 652 |
+| rung keys | `px, tag, url, bytes` | `px, tag, url, bytes, ktx2, ktx2Bytes` |
+| rungs with KTX2 | 0 | **508** |
+
+**Nothing in this repo had to change to pick it up.** `hasKtx2` is
+`opts.tex.images.some((im) => im.rungs.some((r) => r.ktx2))` - data-driven, so
+it flips on its own the moment the manifest carries the field. `useKtx2` was
+already `true`, `public/basis/basis_transcoder.{js,wasm}` was already there, and
+v5's loader already passed `ktx2Path: "/basis/"`. The `"format": "ktx2"` on
+every tier stopped being aspirational without being touched. The bake was never
+a code problem: `LA_PORT_ADAPTIVE`, which produces these assets, asks the same
+question in the same words, and its default model **is** `portla-c5-v9-003-inst-mo`.
+
+**Coverage is every rung except 4096.** 1024 has 77, 512 has 96, 256 has 133,
+128 has 145; the 11 rungs without a counterpart are all 4096, which is above the
+pipeline's `ktx2.maxPx` of 2048. Its config says why, and it is worth keeping in
+mind before raising a tier: *"NEVER set a tier's texture.px above maxPx: a rung
+larger than this gets no KTX2 counterpart and silently falls back to WebP."*
+v5's near tier is **1024**, so nothing falls back: all 77 of the bake's 1024
+rungs carry a `.ktx2`, checked rung by rung.
+
+**The near rung was raised first and did nothing, because the near BAND is
+what decides who gets it.** Counted against the manifest from the first-person
+camera, at `nearDist` 50 only **27 of 344** chunks were in the near band. The
+ship, its containers and their livery sit 50 to 250 m out - the **mid** band,
+130 chunks, and mid was **256 px in this repo and 256 px in the reference**,
+byte for byte the same file. Raising a rung 27 chunks can see could not change
+what was being looked at:
+
+| | chunks from the FP camera | v5 rung, before | reference rung |
+|---|---|---|---|
+| near, <50 m | 27 | 1024 | 512 |
+| mid, 50-250 m | **130** | **256** | **256** |
+| far, >250 m | 187 | 128 | 128 |
+
+**So the band moved, not the rung.** `nearDist` 50 -> **150** and `mid`
+256 -> **512** make one 512 band out to 250 m - 157 of the 344 chunks - with 128
+beyond it. The rung itself stays at the reference's 512; what was wrong was how
+few chunks could see it. Raising it to 1024 was tried and put back: it cost
+38.3 MB of KTX2 on the wire against 12.7 MB at 512, which is three times the
+climb out of the dollhouse for detail the bake mostly does not hold anyway.
+
+`residentBudgetMB` is **256**, not the reference's 58, because 58 was measured
+against a 50 m near band and `residentBytes()` counts resident textures as well
+as geometry: at 150 m it would have spent the ceiling on textures and stopped
+the far half of the model mounting.
+
+**v5 now matches the reference on every key the browser reads live.** Taking
+their bake without taking their numbers would have been half a port, so the
+whole block was brought over:
+
+| | was | now | reference |
+|---|---|---|---|
+| `tiers.near.distance` | 50 | **150** | 50 |
+| `tiers.near.texture.px` | 1024 | **512** | 512 |
+| `tiers.mid.texture.px` | 256 | **512** | 256 |
+| `cache.limitChunks` | 500 | **550** | 550 |
+| `cache.residentBudgetMB` | 256 | **256** | 58 |
+| `streaming.freeCpuArrays` | absent | **true** | true |
+| `render.maxDpr` | 1.5 | **2** | 2 |
+| `render.adaptiveDpr` | true | true | always on |
+
+`streaming` needed nothing: `unloadBuffer` 1.1, `updateHz` 10, `frustumCull`,
+`cullGraceTicks` 15, `alwaysLoadRadiusMetres` 140, `frustumMarginMetres` 90,
+`hysteresisMetres` 20, `loadsPerTick` 28, `radiusScale` 0, `refRadius` 120,
+`geometry: resident`, `residentTier: near` were already identical, key for key.
+
+**`maxDpr` was being ignored, and that is the sharpness gap.** The texture path
+is identical to the reference once the bake matches - same rungs, and
+`configureTex` agrees line for line down to `anisotropy = 8`, `flipY = false`,
+the colour space, the uv channel and the `KHR_texture_transform` handling. What
+did not match was how many pixels the frame is drawn into.
+`canvas-with-wrapper` hardcoded `dpr={lowPower ? [1, 1.25] : [1, 1.5]}` and
+never read the site file, while the reference passes
+`dpr={[1, activeConfig.maxDpr]}` - **2**. On a 2x display that is the scene
+drawn at 1.5x and upscaled against drawn at native, a 1.33x linear resolution
+deficit across the whole frame, and small high-frequency detail like a container
+logo is where an upscale shows first. No texture rung is involved.
+
+The Canvas reads `stream.render.maxDpr` now, low-power still clamped under it.
+v1 to v4 all author 1.5, so the shared wrapper changing is a no-op for them and
+only v5 moves to 2. `adaptiveDpr` stays **true**: the reference mounts
+`AdaptiveQuality` unconditionally with that same ceiling, so always-on with a
+max of 2 is the match, not a fixed value. `MOBILE.maxDpr` still clamps to 1.5
+and `LOW.maxDpr` to 1, so this lands on desktop only.
+
+**Tone mapping is off in v5, and it is a site key so v4 keeps its own.**
+`world.toneMapping` is `"neutral" | "none"`, omitted meaning `"neutral"`, so
+v1 to v4 are untouched and only v5 carries `"none"`. The reference runs
+`NoToneMapping`; v5 ran `NeutralToneMapping`, which rolls off highlights and
+takes local contrast with them - the washed sky, and edges that read softer than
+the pixels behind them actually are. `lowPower` already forced `NoToneMapping`,
+so this only changes the full-power path.
+
+**It makes `grade.exposure` inert, by design.** `toneMappingExposure` is only
+read *by* an operator, so with none selected the 0.94 does nothing - the same is
+true of the reference's own `gl.toneMappingExposure = 0.8`, which is dead code
+there. `grade.brightness`, `contrast` and `saturation` are a CSS filter on the
+canvas element and still apply; the reference has no such filter, so that is a
+remaining difference, left alone because it is a look decision rather than a
+fidelity one.
+
+**One renderer difference is left.** The reference asks for
+`powerPreference: "high-performance"` and v5 does not, which on a laptop with
+switchable graphics decides which GPU draws. It sits in the shared Canvas with
+no site key, so setting it would move v4 as well; untouched.
+
+**`residentBudgetMB` was tried at 58 and put back to 256.** Their config calls it
+*"inert as this entry stands, because streaming.geometry is resident"*, and in
+their runtime it is. In this one it is not: it is half of `residentCapBytes()`,
+`min(residentBudgetMB, gpuMB + texMB)`, measured by `residentBytes()` against
+**decoded geometry plus every resident texture**, and `updateResident` stops
+mounting at it. That check is the fix from "The resident ceiling was never the
+device's ceiling"; it did not exist when 58 was measured. On a desktop
+`residentRadius()` is `Infinity`, so the resident set is the whole model: 344
+near-tier LODs, **66.7 MB compressed on the wire**, 133 to 267 MB decoded at the
+ratios the manager learns, before textures. If 58 bites, the symptom is
+unmistakable - the far edge of the port simply is not there, and the console
+carries `[stream] resident ceiling reached at N MB of 58 MB (residentBudgetMB)`.
+That is why it is 256 here, and why the 1024 near rung above needs it to stay
+there.
+
+**Three reference keys have no counterpart here.** `cache.limitDecodedMB` (290)
+does not exist in this schema - the equivalent ceiling is
+`resolveBudget().cpuMB`, derived from `navigator.deviceMemory` as 192, 288 or
+448 rather than authored per bake. `render.anisotropy` (8) is matched already,
+hardcoded at `tex.anisotropy = 8` in `configureTex`. `render.fov` (35) is a
+camera key, and v5 authors its cameras per layout in the site file.
+
+**Fog is the one deliberate divergence.** The reference sets
+`render.fog.enabled: false` - *"DISABLED on request"* - and its own note warns
+that the unload boundary then becomes a hard wall, with chunks ceasing to exist
+at `far x unloadBuffer`. v5 keeps `stream.fog` on with `start: "far"`, because
+the whole of "Markers are not in the weather" above is about a marker opting out
+of a fog that exists. Turning it off is a scene decision, not streaming parity.
+
+**The mobile profile stays.** `models.config.json` is defaults-only - there is
+nothing to match. `MOBILE` in `streaming/config.ts` (the rung ceilings,
+`residentTier: far`, `sharpestTier: mid`, `wireBudgetMB: 15`, the distance
+scales, the DPR clamp) is this repo's addition, and everything in section 5
+above depends on it.
+
+**The trade is wire for VRAM, and it is not small in either direction.** ETC1S
+is bigger on the network and far smaller on the GPU - image 1 at the 1024 rung
+is 946 KB as KTX2 against 89 KB as WebP, a 10x download, while resident it is
+~0.7 MB against 5.6 MB, an 8x saving. The phone budget above was priced at
+4 bytes/texel RGBA, so those numbers are now conservative rather than wrong.
+
+**And the 256 clamp is gone on mobile.** `rungFor` returns
+`Math.min(want, WEBP_RUNG_CAP)` only when `this.ktx2` is null. With the KTX2
+bake a phone can finally reach the rung `rungBand` picks for it - `MOBILE.rung`
+caps the near band at 512, so a phone goes **256 -> 512** and now sits at the
+same near rung as the desktop. That is the one place where labels genuinely get
+sharper.
+
+**On a desktop they do not.** KTX2 changes the encoding, not the pixel count.
+Both bakes hold the same 47 low-res images and the same `acmat_*` container
+livery at 256 x 128, so a label read from a metre away is exactly as soft as it
+was. That fix is still the 25 `acmat_*` images re-baked at 1024 from source art,
+and it is in "Not built yet".
+
+### Leaving the dollhouse used to leave the textures behind
+
+**The route opens in the dollhouse, and the dollhouse dresses the whole world at
+128.** `viewMode` is `phase === "firstPerson" ? "firstPerson" : "dollhouse"`, so
+the first thing any visitor loads is the dollhouse config: `forceTier: "far"`
+and **128 on all three rungs**, which is what lets it hold a 12,000 m far band.
+Then the tour drops into first person, where the near rung is 512.
+
+**Both views share one resident set**, which is stated in `buildDollhouse` and
+is the point - nothing is thrown away on the switch. So the same chunk objects
+carry their 128 px textures into first person and have to climb.
+
+**`setConfig` swapped the config and asked for nothing.** The climb was left to
+the ordinary `updateTextures` pass at `texUpgradesPerTick` - **16 a tick at
+`updateHz` 10, 160 chunks a second** - against a resident set of ~650, each one
+a fresh fetch of its 512 rung. Four seconds at the floor, longer on a real
+connection, and because the queue re-sorts nearest-first every tick while you
+are still moving, the surfaces you are walking toward keep being re-prioritised
+rather than finished. The symptom is a first-person view whose near surfaces
+look soft for several seconds after arriving, which is easy to read as a texture
+quality problem and is not one.
+
+There is precedent for the fix in the same file: `retierBurst` already widens
+the **geometry** budget for `BURST_TICKS` after a camera jump. Textures had no
+equivalent, although a view switch invalidates every rung at once where a jump
+only invalidates what moved band.
+
+**`setConfig` now raises a `texBurst` when the rungs actually change.** It
+compares `texRung` per tier against the incoming config, so a `setConfig` that
+only re-resolves `hide` or `pick` costs nothing, and for 30 ticks after a real
+change `updateTextures` runs at `TEX_BURST_SCALE` (4x) its usual budget - 64 a
+tick, 640 a second - draining only while there is a backlog to drain. The set is
+queued inside a second and the rest is the network.
+
+**The burst alone was not enough, because the rung it was racing to was also
+wrong.** `rungBand` read the rung off the chunk's **mounted tier** on desktop -
+`if (this.profile === "desktop") return R[tier]` - on the reasoning that the
+resident tier is `near` and banding could only take sharpness away. That
+reasoning does not survive `resident` mode. `residentBandTier` mounts each chunk
+at its *distance* band, `forceTier` pins the whole model at `far` for a view,
+and `retierResident` climbs back at `retierBudget` **2 chunks a tick** once the
+30-tick burst is spent - 344 real chunks, so **tens of seconds**. Until the
+geometry finished climbing, `R[st.current]` was `R.far` = **128**, and the
+texture pass was dutifully re-dressing everything to the number it was already
+at. Draining a queue faster does not help when the target is wrong.
+
+**The rung is derived from distance now, for every profile.** The desktop
+early-return is gone; `rungBand` falls straight through to the band test
+whenever `geometryMode === "resident"`. A surface 30 m away is dressed at
+`texRung.near` the moment it is 30 m away, whatever LOD it is still wearing.
+This is exactly what the bake's own runtime does - `texRungFor` in
+`LA_PORT_ADAPTIVE` re-derives the band with the same comment about why the tier
+cannot be trusted in resident mode - and it is the difference the screenshots
+were showing.
+
+**In the steady state it changes nothing**, which is why it is safe: once the
+tier has caught up, band and tier agree and both give the same rung. It only
+differs while the two are out of step. Where a chunk lacks its band's LOD it is
+an improvement in both directions - a far chunk that only has a `near` LOD stops
+being dressed at 512, and a near chunk that only has `far` stops being stuck at
+128.
+
+**The climb is warmed before it happens, not just drained faster.** A burst
+only reorders work that still has to cross the network, and the ground rungs
+are **12.7 MB** of KTX2 against the dollhouse's 1.4 MB - that download is what
+the viewer was watching land as the labels sharpened. `ChunkManager.warmTextures
+(target, from)` walks the resident set from the pose the ground view opens at,
+bands each chunk under the *target* config, resolves the same URLs `pickTex`
+will resolve, and hands them to `prefetchUrls` nearest-first - the order
+`updateTextures` will ask for them in. v5's `StreamedModel` calls it once, the
+first time it sees `viewMode === "dollhouse"`, so the wait is spent while the
+tour is still playing and the switch finds the files in cache.
+
+`prefetchUrls` fetches at `priority: "low"` with `cache: "force-cache"`, so the
+dollhouse's own chunks keep the bandwidth and nothing is re-requested. It ran
+strictly one at a time, which could not drain a view's worth of rungs in the
+time the dollhouse is up; it runs **4 in parallel** now. It had no other caller.
+
+**All three changes are in `src/streaming/` or `src/shared/`, so v3 and v4 get
+them too.** They open in
+the dollhouse on the same 128 rungs and have the same climb; there is no version
+of this that is a fix in v5 and correct to withhold from them.
+
+**The reference has neither view, which is why the comparison never showed it.**
+`models.config.json` has no `dollhouse` and no `aerial` block - it is one ground
+config from the first frame, so it dresses at 512 once and never climbs. The
+mode system, and this cost, are this repo's.
+
+### S03 is back on a phone, from closer
+
+**A phone gets its own S03 camera, where its ground profile can see the
+craft.** S03 carries `mobileCamera` beside `camera`: `[-1600.7176, 22, 223.314]`,
+200 units back from the anchor along the desktop shot's bearing and 22 up,
+aimed at the centre of the unauthorised craft - pitch -6.5, yaw +173.3. The
+craft spans 12.8 to 13.0 degrees either side of centre, so it fits a portrait
+frame. `desktop` and `low` keep `camera`, the 589-unit shot, because their
+ground fog does not start until 900.
+
+**`mobileCamera` is a general hotspot key, read in one place.**
+`poseForHotspot(id, mobile)` takes it over `camera` when `mobile` is true and
+the key is authored, and falls through to `camera` otherwise, so every other
+hotspot is unchanged. `isMobileDevice()` in `streaming/config.ts` is
+`detectProfile() === "mobile"` memoised - narrower than
+`isConstrainedDevice()`, because `low` keeps the desktop horizon. `goToHotspot`
+and the debug panel's reset-to-authored pass it; v1-v4 pass nothing and get
+`camera`. The debug panel's copy and write paths still address `camera` only,
+so a CP edited from a phone lands on the desktop shot.
+
+| mobile ground profile, fog 374 -> 534, unload 545 | anchor | craft |
+|---|---|---|
+| `camera` `[-1551.2, 29.8319, -162.32]` | 589, 100% fog | 613 - 634, 100% fog |
+| `mobileCamera` `[-1600.7176, 22, 223.314]` | 200, clear | 228 - 272, clear |
+
+**`mobileCamera` stays in the ground profile on purpose.** The aerial profile is
+chosen by camera height alone - `useCameraAloft`, entering at 40 and leaving
+below 30 - not by `walkable: false`, which only makes the pose a fly pose. Y 22
+is under the exit, so arriving from a high layout camera drops back to the
+ground profile before the flight ends. The shot does not need the aerial
+horizon: the furthest corner of the craft is 102 inside the fog start.
+
+**Nothing new to afford.** The ground disc is the stock 545 m one, and the craft
+is the ~23.6 MB it always was; it was never the cost.
+
+**What came back with it.** `OMITTED_ON_CONSTRAINED` is `[]`, so the S03 row,
+its incident `SEC-DEMO-0043`, its geofence and its marker are on every device,
+and `WorldModels` no longer checks `isConstrainedDevice()`. The gate is kept,
+empty, as the way to take a row off constrained devices again.
+
+The rest of this section is how the gate works when the list is not empty.
 
 **It is filtered once, at the table, not at each consumer.** `OMITTED` is built
 at module scope and the store's seed drops the row from `seedHotspots`; markers
@@ -908,9 +1294,9 @@ rule of their own. `SECURITY_EVENT_GROUPS` is filtered from the authored
 `AUTHORED_EVENT_GROUPS`, which carries `SECURITY_SOURCES`, `SECURITY_EVENTS` and
 `isFieldHotspot` with it.
 
-**The incidents go too, which is the part with a visible consequence.**
-`SEC-DEMO-0043` is S03's, so *the layer opens with two incidents open* is a
-desktop sentence: **a phone opens with one.** `SEED_INCIDENTS`, `SEED_HISTORY`
+**The incidents go too, which is the part with a visible consequence.** While
+S03 was on the list, `SEC-DEMO-0043` went with it and a phone opened with one
+incident instead of two. `SEED_INCIDENTS`, `SEED_HISTORY`
 and `SEED_AUDIT` are the filtered seeds, used by the initial state and by both
 `reset` and `resetToSeed`. Audit rows are dropped by `incidentId` as well as
 `hotspotId`, because only the first two rows of an incident carry the hotspot,
@@ -929,12 +1315,9 @@ S03-derived reaches the DOM before `isReady`, which is client-only state, and
 the markers and the craft are scene children rather than markup. A future caller
 that gates DOM on it needs its own client-only gate.
 
-**`worldModels` is now gated on the device, though still not on S03.** See *The
-unauthorised craft is world furniture*: the craft is in the water whether or not
-anyone is looking at the waterside hotspot, and that is still true on a desktop.
-On a phone the list is skipped wholesale, so a second entry added later would be
-skipped with it - which is right while the list is one ship, and the thing to
-revisit if it stops being.
+**`worldModels` is not gated on the device or on S03.** See *The unauthorised
+craft is world furniture*: the craft is in the water whether or not anyone is
+looking at the waterside hotspot, on every device.
 
 **THE ENABLED SET IS ALWAYS UP.** No row carries an `enabled` flag in
 `v5.json`. The six field anchors are unioned into the marker set after every rule
@@ -1086,15 +1469,15 @@ Below `sm` the card comes in on every axis:
 
 | | full | phone |
 |---|---|---|
-| width | `min(620, 100vw-32)` | `min(340, 100vw-40)` |
-| height cap | `min(80dvh, 100dvh-32)` | `72dvh` |
-| padding | 24 | 16 |
+| width | `80vw` | `80vw` |
+| height | `80dvh` (fixed) | `80dvh` (fixed) |
+| padding | 28 | 16 |
 | corner | 14 | 12 |
 | title / subtitle | 18 / 13 | 15 / 11 |
 | field label / value | 10.5 caps / 18 | 10 caps / 15 |
-| row padding | 9 | 6 |
+| row padding | 13 | 6 |
 | alert title / detail | 11 caps / 14 | 10 caps / 12.5 |
-| column gap | 32 | 20 |
+| column gap | 40 | 20 |
 
 `PanelHeader` is shared with the destination panels, which are the width of the
 flap and have the room, so the compaction is an opt-in **`dense`** prop that only
@@ -1385,8 +1768,25 @@ before. Only v4 and v5 call `setOneShotClips` and `setLoopsRunning`.
 `HotspotConfig.image` is a URL under `public/`. When a hotspot has one, the
 popup puts it **inside the card, beside the readings, turned 13 degrees off the
 screen** with its far edge pinned - a surface with depth rather than a picture
-lying flat on the panel. The card keeps its ordinary 620 width and nothing hangs
-outside it.
+lying flat on the panel. The plane is **280 x 224** inside the card's 760.
+
+**Its rendered box is not its layout box, and that is what put a scrollbar in
+S01.** `perspective: 1100px` with `rotateX(2deg)` makes the near edge larger
+than the far one, so the painted plane stands about **7% taller** than the
+224px it occupies in the grid - measured, not estimated: 237.4px painted
+against a 224px track. Scrollable overflow counts transformed descendants, so
+the moment the still was the tallest thing in its column the body's
+`overflow-y-auto` saw a few pixels it could not fit and drew a bar over a card
+with nothing to scroll. It got worse as the plane grew: 9px of phantom overflow
+at 320px wide, 12px at 360.
+
+**The wrapper absorbs the bleed instead of the scroll container.** The
+`[perspective:1100px]` div is `overflow-hidden p-2` now. The 8px of padding is
+more than the ~2px the plane needs vertically and the ~5px it needs to the
+left at this size, so nothing is actually clipped - `overflow-hidden` is the
+guarantee that the figure can never contribute overflow again whatever the
+width, and the padding is what keeps that guarantee from costing anything. Both
+numbers were read off a probe of the real transform, not guessed.
 
 | | |
 |---|---|
@@ -1845,17 +2245,19 @@ The 24h aggregates go because a card read in three seconds is not where a day's
 total belongs. Every `eventOnly` row is untouched: an event still lights the
 card up with its detected class, its confidence and its severity.
 
-**Six readings are two columns and three rows**, which puts the card back at the
-ordinary `min(620px, 100vw - 32px)` - no clip-specific width, no four-column
-rule - with the feed centred at 440 x 248 inside 572 of body. About **556px**
-tall, so nothing scrolls above a 720px window.
+**Six readings are two columns and three rows**, which drops the clip-specific
+width and the four-column rule: S04 and S06 take the same `min(760px, 100vw -
+32px)` as every other security card, with the feed centred at **520 x 293**
+inside 712 of body. Nothing scrolls on an ordinary desktop window.
 
 ### S07 could not scroll on a phone on its side
 
 The dashboard card is the one popup that does **not** scroll as a whole: its
 body is `flex flex-col overflow-hidden` so the capability lines and counters
-stay put while the incident list scrolls inside itself. Two things decided that,
-and both asked the same width-only question:
+stay put while the incident list scrolls inside itself. (The card's own height
+is a `max-h` - see "A security card is bigger than an operational one" - so
+that inner scroll starts only once the card has run out of room.) Two things
+decided that, and both asked the same width-only question:
 
 - the body carried a `max-sm:block max-sm:overflow-y-auto` escape - `max-sm` is
   `max-width: 640px`
@@ -1863,10 +2265,9 @@ and both asked the same width-only question:
   `const phone = useMediaQuery("(max-width: 639px)")`
 
 **A phone on its side is 844px wide.** Neither test fired, so the body could not
-scroll and the list did not think it had to either - with the `Current` tab and
-a handful of rows, `scrolls` is false and the list is `overflow-hidden`. Nothing
-scrolled, and anything past the fold was unreachable. It is the primary way this
-experience is watched.
+scroll and the list did not think it had to either - with a handful of rows the
+list was `overflow-hidden`. Nothing scrolled, and anything past the fold was
+unreachable. It is the primary way this experience is watched.
 
 **A hand-held screen is narrow OR short.** `HANDHELD_MEDIA_QUERY` in
 `shared/responsive.ts` is `(max-width: 639px), (max-height: 540px)` - a media
@@ -1878,6 +2279,261 @@ one device from two sides, and a rule written with only the first is a rule that
 does not apply in landscape. Anything asking "is this a phone" should ask
 `useIsHandheld()`; `useIsMobile()` is a different question (below 1024) and is
 left alone.
+
+### A security card is bigger than an operational one
+
+The card is one component and three sizes, picked by which table the row came
+out of. `isSecurity` is `!!securityById[hotspotId]` - the same lookup that
+resolved the hotspot a few lines above, so a card is wide because its row is in
+`securityHotspots[]`, not because someone listed ids:
+
+| | width | height |
+|---|---|---|
+| operational hotspot | `min(620, 100vw-32)` | `max-h: min(80dvh, 100dvh-32)` |
+| S01 - S07 | `80vw` (min and max too) | `h: 80dvh`, `80vh` where `dvh` is unsupported |
+
+**Every security card is 80% of the screen** (it was 70% first). The 760 / 880 caps below were
+retired for `80vw` wide and `80dvh` tall, the same for S07 as for
+S01 - S06, on every screen: no `max-sm:` or `short:` override, and a security
+card skips the `short:scale-[0.85]` shrink that would take it under 80%. The
+height is a fixed `h`, so every card is the same 80% box and its body scrolls
+inside when it holds more. The width is pinned with `min-w` and `max-w` as
+well, and the height falls back to `80vh` behind `supports-[height:100dvh]:`,
+because iPadOS Safari before 15.4 drops a `dvh` value entirely and the card
+would otherwise collapse to its content.
+
+**A fixed full-screen card was tried and backed out.** A card of
+`100vw-48 x 100dvh-48` left most of its glass empty, and filling it by
+stretching the readings (first as `1fr` rows, then as tiles) spread them too
+far apart.
+
+**Operational hotspots take the same 80% box, and nothing else.** Every
+non-poster popup - the 30 operational hotspots as well as S01 - S07 - is
+`80vw x 80dvh`, without the `short:scale-[0.85]` shrink (that now applies to a
+poster card only; v5 has none). Inside, an operational card is exactly what it
+was: `PanelHeader`, the alert banner, the journey, and the two-column `Field`
+grid at its original sizes. `CARD_SCALE`, `CardHeader` and `HotspotBody` are
+security-only. Giving operational cards the security layout was tried and
+backed out - the ask was a bigger popup, not a new design for them.
+
+### Inside the 80% box: the designed layout
+
+The layout was drawn first as a design canvas, one artboard per hotspot, and
+then built. It applies to every security card on every screen - desktop,
+iPad and phone - inside the same 80% box (`designed` for S01 - S06); the older
+single-column flow with `SourceIncidents` is no longer reached by a security
+card. The header gains a `badge` - `S01 · Access Control` - in
+`CardHeader` (below), hidden below `md`.
+
+**Media and readings stay side by side on every screen.** Below 1024px or on
+a hand-held screen (`stacked = useIsHandheld() || useIsMobile()`) the media card
+only rebalances its grid from `1.45fr / 1fr` to `1fr / 1.15fr`, giving the
+readings the wider share; the readings column scrolls inside itself, and a
+`ReadingRow` wraps its value under its label when the column is too narrow for
+both on one line. `stacked` otherwise only decides whether S07 goes side by
+side. The paragraph below is the stacked design this replaced.
+
+**Below 1024px, or on a hand-held screen, the card stacked** (`stacked =
+useIsHandheld() || useIsMobile()`). An 80% card on an iPad in portrait is about
+615px wide and on a phone about 310px, so the side-by-side grid gives way to
+one scrolling column: the media first, at its own aspect ratio (the clip's
+`width / height`, `16 / 9` for a still), then the hero tile, the readings and
+the alerts. The identity strip and the stat tiles use `repeat(auto-fit,
+minmax(120px | 84px, 1fr))`, so they run three or four across on a desktop
+and wrap to fewer on a narrow card without a breakpoint of their own. S07 goes
+side by side (`centreWide`) only when not stacked; stacked, its body is one
+block that scrolls.
+
+**Type and spacing are one fluid scale, not breakpoints.** `CARD_SCALE`
+sets CSS variables on the security card's root - `--fs-title`, `--fs-sub`,
+`--fs-label`, `--fs-value`, `--fs-hero`, `--fs-stat`, `--fs-ident`, `--fs-row`,
+`--fs-meta`, and `--sp-pad`, `--sp-gap`, `--sp-tile`, `--sp-row` - each a
+`fluid(phone, desktop)` clamp that runs linearly from its phone size at a
+390px `vmin` to its desktop size at 900px:
+
+| | phone | desktop |
+|---|---|---|
+| title / subtitle | 12.5 / 9.5 | 22 / 13.5 |
+| label (caps) | 8 | 11.5 |
+| reading value | 10.5 | 17 |
+| hero / stat / ident | 13 / 16 / 10.5 | 28 / 38 / 18 |
+| incident type / meta | 10 / 8.5 | 15 / 12 |
+| card padding / gap / row | 10 / 7 / 4 | 28 / 20 / 12 |
+
+The phone end was cut down a second time: at the first values a phone card
+read too large for a box 80% of a phone wide, and the side-by-side layout needs
+the smaller type to fit both columns. The alert list caps at 96px instead of
+152px below `sm` and on a `short:` screen.
+
+It keys on `vmin`, not `vw`, so a phone on its side (844 x 390) sizes like a
+phone and an iPad either way up (768 short side) sits near the desktop end.
+The card's padding is `var(--sp-pad)` inline. Every security component -
+`CardHeader`, `HeroTile`, `ReadingRow`, `IdentCell`, `StatTile`,
+`FieldAlerts`, `IncidentLine`, `SystemCell`, `SectionLabel` - reads the
+variables, with the old desktop size as the fallback, and their `max-sm:` /
+`short:` size overrides are gone. The header is `CardHeader` rather than
+`PanelHeader`, whose own breakpoint sizes would fight the scale; `PanelHeader`
+is untouched.
+
+**No security text is cut with an ellipsis.** On an iPad the narrower columns
+were truncating values, incident types and system states to `…`. Every
+`truncate` in the security card became `break-words` (hero, identity cells,
+system cells, incident lines and their detail strip, the log rows, the filter
+labels) and the subtitle lost its `line-clamp-2`: a long value takes a second
+line instead of losing its tail.
+
+**S01, S02, S04, S06 - a card with media** (`HotspotBody`, media branch)
+is a `1.45fr / 1fr` grid at full body height:
+
+- left: the media fills its cell. A still is a `StillPanel` (no panel behind it: the
+  image sits straight on the card's glass, `object-contain` to the cell's
+  edges, the hotspot name as a tag, `sizes` `STILL_PANEL_SIZES`); a clip is `ClipBlock` with `panel`, full height,
+  `object-contain`, with no dark backing or border behind it (the video sits on
+  the card's glass like the still), badges and pause button unchanged
+- right, top: a `HeroTile` for the headline reading - the first of
+  `HERO_FIELDS` (`security_status`, `risk_state`, `incident_status`,
+  `event_type`, `zone_status`) the card has - with a glowing tone dot and the
+  value in caps. It carries no note: the identity reading beside it repeated
+  a row below and was taken out
+- right, middle: every other reading as a `ReadingRow`, label left and value
+  right, scrolling inside itself
+- right, bottom: `FieldAlerts`
+
+**S03, S05 - a card without media** is one column: the alert banner (S03), the
+`HeroTile` (none when the card has an `alert`), an identity strip of every
+non-numeric reading (`IdentCell`), a row of `StatTile`s for every numeric one
+(38px numbers, up to four across), then `FieldAlerts`.
+
+**`FieldAlerts`** is the alerts block at the bottom of every field card: the
+hotspot's open incidents as `IncidentLine`s (selecting one picks which
+incident's readings the card shows, as `SourceIncidents` did), else its most
+recent closed record under "Recent alerts", else a dashed "No open alerts".
+It has no audit-log button; the log is reached from S07.
+
+**S07** is two columns, `1fr / 1.45fr`: `SecurityCommandView` with `wide`
+(systems two across, then the four counters - active, critical, high, medium -
+as `StatTile`s pinned to the bottom) beside `SecurityIncidentCentre` with
+`flush`, which drops its top margin so both columns start level.
+
+### No clock times or ages in the security layer
+
+**Nothing in the security UI prints a time.** The time column came out of
+`IncidentLine` and the age column out of `IncidentRow`; the expanded record
+lost `Event time` and `Closed in`; the audit log lists its lines without
+stamps. `formatAgo`, `formatClock`, `parseDemoTime` and `closedDuration` were
+deleted with them. On a security card the time readings - `event_time`,
+`detection_time` and `duration`, listed in `TIME_FIELDS` - are filtered out of
+the fields as well, so an event no longer adds them. The stamps are still
+stored and still order the queue and the log; only their display is gone.
+Operational hotspots are untouched.
+
+The history that follows is how the capped sizes were reached.
+
+**The frame grew and so did what stands in it**, because a wider card holding
+the same small picture reads as an emptier card, not a bigger one. The clip
+feed's cap went 440 -> **520**, and the turned still 250 -> **280** with its
+`sizes` hint moved with it. The field grid needed nothing: it was already two
+columns that stretch.
+
+**760 and 880 are a second pass, not the first numbers.** 880 and 1040 were
+tried first and read as too much - a field grid of four readings does not earn
+that much glass, and the still had to grow past the point where its own
+perspective bleed started a scrollbar (see "The still stands in the card as a
+turned plane"). One step back from there is the size that is clearly bigger
+than the 620 it started at without the card becoming the screen.
+
+**Past that, the card grows by spacing, not by width.** Width buys columns and
+the columns were already there; what a card of four readings actually lacked
+was air between them. So the third pass left 760 and 880 alone and turned up
+the gaps, which makes the card taller as a side effect rather than wider. Two
+of the knobs are shared with operational cards, so they are CSS variables read
+with a fallback and set only on a security card's root - `--hs-row-y` on
+`Field`'s `py`, `--hs-gap-x` on the field grid's `column-gap`. Everything else
+in the list below belongs to a security-only component and is set directly:
+
+| | was | now |
+|---|---|---|
+| card padding | 24 | 28 |
+| field row padding (`--hs-row-y`) | 9 | 13 |
+| field column gap (`--hs-gap-x`) | 32 | 40 |
+| system cell padding / gap | 9 / 3 | 13 / 4 |
+| system grid column gap | 18 | 26 |
+| incident row padding / gap | 10 x 14 / 14 | 13 x 16 / 16 |
+| incident row spacing | 6 | 8 |
+| detail strip padding | 14 x 12 | 16 x 16 |
+| alert banner padding / margin | 14 x 12 / 16 | 16 x 14 / 20 |
+| queue dialog padding | 20 | 24 |
+
+**Each one kept its phone value.** The variables fall back to the old numbers
+and `max-sm:`/`short:` restate them, so a phone is pixel-for-pixel what it was
+before this pass - the extra air is desktop only, for the same reason the width
+is. This is the rule the type scale already follows: see "Every popup size has
+a phone size".
+
+**The phone sizes are untouched.** `max-sm:` still comes in at
+`min(340, 100vw-40)` and `72dvh`, `short:` still scales the whole card to 0.85,
+and the clip's `short:w-[calc(100vw-24px)]` moved out of the width ternary into
+its own clause so it survives the security branch. On a phone the viewport is
+the constraint and 880 was never going to be reachable; this is a desktop
+change only.
+
+**Every height is a `max-h`, including S07's.** The dashboard was the one card
+with a fixed `h-`, from when it was the only one tall enough to need its own
+scroll geometry, and at 92dvh that reserved most of the screen whether the
+content wanted it or not - a card of six capability lines, four counters and
+five incident rows, stretched to fill, with dead glass under the detail strip.
+It is `max-h` now: the card is as tall as what it holds and reaches 92dvh only
+when the queue is long enough to want it.
+
+**Nothing below it needed changing to make that work.** The chain from the card
+down to the incident list is `flex-1 min-h-0` at every level, and a column flex
+container with an `auto` height sizes to the sum of its items' contributions -
+`flex-basis: 0` does not collapse it. So the same classes that divided a fixed
+height now measure a content one. The one thing that did move is the empty
+state, which was `flex-1` and stretched to the full card: it is `py-6` now, a
+box the size of the sentence in it. What the content height then exposed - that
+it was not the same on both tabs - is the section after next.
+
+### The dashboard is the same height on both tabs
+
+`max-h` made the card fit its content, which exposed the next problem: the
+content was a different height on each tab, so `Current` -> `Past` resized the
+popup under the pointer. Two things caused that and both are gone.
+
+**The queue is no longer capped; it scrolls.** `Past` holds more records than
+fit, and the five-row cap clipped them with no way to reach the rest in the
+card. `QueueBody` renders every row now, its list is `overflow-y-auto` inside
+a `grid-rows-[minmax(0,1fr)]` cell (the S07 two-column grid got the same, so a
+grid item can shrink below its content), and the detail strip stays pinned
+under it. The `N more records` button, `MAX_QUEUE_ROWS`, the invisible
+off-tab twin and `offRows` are gone: with the card a fixed 80% box, the height
+no longer depends on the content, so there was nothing left for the twin to
+hold steady. `IncidentQueueDialog` is still in the file but nothing opens it.
+
+The paragraphs that follow describe the earlier capped design.
+
+**The queue is capped on both tabs now, not just `Current`.** `scrolls` was
+`tab === "past" || phone`, so `Past` rendered every record and scrolled while
+`Current` rendered five and did not - a five-row card against a 92dvh one. It
+is `phone` alone now: on a desktop both tabs show `MAX_QUEUE_ROWS` and the
+`N more records · show the full queue` button, and the full list is where it
+always was, in `IncidentQueueDialog`. The list's middle overflow branch went
+with it - it is `overflow-visible` on a phone and `overflow-hidden` otherwise.
+
+**The other tab is rendered too, invisibly, so the card is sized by the taller
+of the two.** `QueueBody` is the extracted block - empty state, rows, overflow
+button, detail strip - and `SecurityIncidentCentre` renders it twice into one
+CSS grid cell (`col-start-1 row-start-1` on both), the live one over an
+`aria-hidden invisible` copy fed the off tab's rows. A grid row is as tall as
+its tallest item, so the height is the max over both tabs and does not move
+when you switch. `visibility: hidden` keeps the copy out of the tab order and
+the a11y tree, and capping the rows first is what keeps it cheap - the ghost is
+never more than five rows and a strip.
+
+`queueOf(base)` is the filter-and-sort lifted out of the old `rows` memo so
+both tabs go through the same one; `rows` and `offRows` are two calls to it.
+The ghost selects its own first row, so it carries a detail strip of
+representative height rather than none.
 
 ### Every popup size has a phone size
 
@@ -2066,9 +2722,21 @@ operator is one of the things inside the drawn limit.
 
 `SiteConfig.worldModels` - a list of GLBs mounted with the scene and never
 taken down, authored in world coordinates like the geofence. v5 carries one,
-`…/glb/la-port-zone-c5-unauthorised-ship-optimized.glb`: 1.6 MB, Draco
-geometry and WebP textures, one node at `[-1627.84, -5.73, 450.37]`, 91
-primitives over 91 materials and 38 images.
+`…/glb/la-port-zone-c5-unauthorised-ship-optimized.glb`: **0.99 MB** on the
+wire, Draco geometry and WebP textures, one node at `[-1627.84, -5.73, 450.37]`,
+**35 primitives over 35 materials and 26 images**, 204,862 verts / 110,126 tris.
+`KHR_mesh_quantization` as well as Draco, `glTF-Transform v4.5.0`.
+
+**Decoded it is ~23.6 MB, and that is the number that matters.** 19.0 MB of
+texture - 26 images, none above 512, priced RGBA + mips the way
+`textureBytes()` prices them - and 4.58 MB of vertex and index buffers. It is
+mounted outside the streamer, so **none of it is counted in `residentBytes()`**
+and no budget in `ChunkManager` sees it. 35 primitives over 35 unshared
+materials is 35 draw calls.
+
+*(Re-optimised on 2026-09-22 from the 1.6 MB / 91-primitive / 38-image bake the
+earlier figures here described. The `public/` pruning note above still quotes
+1.6 MB because that records what was deleted at the time.)*
 
 It is **not** gated on S03, which is the difference between it and the zone.
 The craft is in the water whether or not anyone is looking at the waterside
@@ -2077,10 +2745,9 @@ is also why the two are separate GLBs - the combined bake would have put the
 ship inside `ZoneGeofence`, where the material pass would have painted all 91
 of its materials green.
 
-**It IS gated on the device.** `WorldModels` returns null when
-`isConstrainedDevice()` - so the whole list is skipped on `mobile` and `low`,
-and 91 primitives, 91 materials and 38 images never reach a phone. See *S03 is
-not on a phone*: the row that gave the craft its meaning is not there either.
+**It is not gated on the device.** It was while S03 was off phones; the 35
+primitives, 35 materials and 26 images - ~23.6 MB decoded - load on every
+device now. See *S03 is back on a phone, from closer*.
 
 `WorldModels` takes the draco path, stubs `raycast` on every mesh, and refcounts
 through `acquireGLTF`/`releaseGLTF` like every other loader here.
@@ -2126,6 +2793,21 @@ the component memoises a `THREE.Color` per value.
 **It does not track `zone_status`** - S03's card says ALARM while its zone draws
 green, and if a zone is ever meant to answer to its reading, that is a rule to
 write rather than a colour to pick.
+
+**It is first-person furniture, and is now mounted like it.** `ZoneGeofence`
+draws while `hotspotInfo.hotspotId ?? selectedHotspotId` names a hotspot that
+carries a `geofence`, and closing the card clears only the first of those - the
+selection is meant to survive, so the anchor stays picked. That is right in the
+ground view and wrong the moment the view changes: open S03, close it, go up to
+the dollhouse, and the green box was still lying in the water under an overview
+that has no anchors in it at all.
+
+The mount was `!activeFloor?.interior` alone, while `HotspotMarkers` two lines
+above it had always been `!activeFloor?.interior && viewMode === "firstPerson"`.
+A zone is the same kind of thing as a marker - an annotation on the world for
+someone standing in it - so it carries the same gate now. Nothing about the
+selection changed: come back down and the zone is there again, because the
+anchor is still the one that is picked.
 
 | | |
 |---|---|
@@ -2383,7 +3065,8 @@ both taking the live path and being read as UTC against event times read as
 local. It writes the authored shape now, which fixes a timezone skew between a
 record and its own log that nothing had noticed.
 
-**`formatClock` and `formatStamp` became `formatAgo`.** `4:21 PM` is a fact
+**`formatClock` and `formatStamp` became `formatAgo`** (since removed: see "No
+clock times or ages in the security layer"). `4:21 PM` is a fact
 about a rehearsal, not about the run being watched: it is wrong by a few hours
 for most of the day, and it is the one reading in the card that a viewer can
 check against their own clock and catch out. `18 min ago` / `3 hr ago` /
@@ -2611,8 +3294,8 @@ A row expands in place to the §4 field set, which is the shape of one incident
 rather than of the card. It is a tinted block **inside** the row rather than a
 section under it: the tint says the readings belong to the row above, where a
 dividing line made them look like the next thing in the list. Its fields are
-Record, Type, Severity, Status, Source, Source ID, Location, Event time, Assigned
-team and, on a closed record, **Closed in**.
+Record, Type, Severity, Status, Source, Source ID, Location and Assigned team.
+`Event time` and `Closed in` were removed with every other time reading.
 
 Status replaced **Acknowledged**, which was the same fact told twice: acknowledging
 is what moves an incident to INVESTIGATING. `Closed in` is MEASURED from the
@@ -2729,9 +3412,10 @@ of them were *glanceable*, which on the one card meant to answer "is anything
 wrong" is the whole job.
 
 **Everything came up one step, and the card came out wider.** The security
-centre is `min(720px, 100vw - 32px)` against every other card's 620, because six
-two-column capability lines at a readable size do not fit 620 without wrapping
-the state off the end of the label. The rest, in order of how much it moved:
+centre is `min(880px, 100vw - 32px)` against every other security card's 760,
+because six two-column capability lines at a readable size do not fit 620
+without wrapping the state off the end of the label. The rest, in order of how
+much it moved:
 
 | | before | now |
 |---|---|---|
@@ -2782,7 +3466,7 @@ row - and `AI Anomaly / Unattended Object` had no chance in it. The seven are
 `Access Control`, `Container Screening`, `Waterside Perimeter`, `Video
 Analytics`, `Restricted Zone`, `Unattended Object` and `Security Dashboard`.
 `popupTitle` is untouched and still carries the full name, because the card
-header has 720px and a truncated heading is the one place a long name actually
+header has 880px and a truncated heading is the one place a long name actually
 costs something. `SECURITY_EVENT_GROUPS[].title` took the same six, so the
 **All sources** filter and the Resources row say the same word for the same
 hotspot.
@@ -2828,6 +3512,27 @@ accounted for.
 nothing generates events yet, so there is nothing true to put in them.
 
 ---
+
+### The feeds are fetched before they are asked for
+
+S04 and S06 play `s04-video.mp4` (990 KB) and `s06-video.mp4` (660 KB) from
+S3. A `<video>` only starts downloading when the popup mounts, so every first
+open waited on the network, and `s04-video.mp4` is not fast-start (its `moov`
+index sits after `mdat`), which costs a further round trip to the end of the
+file before the first frame.
+
+`StillPreload`, once `ready` (the loader is done), calls `warmClip` for every
+`clip.url`: one `fetch` per URL, the body kept as a `Blob` and exposed as an
+object URL in `clipBlobs`, with the in-flight promise in `clipLoads` so nothing
+is fetched twice. The bucket answers `Access-Control-Allow-Origin: *`, which is
+what lets a `fetch` read it. `ClipBlock` takes its `src` from `useClipSrc`:
+the object URL when the clip is warm, nothing while its fetch is still in
+flight (then the object URL when it lands, so the open does not start a second
+download), and the plain S3 URL when no warm-up was started or it failed.
+
+Re-encoding `s04-video.mp4` fast-start (`-movflags +faststart`) would still
+help the cold path - a popup opened before the loader finishes - but is an
+asset change outside this repo.
 
 ## 7. Supporting changes
 
@@ -2988,13 +3693,10 @@ Tracked here so the gap is explicit:
   which reads, but it is not the card the studies chose. Four renders, one per
   capability, is the whole of the gap.
 
-- **S03 has no phone equivalent, only an absence.** It is dropped on `mobile`
-  and `low` because its 589-unit shot needs a horizon a phone cannot afford -
-  see *S03 is not on a phone*. A re-authored `cp_016` standing near the quay
-  would make the craft visible inside the stock 545 m disc, at which point the
-  row, the geofence and `worldModels` could all come back and
-  `OMITTED_ON_CONSTRAINED` would empty. Until then a phone is a five-marker,
-  one-incident demo and the two do not match.
+- **S03's `mobileCamera` is not checked on a real phone yet.** The numbers say
+  the craft is clear of fog and inside the 545 m disc; what is unconfirmed is
+  the framing at a portrait aspect, and that nothing in the stream stands
+  between the camera and the craft.
 
 - **`stream.mobileFarScale` is now a lever nothing pulls.** Still read by
   `mobileProfile` and still in the schema; no site file sets it. It is safe to

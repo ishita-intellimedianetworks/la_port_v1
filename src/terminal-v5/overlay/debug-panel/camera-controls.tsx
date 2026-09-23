@@ -22,6 +22,7 @@ import {
   saveAnchor,
 } from "./anchor-json";
 import type { Vec3 } from "@/config/schema";
+import { isMobileDevice } from "@/streaming/config";
 
 const DEG = 180 / Math.PI;
 const RAD = Math.PI / 180;
@@ -177,7 +178,9 @@ export default function DebugCameraControls() {
     if (!ctrl || !target) return;
 
     const pose =
-      target.kind === "hotspot" ? site.poseForHotspot(target.id) : site.poseForLayout(target.id);
+      target.kind === "hotspot"
+        ? site.poseForHotspot(target.id, isMobileDevice())
+        : site.poseForLayout(target.id);
     const [x, authoredY, z] = pose.position;
     const h = eyeHeight();
     const footGuess = authoredY ? authoredY - h : 0;

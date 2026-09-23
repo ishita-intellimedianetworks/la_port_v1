@@ -672,7 +672,7 @@ const AUTHORED_EVENT_GROUPS: SecurityEventGroup[] = [
   },
 ];
 
-const OMITTED_ON_CONSTRAINED: readonly string[] = ["S03"];
+const OMITTED_ON_CONSTRAINED: readonly string[] = [];
 
 const OMITTED: ReadonlySet<string> = new Set(
   isConstrainedDevice() ? OMITTED_ON_CONSTRAINED : [],

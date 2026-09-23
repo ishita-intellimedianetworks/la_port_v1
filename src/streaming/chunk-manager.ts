@@ -9,6 +9,7 @@ import type { Manifest, ChunkEntry, MaterialDef, TexManifest, TexSlot } from "./
 import type { StreamHideRule } from "@/config/schema";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
 import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
+import { prefetchUrls } from "@/shared/runtime/prefetch";
 
 interface ChunkState {
   entry: ChunkEntry;
@@ -185,9 +186,13 @@ export class ChunkManager {
    *  racing a loading screen, a re-tier costs a decode against a live frame. */
   private retierBudget = 2;
   private retierBurst = 0;
+  /** Ticks of widened texture budget left. A view switch retunes every rung at
+   *  once, which `texUpgradesPerTick` is not sized for — see `setConfig`. */
+  private texBurst = 0;
   private _prevCam = new THREE.Vector3(NaN, NaN, NaN);
   private static readonly JUMP_METRES = 50;
   private static readonly BURST_TICKS = 30;
+  private static readonly TEX_BURST_SCALE = 4;
   /** Backlog of chunks wanting a sharper tier or rung — see `StreamStats.dressing`.
    *  Written by the two passes that drain it, read only by `stats()`. */
   private retierWanted = 0;
@@ -342,8 +347,58 @@ export class ChunkManager {
     });
   }
 
+  /** Warm the HTTP cache with the rungs another view is about to ask for.
+   *  The dollhouse dresses the world at `far` and then sits there while the
+   *  tour plays; the switch to first person re-dresses every chunk at once and
+   *  then waits on the network for every file. Fetching them at low priority
+   *  from the pose they will be wanted at, while nothing else needs the
+   *  connection, turns that wait into a cache hit. Ordered nearest-first for
+   *  the same reason `updateTextures` is: the files arrive in the order the
+   *  switch will ask for them. */
+  warmTextures(target: StreamingConfig, from: THREE.Vector3): void {
+    const rows: { c: ChunkEntry; d: number }[] = [];
+    for (const st of this.states.values()) {
+      if (!st.entry.lods.length || this.hidden.has(st.entry.id)) continue;
+      const d = this.surfaceDist(from, st.entry);
+      if (d >= target.textureDist) continue;
+      rows.push({ c: st.entry, d });
+    }
+    rows.sort((a, b) => a.d - b.d);
+
+    const seen = new Set<string>();
+    const urls: string[] = [];
+    for (const { c, d } of rows) {
+      const tier: Tier =
+        d < target.nearDist ? "near" : d < target.midDist ? "mid" : "far";
+      if (!target.texturedTiers.includes(tier)) continue;
+      const px = target.texRung[tier];
+      const fmt = target.texFormat?.[tier] ?? "auto";
+      for (const mi of c.materials) {
+        const def = this.materials[mi];
+        if (!def) continue;
+        const T = def.textures;
+        for (const slot of [T.baseColor, T.normal, T.metallicRoughness, T.emissive]) {
+          if (!slot) continue;
+          const pick = this.pickTex(slot, px, fmt);
+          if (!pick || seen.has(pick.url)) continue;
+          seen.add(pick.url);
+          urls.push(this.assetBase + pick.url);
+        }
+      }
+    }
+    prefetchUrls(urls);
+  }
+
   setConfig(cfg: StreamingConfig) {
+    const rungsChanged =
+      !this.cfg || TIER_ORDER.some((t) => this.cfg.texRung[t] !== cfg.texRung[t]);
     this.cfg = cfg;
+    // A view switch invalidates the rung on EVERY resident chunk at once - the
+    // dollhouse dresses the world at `far` and first person wants `near` - and
+    // `texUpgradesPerTick` is sized for a camera drifting, not for that. Without
+    // this the whole model climbs back at 16 a tick and the near surfaces are
+    // the last thing to look right, long after the move is over.
+    if (rungsChanged) this.texBurst = ChunkManager.BURST_TICKS;
     this.effUnload = cfg.unloadDist;
     // Re-resolved, not carried over: `hide` is per view, so the dollhouse's
     // backdrop planes come back on the next tick through the normal path.
@@ -429,7 +484,9 @@ export class ChunkManager {
     this.retexWanted = upgrades.length + flips;
     if (upgrades.length) {
       upgrades.sort((a, b) => a.dist - b.dist);
-      const perTick = Math.max(1, this.cfg.texUpgradesPerTick);
+      const base = Math.max(1, this.cfg.texUpgradesPerTick);
+      const perTick = this.texBurst > 0 ? base * ChunkManager.TEX_BURST_SCALE : base;
+      if (this.texBurst > 0) this.texBurst--;
       for (let i = 0; i < Math.min(perTick, upgrades.length); i++) {
         const u = upgrades[i];
         this.retexture(u.st, true, this.rungFor(u.st.current!, u.st.entry));
@@ -792,9 +849,16 @@ export class ChunkManager {
 
   private rungBand(tier: Tier, c?: ChunkEntry): number {
     const R = this.cfg.texRung;
-    // Desktop is exempt: its resident tier is `near`, already the sharpest rung
-    // on every chunk, so banding it would only take sharpness away.
-    if (this.profile === "desktop") return R[tier];
+    // In `streamed` mode the mounted tier IS the distance band, so the rung
+    // follows from it. In `resident` mode it is not, and reading the rung off
+    // the tier there ties the texture to whatever geometry happens to be
+    // mounted: `forceTier` pins one for a whole view, and `retierResident`
+    // climbs back at `retierBudget` chunks a tick, so after leaving the
+    // dollhouse the tier lags the camera by tens of seconds and the rung lagged
+    // with it. The band is re-derived from distance instead, so a near surface
+    // is dressed at the near rung the moment it is near, whatever LOD it is
+    // still wearing. No profile is exempt — this is what the bake's own runtime
+    // does in `texRungFor`.
     if (this.cfg.geometryMode !== "resident" || !c) return R[tier];
     const d = this.surfaceDist(this._cam, c);
     if (d < this.cfg.nearDist) return R.near;

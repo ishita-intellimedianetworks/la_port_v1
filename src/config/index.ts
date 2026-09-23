@@ -47,7 +47,7 @@ export interface Site {
    *  first-person start, the fallback for an unauthored layout — reads THIS. */
   startPose: CameraPose;
   poseForLayout: (layoutId: string) => CameraPose;
-  poseForHotspot: (hotspotId: string) => CameraPose;
+  poseForHotspot: (hotspotId: string, mobile?: boolean) => CameraPose;
   /** True when a layout's camera is authored in the AIR rather than on the
    *  ground — see `resolveSite`. */
   isFlyLayout: (layoutId: string | null | undefined) => boolean;
@@ -120,10 +120,10 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
     return authoredPose(layout);
   };
 
-  const poseForHotspot = (hotspotId: string): CameraPose => {
+  const poseForHotspot = (hotspotId: string, mobile = false): CameraPose => {
     const hotspot = hotspotById[hotspotId] ?? securityHotspotById[hotspotId];
     if (!hotspot) return startPose;
-    const camera = hotspot.camera;
+    const camera = (mobile && hotspot.mobileCamera) || hotspot.camera;
     if (!camera || isPlaceholder(camera.position)) return poseForLayout(hotspot.layoutId);
     const eyeOffset = layoutById[hotspot.layoutId]?.walkable === false ? 0 : doc.world.eyeHeight;
     return poseForCamera(camera, eyeOffset);

@@ -13,16 +13,16 @@
     "slug": "portla-c5-v9w-inst-mo",
     "tiers": {
       "near": {
-        "distance": 50,
+        "distance": 150,
         "texture": {
-          "px": 1024,
+          "px": 512,
           "format": "ktx2"
         }
       },
       "mid": {
         "distance": 250,
         "texture": {
-          "px": 256,
+          "px": 512,
           "format": "ktx2"
         }
       },
@@ -46,10 +46,11 @@
       "radiusScale": 0,
       "refRadius": 120,
       "geometry": "resident",
-      "residentTier": "near"
+      "residentTier": "near",
+      "freeCpuArrays": true
     },
     "cache": {
-      "limitChunks": 500,
+      "limitChunks": 550,
       "residentBudgetMB": 256
     },
     "fog": {
@@ -168,7 +169,7 @@
       "progressiveTextures": true,
       "texUpgradesPerTick": 16,
       "adaptiveDpr": true,
-      "maxDpr": 1.5
+      "maxDpr": 2
     },
     "pick": [
       {
@@ -186,6 +187,7 @@
     "eyeHeight": 1.8288,
     "fov": 35,
     "shadows": true,
+    "toneMapping": "none",
     "grade": {
       "exposure": 0.94,
       "brightness": 0,
@@ -3354,6 +3356,18 @@
           3.0604,
           -0.0961,
           3.1338
+        ]
+      },
+      "mobileCamera": {
+        "position": [
+          -1600.7176,
+          22,
+          223.314
+        ],
+        "rotation": [
+          -3.0277,
+          0.1164,
+          3.1283
         ]
       },
       "geofence": {

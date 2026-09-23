@@ -813,7 +813,7 @@ export function SceneContent({
         </Suspense>
       )}
 
-      {!activeFloor?.interior && (
+      {!activeFloor?.interior && viewMode === "firstPerson" && (
         <Suspense fallback={null}>
           <ZoneGeofence />
         </Suspense>
