@@ -1426,15 +1426,25 @@ kept oscillating underneath it. Two different answers to the same question.
 leaves the rest of the security row on screen. `pickedLayoutId` is null when the
 pick is a security one, so that path is untouched.
 
-**`pulse` covers the picked layout, not just the picked bead.** `isSelected ||
-inPickedLayout`, where `inPickedLayout` is an operational hotspot sharing the
-selection's `layoutId`. The layout moves together; the security row does not.
+**`pulse` covers the active layout, not just the picked bead.** `isSelected ||
+inActiveLayout`, where `activeLayoutId` is `pickedLayoutId ?? currentLayoutId` -
+the layout being looked at, whether it got there by one of its anchors being
+picked or by being the current destination. So arriving at a layout moves its
+children, not only clicking one of them.
 
-**`still` is gated on anything being picked.** `securityPicked` became
-`anyPicked` - `!ground.on && !!selectedHotspotId`. A security bead that is not
-the selection is small and static whenever *something* is picked, whichever
-table that something came from. Standing on the ground (`ground.on`) still
-overrides all of it, because proximity is a different question from selection.
+**`still` is unconditional for the security row.** It was gated first on
+`securityPicked`, then on anything being picked; it is now `isSecurity &&
+!isSelected`, full stop. The whole rule is two lines and reads as one sentence:
+
+- **the selected bead always moves**, whichever table it came from
+- **the active layout's children move with it**
+- **nothing else moves** - every unselected security bead is small and static,
+  at every distance, in every view
+
+The `ground.on` exception went with the gating. Proximity decides what is
+*drawn*, which is what `own` is for; it no longer decides what oscillates,
+because a bead that moves because you walked near it was the same noise the
+`SECURITY_MINOR_BEAD` clamp exists to keep down.
 
 ### A bead is the same size from every CP
 

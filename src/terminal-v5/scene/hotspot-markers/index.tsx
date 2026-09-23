@@ -82,8 +82,10 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
           : [selectedHotspotId])
       : own;
 
-  // Anything picked quiets the security row, not only a security pick.
-  const anyPicked = !ground.on && !!selectedHotspotId;
+  // Whatever layout is being looked at, whether it got there by picking one of
+  // its anchors or by being the current destination. Its children move; nothing
+  // else does.
+  const activeLayoutId = pickedLayoutId ?? currentLayoutId;
 
   const alwaysOn = useMemo(
     () =>
@@ -108,7 +110,8 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
 
         const isSelected = id === selectedHotspotId;
         const isSecurity = !site.hotspotById[id];
-        const inPickedLayout = !isSecurity && !!pickedLayoutId && hotspot.layoutId === pickedLayoutId;
+        const inActiveLayout =
+          !isSecurity && !!activeLayoutId && hotspot.layoutId === activeLayoutId;
         return (
           <Hotspot
             key={id}
@@ -116,9 +119,9 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            pulse={isSelected || inPickedLayout}
+            pulse={isSelected || inActiveLayout}
             beadScale={isSecurity && !isSelected ? SECURITY_MINOR_BEAD : 1}
-            still={isSecurity && anyPicked && !isSelected}
+            still={isSecurity && !isSelected}
             screenLocked={isSecurity}
             onHotspotClick={() =>
               setHotspotInfo({
