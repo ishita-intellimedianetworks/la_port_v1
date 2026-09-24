@@ -59,6 +59,7 @@ export function Hotspot({
   const pingRefs = useRef<(THREE.Mesh | null)[]>([]);
   const sizerRef = useRef<THREE.Group>(null);
   const markerWorld = useRef(new THREE.Vector3());
+  const cameraWorld = useRef(new THREE.Vector3());
   const camera = useThree((s) => s.camera);
   // Canvas height in CSS pixels — the units BEAD_PX is expressed in, so the
   // marker is the same size on a laptop and on a 4K monitor.
@@ -112,7 +113,7 @@ export function Hotspot({
     const cam = camera as THREE.PerspectiveCamera;
     if (sizer && cam.isPerspectiveCamera && viewportHeight > 0) {
       sizer.getWorldPosition(markerWorld.current);
-      const dist = cam.position.distanceTo(markerWorld.current);
+      const dist = cam.getWorldPosition(cameraWorld.current).distanceTo(markerWorld.current);
       const worldPerPx = (2 * Math.tan((cam.fov * Math.PI) / 360) * dist) / viewportHeight;
       const wanted = (beadPx / 2) * worldPerPx;
       const s = Math.min(maxScale, Math.max(MIN_SCALE, wanted / size));

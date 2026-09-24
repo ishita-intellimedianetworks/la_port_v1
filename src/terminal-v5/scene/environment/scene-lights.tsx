@@ -36,6 +36,7 @@ const DEFAULT_LIGHTS = {
 
 const _corner = new THREE.Vector3();
 const _snap = new THREE.Vector3();
+const _eye = new THREE.Vector3();
 const _casters = new THREE.Box3();
 
 function axisRange(box: THREE.Box3, origin: THREE.Vector3, axis: THREE.Vector3) {
@@ -290,9 +291,10 @@ export default function SceneLights({
 
     const extent = followExtent;
     const last = followAt.current;
+    camera.getWorldPosition(_eye);
     const moved =
       !last ||
-      Math.hypot(camera.position.x - last.x, camera.position.z - last.z) >
+      Math.hypot(_eye.x - last.x, _eye.z - last.z) >
         extent * FOLLOW_MARGIN;
     const settled = settleAt.current > 0 && clock.elapsedTime >= settleAt.current;
     if (!moved && !settled) return;
@@ -300,9 +302,9 @@ export default function SceneLights({
     if (moved) {
       const centre = last ?? new THREE.Vector3();
       centre.set(
-        camera.position.x,
+        _eye.x,
         (bounds.min[1] + bounds.max[1]) * 0.5,
-        camera.position.z,
+        _eye.z,
       );
       followAt.current = centre;
 

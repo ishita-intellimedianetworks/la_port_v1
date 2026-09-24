@@ -24,6 +24,10 @@ export interface InstructionsOverlayProps {
   columns?: number;
   actionLabel: string;
   onAction: () => void;
+  actionDisabled?: boolean;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  note?: string;
   backdropClassName?: string;
   cardVariant?: "light" | "dark";
   contained?: boolean;
@@ -65,6 +69,10 @@ export function InstructionsOverlay({
   columns = 2,
   actionLabel,
   onAction,
+  actionDisabled = false,
+  secondaryLabel,
+  onSecondary,
+  note,
   backdropClassName = "bg-black/30",
   cardVariant = "light",
   contained = false,
@@ -146,13 +154,31 @@ export function InstructionsOverlay({
 
       {body}
 
-      <button
-        onClick={onAction}
-        className={`${surfaceClass} shrink-0 cursor-pointer px-7 short:px-5 py-2.5 short:py-1.5 rounded-lg text-sm short:text-xs font-semibold ${buttonHoverClass} transition-colors`}
-        style={{ ...WHITE_TEXT, ...GLASS_BLUR }}
-      >
-        {actionLabel}
-      </button>
+      {note && (
+        <p className="shrink-0 text-center text-[12.5px] short:text-[10px] font-semibold" style={WHITE_TEXT}>
+          {note}
+        </p>
+      )}
+
+      <div className="flex shrink-0 items-center gap-3">
+        {secondaryLabel && onSecondary && (
+          <button
+            onClick={onSecondary}
+            className={`${surfaceClass} shrink-0 cursor-pointer px-7 short:px-5 py-2.5 short:py-1.5 rounded-lg text-sm short:text-xs font-semibold ${buttonHoverClass} transition-colors`}
+            style={{ ...WHITE_TEXT, ...GLASS_BLUR }}
+          >
+            {secondaryLabel}
+          </button>
+        )}
+        <button
+          onClick={onAction}
+          disabled={actionDisabled}
+          className={`${surfaceClass} shrink-0 cursor-pointer px-7 short:px-5 py-2.5 short:py-1.5 rounded-lg text-sm short:text-xs font-semibold ${buttonHoverClass} transition-colors disabled:cursor-default disabled:opacity-45`}
+          style={{ ...WHITE_TEXT, ...GLASS_BLUR }}
+        >
+          {actionLabel}
+        </button>
+      </div>
     </>
   );
 

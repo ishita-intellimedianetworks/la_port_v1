@@ -17,6 +17,15 @@ layer, and the decisions behind both.
 > v3. Anything that changes v5's behaviour (a new hotspot, a store field, a
 > mode rule, a config key) should land here in the same change.
 
+> **VR.** `/v5/vr`, like `/v2/vr` to `/v4/vr`, is a separate page described in
+> `docs/vr.md`. It lives in `terminal-v5/vr/` and `src/vr/` and changes no
+> other file in this tree: it mounts the same provider, scene and overlays and
+> moves the headset by following `PlayerController`. In the headset, the
+> security group heads the Resources menu, Home and Dollhouse reset the security
+> store as the 3D bar does, and a security hotspot's card shows its live fields
+> from `useSecurityStore`. The designed security layouts are not drawn there
+> yet.
+
 ---
 
 ## 1. Source of truth

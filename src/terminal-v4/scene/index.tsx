@@ -8,6 +8,10 @@ import * as THREE from "three";
 import type { FloorConfig, FloorTransition, FurnitureConfig } from "@/shared/types";
 import { useScene } from "../context/scene-context";
 import { PlayerController } from "./player";
+import { probeFloorY } from "./player/utils/probe-floor-y";
+import { navConfig } from "../navigation-config";
+import { VrPlayerController } from "@/vr/player-controller";
+import { useIsVr } from "@/vr/vr-mode";
 import { NavPath3D } from "./route-line";
 import { HotspotMarkers } from "./hotspot-markers";
 import { ZoneGeofence } from "./zone-geofence";
@@ -365,6 +369,7 @@ export function SceneContent({
   const showNavmesh = useDebugStore((s) => s.showNavmesh);
   const navmeshDepth = useDebugStore((s) => s.navmeshDepth);
 
+  const vr = useIsVr();
   const pathfinding = useMemo(() => new Pathfinding(), []);
   const { camera, raycaster, gl, scene } = useThree();
 
@@ -746,7 +751,7 @@ export function SceneContent({
             onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
           />
           <StreamFog config={streamConfig} />
-          {streamConfig.adaptiveDpr && <AdaptiveQuality maxDpr={streamConfig.maxDpr} />}
+          {streamConfig.adaptiveDpr && !vr && <AdaptiveQuality maxDpr={streamConfig.maxDpr} />}
         </>
       ) : (
         currentModelUrl && (
@@ -807,7 +812,22 @@ export function SceneContent({
         />
       )}
 
-      {viewMode === "firstPerson" && (
+      {viewMode === "firstPerson" && vr && (
+        <VrPlayerController
+          ref={playerControllerRef}
+          enabled={navReady && !cinematicActive}
+          cameraHeight={activeFloor?.cameraHeight ?? cameraHeight}
+          metersPerUnit={navConfig.logic.displayMetersPerUnit}
+          startPosition={firstPersonStart?.position ?? activeFloor?.startPosition ?? startPosition}
+          startRotation={firstPersonStart?.rotation ?? activeFloor?.startRotation ?? startRotation}
+          pathfinding={pathfinding}
+          initialZone={zoneNameForFloor(activeFloor?.id ?? floors[0].id)}
+          onZoneChange={handleZoneChange}
+          probeFloorY={probeFloorY}
+        />
+      )}
+
+      {viewMode === "firstPerson" && !vr && (
         <>
           <PlayerController
             ref={playerControllerRef}

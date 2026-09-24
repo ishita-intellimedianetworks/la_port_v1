@@ -170,7 +170,7 @@ export default function SkyDome({
     material.uniforms.uFade.value = k;
     material.uniforms.uTime.value += delta;
 
-    mesh.position.copy(camera.position);
+    camera.getWorldPosition(mesh.position);
     mesh.parent?.worldToLocal(mesh.position);
 
     if (!(scene.background instanceof THREE.Color)) {

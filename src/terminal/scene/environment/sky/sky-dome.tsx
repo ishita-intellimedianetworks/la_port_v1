@@ -192,7 +192,7 @@ export default function SkyDome({
 
     // Park the dome on the camera. Written through the parent transform so it
     // stays correct wherever the environment sits in the graph.
-    mesh.position.copy(camera.position);
+    camera.getWorldPosition(mesh.position);
     mesh.parent?.worldToLocal(mesh.position);
 
     if (!(scene.background instanceof THREE.Color)) {
