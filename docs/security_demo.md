@@ -1616,8 +1616,11 @@ at the solid end. Its two lines also swapped weight: the level is now the small 
 kicker and the sentence is the 14px line, because *what is wrong* is the part
 worth reading.
 
-`CARD_TEXT_SHADOW` is `0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)` -
-a tight plate under each glyph and a wider halo around it. Set **once, on the
+`CARD_TEXT_SHADOW` is `0 1px 2px rgba(0,0,0,0.6), 0 0 4px rgba(0,0,0,0.25)` -
+a tight plate under each glyph and a small halo around it. It was
+`0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)` and was softened because
+the full halo read as a dark smudge behind every line of text; both layers are
+kept so light ink still holds over a bright scene. Set **once, on the
 card's root**, and inherited: `text-shadow` is an inherited property, so the
 header, the alert banner, the journey rows, the incident tables and the field
 grid all take it from one declaration and nothing has to remember to opt in.

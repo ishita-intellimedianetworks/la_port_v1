@@ -22,7 +22,7 @@ import { PanelHeader } from "../destination-panel/panel-header";
 import { useLayoutNavigation } from "../use-layout-navigation";
 import { useIsHandheld, useIsMobile } from "@/shared/responsive";
 
-const CARD_TEXT_SHADOW = "0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)";
+const CARD_TEXT_SHADOW = "0 1px 2px rgba(0,0,0,0.6), 0 0 4px rgba(0,0,0,0.25)";
 
 const FIELDS_BESIDE_STILL = 4;
 
