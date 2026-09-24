@@ -2367,8 +2367,9 @@ The layout was drawn first as a design canvas, one artboard per hotspot, and
 then built. It applies to every security card on every screen - desktop,
 iPad and phone - inside the same 80% box (`designed` for S01 - S06); the older
 single-column flow with `SourceIncidents` is no longer reached by a security
-card. The header gains a `badge` - `S01 · Access Control` - in
-`CardHeader` (below), hidden below `md`.
+card. `CardHeader` (below) carries only the title, the layout-name subtitle
+and the close button; the `S01 · Access Control` id badge it once had was
+removed so no hotspot id shows in a card's header.
 
 **Media and readings stay side by side on every screen.** Below 1024px or on
 a hand-held screen (`stacked = useIsHandheld() || useIsMobile()`) the media card
@@ -3362,6 +3363,13 @@ Its actions:
 The four that CHANGE the incident are hidden once it is resolved; the two that
 only look at it stay, because where a past incident happened and what was done
 about it are exactly what a closed record is for.
+
+**The S07 detail strip carries View location only.** The strip under the
+dashboard's incident list (`IncidentDetailStrip`) shows status, acknowledgement,
+location, source and team, and one action, View location. Its Audit · N button
+was removed and `SecurityIncidentCentre` no longer opens `IncidentLogDialog`;
+Audit survives only on `IncidentRow`, which `SourceIncidents` renders and no
+security card reaches, so an incident's log cannot be opened from the dashboard.
 
 **De-escalate is not in the spec**, which names only ESCALATE. It exists because
 a demo that can only raise severity has one-way state: a presenter who escalates

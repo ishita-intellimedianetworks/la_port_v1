@@ -46,7 +46,7 @@ export function PanelHeader({ title, subtitle, onClose, onBack, dense }: PanelHe
                 "nav-body mt-0.5 line-clamp-2 text-[13px] font-medium short:text-[11px]",
                 dense && "max-sm:text-[11px]",
               )}
-              style={{ color: "var(--nav-text-2)" }}
+              style={{ color: "var(--nav-text)" }}
             >
               {subtitle}
             </p>

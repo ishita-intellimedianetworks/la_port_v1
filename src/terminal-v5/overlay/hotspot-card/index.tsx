@@ -111,7 +111,7 @@ function Field({
     >
       <h3
         className="nav-body text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {field.label}
       </h3>
@@ -122,7 +122,7 @@ function Field({
           flag && "uppercase tracking-[0.02em]",
         )}
         style={{
-          color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color),
+          color: field.pending ? "var(--nav-text)" : valueColor(field, tone, color),
         }}
       >
         {formatValue(field)}
@@ -176,14 +176,14 @@ function SectionLabel({
     <div className={cn("mb-2.5 mt-5 flex items-baseline justify-between gap-3", className)}>
       <span
         className="nav-body text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-dim)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {children}
       </span>
       {aside && (
         <span
           className="nav-body shrink-0 tabular-nums text-[length:var(--fs-label,11.5px)] font-medium"
-          style={{ color: "var(--nav-text-faint)" }}
+          style={{ color: "var(--nav-text)" }}
         >
           {aside}
         </span>
@@ -376,7 +376,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
             <CardHeader
               title={hotspot.popupTitle}
               subtitle={layout.name}
-              badge={`${hotspot.id} · ${hotspot.name}`}
               onClose={onClose}
             />
           ) : (
@@ -416,7 +415,7 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               >
                 <div
                   className="nav-body pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                  style={{ color: "var(--nav-text-dim)" }}
+                  style={{ color: "var(--nav-text)" }}
                 >
                   {site.ui.popup.journeyTitle}
                 </div>
@@ -438,7 +437,7 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                       <div className="min-w-0 flex-1">
                         <h3
                           className="nav-body text-[11.5px] max-sm:text-[10.5px] font-medium short:text-[10.5px]"
-                          style={{ color: "var(--nav-text-faint)" }}
+                          style={{ color: "var(--nav-text)" }}
                         >
                           {step.stage} · {step.state}
                         </h3>
@@ -454,7 +453,7 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                         style={{
                           background: "rgba(255,255,255,0.06)",
                           border: "1.5px solid rgba(255,255,255,0.16)",
-                          color: "var(--nav-text-2)",
+                          color: "var(--nav-text)",
                         }}
                       >
                         {step.layoutId}
@@ -536,12 +535,10 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
 function CardHeader({
   title,
   subtitle,
-  badge,
   onClose,
 }: {
   title: string;
   subtitle: string;
-  badge: string;
   onClose: () => void;
 }) {
   return (
@@ -556,22 +553,12 @@ function CardHeader({
         {subtitle && (
           <p
             className="nav-body mt-0.5 text-[length:var(--fs-sub)] font-medium"
-            style={{ color: "var(--nav-text-2)" }}
+            style={{ color: "var(--nav-text)" }}
           >
             {subtitle}
           </p>
         )}
       </div>
-      <span
-        className="nav-display shrink-0 self-center rounded-full px-2.5 py-1 text-[length:var(--fs-label)] font-bold tracking-[0.06em] max-md:hidden"
-        style={{
-          color: "var(--nav-text-2)",
-          background: "rgba(255,255,255,0.06)",
-          border: "1.5px solid var(--nav-border)",
-        }}
-      >
-        {badge}
-      </span>
       <button
         type="button"
         onClick={onClose}
@@ -703,7 +690,7 @@ function StillPanel({ src, alt, tag }: { src: string; alt: string; tag: string }
 
 function HeroTile({ field, color }: { field: HotspotField; color?: string }) {
   const tone = useSite().toneFor(field.value, field.tone);
-  const ink = field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color);
+  const ink = field.pending ? "var(--nav-text)" : valueColor(field, tone, color);
   return (
     <div
       className="flex shrink-0 items-center gap-[calc(var(--sp-tile)*0.8)] rounded-[12px] p-[var(--sp-tile)]"
@@ -716,7 +703,7 @@ function HeroTile({ field, color }: { field: HotspotField; color?: string }) {
       <div className="min-w-0 flex-1">
         <h3
           className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--nav-text-faint)" }}
+          style={{ color: "var(--nav-text)" }}
         >
           {field.label}
         </h3>
@@ -740,13 +727,13 @@ function ReadingRow({ field, color }: { field: HotspotField; color?: string }) {
     >
       <h3
         className="nav-body shrink-0 text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {field.label}
       </h3>
       <h2
         className="nav-display min-w-0 break-words text-right text-[length:var(--fs-value)] font-bold"
-        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+        style={{ color: field.pending ? "var(--nav-text)" : valueColor(field, tone, color) }}
       >
         {formatValue(field)}
       </h2>
@@ -760,13 +747,13 @@ function IdentCell({ field, color }: { field: HotspotField; color?: string }) {
     <div className="flex min-w-0 flex-col gap-1">
       <h3
         className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {field.label}
       </h3>
       <h2
         className="nav-display break-words text-[length:var(--fs-ident)] font-bold"
-        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+        style={{ color: field.pending ? "var(--nav-text)" : valueColor(field, tone, color) }}
       >
         {formatValue(field)}
       </h2>
@@ -787,13 +774,13 @@ function StatTile({ field, color }: { field: HotspotField; color?: string }) {
     >
       <h3
         className="nav-body text-[length:var(--fs-label)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {field.label}
       </h3>
       <h2
         className="nav-display text-[length:var(--fs-stat)] font-bold tabular-nums leading-none"
-        style={{ color: field.pending ? "var(--nav-text-faint)" : valueColor(field, tone, color) }}
+        style={{ color: field.pending ? "var(--nav-text)" : valueColor(field, tone, color) }}
       >
         {formatValue(field)}
       </h2>
@@ -859,7 +846,7 @@ function FieldAlerts({ hotspotId }: { hotspotId: string }) {
           className="flex items-center justify-center rounded-[9px] border border-dashed py-3.5"
           style={{ borderColor: "var(--nav-divider)" }}
         >
-          <p className="nav-body text-[length:var(--fs-row,13px)]" style={{ color: "var(--nav-text-faint)" }}>
+          <p className="nav-body text-[length:var(--fs-row,13px)]" style={{ color: "var(--nav-text)" }}>
             No open alerts
           </p>
         </div>
@@ -1351,7 +1338,7 @@ function SystemCell({ field, color }: { field: HotspotField; color?: string }) {
     >
       <span
         className="nav-body break-words text-[length:var(--fs-label,11.5px)] font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {field.label}
       </span>
@@ -1395,7 +1382,7 @@ function IncidentLine({
       </span>
       <span
         className="nav-body w-[132px] shrink-0 break-words text-[length:var(--fs-meta,12px)] font-medium max-md:hidden"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {incident.sourceId || incident.source}
       </span>
@@ -1412,21 +1399,10 @@ function IncidentLine({
   );
 }
 
-function IncidentDetailStrip({
-  incident,
-  onShowLog,
-}: {
-  incident: SecurityIncident;
-  onShowLog: () => void;
-}) {
-  const audit = useSecurityStore((s) => s.audit);
+function IncidentDetailStrip({ incident }: { incident: SecurityIncident }) {
   const { goToHotspot, goToLayout, find: findLayout } = useLayoutNavigation();
   const site = useSite();
 
-  const mine = useMemo(
-    () => audit.filter((e) => e.incidentId === incident.id),
-    [audit, incident.id],
-  );
   const target = incident.navigationTarget;
   const anchor = site.securityHotspotById[incident.sourceHotspotId];
   const sourceAnchor = anchor && anchor.enabled !== false ? anchor : null;
@@ -1459,9 +1435,8 @@ function IncidentDetailStrip({
         <DetailRow label="Assigned" value={incident.assignedTeam} />
       </dl>
 
-      <div className="flex flex-wrap items-center gap-2 pt-3.5 max-sm:pt-3 short:pt-3">
-        <RowAction label={auditLabel(mine.length)} onClick={onShowLog} />
-        {canTravel && (
+      {canTravel && (
+        <div className="flex flex-wrap items-center gap-2 pt-3.5 max-sm:pt-3 short:pt-3">
           <RowAction
             label="View location"
             onClick={() => {
@@ -1470,8 +1445,8 @@ function IncidentDetailStrip({
               else goToLayout(target);
             }}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1522,7 +1497,6 @@ function QueueBody({
   narrowed,
   tab,
   onSelect,
-  onShowLog,
 }: {
   rows: SecurityIncident[];
   activeId: string | null;
@@ -1530,7 +1504,6 @@ function QueueBody({
   narrowed: boolean;
   tab: "current" | "past";
   onSelect: (id: string) => void;
-  onShowLog: (incident: SecurityIncident) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -1540,7 +1513,7 @@ function QueueBody({
       >
         <p
           className="nav-body text-[13px] max-sm:text-[11.5px] short:text-[11.5px]"
-          style={{ color: "var(--nav-text-faint)" }}
+          style={{ color: "var(--nav-text)" }}
         >
           {narrowed
             ? "Nothing matches these filters."
@@ -1573,7 +1546,7 @@ function QueueBody({
         ))}
       </div>
 
-      {active && <IncidentDetailStrip incident={active} onShowLog={() => onShowLog(active)} />}
+      {active && <IncidentDetailStrip incident={active} />}
     </>
   );
 }
@@ -1588,7 +1561,6 @@ function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
   const [severities, setSeverities] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [sort, setSort] = useState<string[]>(["time"]);
-  const [logFor, setLogFor] = useState<SecurityIncident | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
 
   const current = useMemo(
@@ -1656,7 +1628,7 @@ function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
         <div className="flex shrink-0 items-center gap-2">
           <span
             className="nav-body text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-semibold uppercase tracking-[0.08em]"
-            style={{ color: "var(--nav-text-dim)" }}
+            style={{ color: "var(--nav-text)" }}
           >
             Incidents
           </span>
@@ -1714,7 +1686,6 @@ function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
             narrowed={narrowed}
             tab={tab}
             onSelect={setSelected}
-            onShowLog={setLogFor}
           />
         </div>
       </div>
@@ -1730,8 +1701,6 @@ function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
           onClose={() => setQueueOpen(false)}
         />
       )}
-
-      {logFor && <IncidentLogDialog incident={logFor} onClose={() => setLogFor(null)} />}
     </div>
   );
 }
@@ -1814,10 +1783,10 @@ function FilterSelect({
           border: narrowed
             ? "1.5px solid rgba(255,255,255,0.5)"
             : "1.5px solid var(--nav-border)",
-          color: narrowed ? "#ffffff" : "var(--nav-text-dim)",
+          color: narrowed ? "#ffffff" : "var(--nav-text)",
         }}
       >
-        {label && <span style={{ opacity: 0.7 }}>{label}</span>}
+        {label && <span>{label}</span>}
         <span className="max-w-[150px] break-words text-left">{summary}</span>
         <ChevronDown
           size={13}
@@ -1849,7 +1818,7 @@ function FilterSelect({
                 aria-selected={on}
                 onClick={() => toggle(i.id)}
                 className="nav-body flex w-full cursor-pointer items-center gap-2 rounded-[7px] px-2.5 py-[7px] text-left text-[12.5px] max-sm:text-[11px] short:text-[11px] transition-[color] duration-150 hover:brightness-125"
-                style={{ color: on ? "var(--nav-text)" : "var(--nav-text-dim)" }}
+                style={{ color: on ? "var(--nav-text)" : "var(--nav-text)" }}
               >
                 {i.dot && (
                   <span
@@ -1979,7 +1948,7 @@ function Chip({
       style={{
         background: on ? "var(--nav-accent)" : "rgba(255,255,255,0.06)",
         border: on ? "1.5px solid rgba(255,255,255,0.5)" : "1.5px solid var(--nav-border)",
-        color: on ? "#ffffff" : "var(--nav-text-dim)",
+        color: on ? "#ffffff" : "var(--nav-text)",
         opacity: disabled ? 0.45 : 1,
       }}
     >
@@ -1992,7 +1961,7 @@ function Chip({
           className="ml-0.5 rounded-full px-1.5 py-px text-[11px] max-sm:text-[10px] short:text-[10px] font-bold tabular-nums"
           style={{
             background: on ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)",
-            color: on ? "#ffffff" : "var(--nav-text-faint)",
+            color: on ? "#ffffff" : "var(--nav-text)",
           }}
         >
           {count}
@@ -2066,7 +2035,7 @@ function IncidentRow({
           </span>
           <span
             className="nav-body break-words text-[12px] max-sm:text-[11px] short:text-[11px]"
-            style={{ color: "var(--nav-text-faint)" }}
+            style={{ color: "var(--nav-text)" }}
           >
             {incident.source} · {incident.locationLabel}
           </span>
@@ -2170,7 +2139,7 @@ function DetailRow({
     >
       <dt
         className="nav-body text-[11.5px] max-sm:text-[10.5px] short:text-[10.5px] font-medium uppercase tracking-[0.05em]"
-        style={{ color: "var(--nav-text-faint)" }}
+        style={{ color: "var(--nav-text)" }}
       >
         {label}
       </dt>
@@ -2202,7 +2171,7 @@ function RowAction({
       style={{
         background: "rgba(255,255,255,0.06)",
         border: "1.5px solid var(--nav-border)",
-        color: "var(--nav-text-2)",
+        color: "var(--nav-text)",
         opacity: disabled ? 0.45 : 1,
       }}
     >
@@ -2334,7 +2303,7 @@ function IncidentLogDialog({
 
         <div className="ui-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {entries.length === 0 ? (
-            <p className="nav-body py-3 text-[13px] max-sm:text-[11.5px] short:text-[11.5px]" style={{ color: "var(--nav-text-faint)" }}>
+            <p className="nav-body py-3 text-[13px] max-sm:text-[11.5px] short:text-[11.5px]" style={{ color: "var(--nav-text)" }}>
               No entries yet.
             </p>
           ) : (
@@ -2347,7 +2316,7 @@ function IncidentLogDialog({
                 >
                   <span
                     className="nav-body min-w-0 flex-1 text-[12.5px] max-sm:text-[11px] short:text-[11px] leading-snug"
-                    style={{ color: "var(--nav-text-2)" }}
+                    style={{ color: "var(--nav-text)" }}
                   >
                     {e.detail}
                   </span>
