@@ -1,20 +1,20 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useXRInputSourceState } from "@react-three/xr";
 import { useSite } from "@/config/context";
 import { useVrBridge, type VrView } from "./bridge";
 import {
   BottomBar,
-  HotspotPanel,
   InstructionsPanel,
   ResourcesPanel,
 } from "./ui/panels";
+import { MapPanel } from "./ui/map-panel";
 
 const DOUBLE_PRESS_MS = 450;
 
-type Menu = "resources" | "instructions" | null;
+type Menu = "resources" | "instructions" | "map" | null;
 
 function useDoubleTrigger(active: boolean, onDouble: () => void) {
   const left = useXRInputSourceState("controller", "left");
@@ -43,17 +43,48 @@ function useDoubleTrigger(active: boolean, onDouble: () => void) {
   });
 }
 
+function useShowButton(active: boolean, onPress: () => void) {
+  const left = useXRInputSourceState("controller", "left");
+  const right = useXRInputSourceState("controller", "right");
+  const wasDown = useRef(false);
+  const onPressRef = useRef(onPress);
+  useLayoutEffect(() => {
+    onPressRef.current = onPress;
+  });
+
+  useFrame(() => {
+    const down =
+      left?.gamepad?.["y-button"]?.state === "pressed" ||
+      right?.gamepad?.["b-button"]?.state === "pressed";
+    if (down && !wasDown.current && active) onPressRef.current();
+    wasDown.current = down;
+  });
+}
+
 export function VrHud() {
   const bridge = useVrBridge();
   const site = useSite();
   const [introduced, setIntroduced] = useState<ReadonlySet<VrView>>(new Set());
   const [menu, setMenu] = useState<Menu>(null);
   const view = bridge.view;
-  const hotspot = view === "firstPerson" ? bridge.hotspot : null;
+  const [barHidden, setBarHidden] = useState(false);
+  const [lastView, setLastView] = useState(view);
+  if (lastView !== view) {
+    setLastView(view);
+    setBarHidden(false);
+  }
+  const card = view === "firstPerson" ? bridge.card : null;
   const introducing = !introduced.has(view);
-  const panelOpen = introducing || menu !== null || hotspot !== null;
+  const panelOpen = introducing || menu !== null || card !== null;
 
   useDoubleTrigger(view === "dollhouse" && !panelOpen && !bridge.fadeVisible, bridge.enterHome);
+  useShowButton(barHidden, () => setBarHidden(false));
+
+  const runQueued = bridge.runQueued;
+  const settledInFirstPerson = view === "firstPerson" && !bridge.fadeVisible;
+  useEffect(() => {
+    if (settledInFirstPerson) runQueued();
+  }, [settledInFirstPerson, runQueued]);
 
   if (bridge.fadeVisible) return null;
 
@@ -70,20 +101,12 @@ export function VrHud() {
     );
   }
 
-  if (hotspot) {
-    return (
-      <HotspotPanel
-        key={hotspot.id}
-        title={hotspot.popupTitle}
-        subtitle={bridge.hotspotLayoutName}
-        alert={hotspot.alert}
-        fields={hotspot.fields}
-        onClose={bridge.closeHotspot}
-      />
-    );
+  if (card) {
+    const Card = bridge.Card;
+    return <Card key={card.hotspotId ?? `${card.destId}:${card.index}`} {...card} onClose={bridge.closeHotspot} />;
   }
 
-  if (menu === "resources" && view === "firstPerson") {
+  if (menu === "resources") {
     return (
       <ResourcesPanel
         groups={bridge.groups}
@@ -93,6 +116,12 @@ export function VrHud() {
       />
     );
   }
+
+  if (menu === "map" && bridge.map) {
+    return <MapPanel map={bridge.map} onClose={() => setMenu(null)} />;
+  }
+
+  if (barHidden) return null;
 
   return (
     <BottomBar
@@ -104,7 +133,12 @@ export function VrHud() {
         bridge.goDollhouse();
       }}
       onResources={() => setMenu("resources")}
+      onMap={bridge.map ? () => setMenu("map") : null}
       onInstructions={() => setMenu("instructions")}
+      onHide={() => {
+        setMenu(null);
+        setBarHidden(true);
+      }}
     />
   );
 }

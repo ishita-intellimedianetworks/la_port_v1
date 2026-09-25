@@ -1,29 +1,52 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Container } from "@react-three/uikit";
 import {
   ArrowLeft,
   Box,
   ChevronRight,
+  EyeOff,
   House,
   Info,
-  Library,
+  Map as MapIcon,
+  Images,
   LogOut,
   MapPin,
   PersonStanding,
-  X,
 } from "@react-three/uikit-lucide";
-import { useSite } from "@/config/context";
-import type { HotspotField, Tone } from "@/config/schema";
 import type { VrResourceGroup, VrView } from "../bridge";
 import { exitVr } from "../xr-store";
-import { Glass, HeadLocked, IconButton, List, Panel, PanelHeader, Row } from "./primitives";
+import {
+  Divider,
+  GlassButton,
+  GroupLabel,
+  HeadLocked,
+  List,
+  Panel,
+  PanelHeader,
+  Row,
+  Tile,
+  IconButton,
+} from "./primitives";
 import { VrText } from "./text";
-import { COLOR, POINTER_ORDER, RADIUS, SPACE, TEXT } from "./tokens";
+import { COLOR, DOCK, OPACITY, POINTER_ORDER, SPACE, TEXT } from "./tokens";
 
 const ICON = { width: 26, height: 26, color: COLOR.text } as const;
 const SMALL_ICON = { width: 20, height: 20, color: COLOR.text } as const;
+const TILE_ICON = { width: 20, height: 20, color: COLOR.text } as const;
+
+const HIDE_HINT = "B or Y brings them back";
+
+
+interface BarItem {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  tone?: "danger";
+  active?: boolean;
+  onSelect: () => void;
+}
 
 export function BottomBar({
   view,
@@ -31,43 +54,66 @@ export function BottomBar({
   onFirstPerson,
   onDollhouse,
   onResources,
+  onMap,
   onInstructions,
+  onHide,
 }: {
   view: VrView;
   onHome: () => void;
   onFirstPerson: (() => void) | null;
   onDollhouse: () => void;
   onResources: () => void;
+  onMap: (() => void) | null;
   onInstructions: () => void;
+  onHide: () => void;
 }) {
-  const firstPerson = view === "firstPerson";
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const items: BarItem[] = [
+    { key: "home", label: "Home", icon: <House {...ICON} />, onSelect: onHome },
+    ...(onFirstPerson
+      ? [{ key: "firstPerson", label: "First Person", icon: <PersonStanding {...ICON} />, onSelect: onFirstPerson }]
+      : []),
+    { key: "dollhouse", label: "Dollhouse", icon: <Box {...ICON} />, active: view === "dollhouse", onSelect: onDollhouse },
+    { key: "info", label: "Instructions", icon: <Info {...ICON} />, onSelect: onInstructions },
+    ...(onMap ? [{ key: "map", label: "Map", icon: <MapIcon {...ICON} />, onSelect: onMap }] : []),
+    { key: "resources", label: "Resources", icon: <Images {...ICON} />, onSelect: onResources },
+    { key: "hide", label: "Hide icons (B / Y to show)", icon: <EyeOff {...ICON} />, onSelect: onHide },
+    { key: "exit", label: "Exit VR", icon: <LogOut {...ICON} />, tone: "danger", onSelect: exitVr },
+  ];
+  const label = items.find((i) => i.key === hovered)?.label ?? null;
+
   return (
     <HeadLocked pointerEvents="none">
       <Container
         positionType="absolute"
-        positionBottom="22%"
+        positionBottom="30%"
         width="100%"
-        flexDirection="row"
-        justifyContent="center"
+        flexDirection="column"
+        alignItems="center"
       >
+        <Container height={DOCK.labelHeight} alignItems="center" justifyContent="center">
+          <VrText fontSize={DOCK.label} fontWeight="semi-bold" color={COLOR.text} visibility={label ? "visible" : "hidden"}>
+            {label ?? " "}
+          </VrText>
+        </Container>
         <Container
           pointerEvents="auto"
           pointerEventsOrder={POINTER_ORDER.ui}
           flexDirection="row"
           alignItems="center"
           gapColumn={SPACE.dock}
-          padding={SPACE.dock}
-          borderRadius={RADIUS.dot}
         >
-          <Glass radius={RADIUS.dot} />
-          <IconButton icon={<House {...ICON} />} onSelect={onHome} />
-          {firstPerson && onFirstPerson && (
-            <IconButton icon={<PersonStanding {...ICON} />} onSelect={onFirstPerson} />
-          )}
-          {firstPerson && <IconButton icon={<Box {...ICON} />} onSelect={onDollhouse} />}
-          <IconButton icon={<Info {...ICON} />} onSelect={onInstructions} />
-          {firstPerson && <IconButton icon={<Library {...ICON} />} onSelect={onResources} />}
-          <IconButton icon={<LogOut {...ICON} />} tone="danger" onSelect={exitVr} />
+          {items.map((item) => (
+            <IconButton
+              key={item.key}
+              icon={item.icon}
+              tone={item.tone}
+              active={item.active}
+              onHover={(h) => setHovered((cur) => (h ? item.key : cur === item.key ? null : cur))}
+              onSelect={item.onSelect}
+            />
+          ))}
         </Container>
       </Container>
     </HeadLocked>
@@ -87,19 +133,17 @@ export function ResourcesPanel({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = groups.find((g) => g.id === openId) ?? null;
-  const close = <X {...SMALL_ICON} />;
   const back = <ArrowLeft {...SMALL_ICON} />;
 
   return (
     <Panel onDismiss={onClose}>
       <PanelHeader
         title={open ? open.name : label}
-        subtitle={open ? `${open.hotspots.length} hotspots` : undefined}
+        subtitle={open ? `${open.hotspots.length} hotspots` : `${groups.length} layouts`}
         onBack={open ? () => setOpenId(null) : undefined}
-        onClose={onClose}
         backIcon={back}
-        closeIcon={close}
       />
+      <Divider />
       <List>
         {open ? (
           <>
@@ -144,206 +188,70 @@ export function ResourcesPanel({
   );
 }
 
-const TONE_COLOR: Record<Tone, string> = {
-  ok: COLOR.ok,
-  warn: COLOR.warn,
-  alert: COLOR.alert,
-};
-
-function formatValue(field: HotspotField): string {
-  const { type, value, unit } = field;
-  if (field.pending || value === "" || value === null || value === undefined) return "-";
-  if (type === "boolean") return value ? "Yes" : "No";
-  let text: string;
-  if (typeof value === "number") {
-    if (field.decimals != null) text = value.toFixed(field.decimals);
-    else text = Number.isInteger(value) ? value.toLocaleString() : String(value);
-    if (type === "percentage") text += "%";
-  } else {
-    text = String(value);
-  }
-  return unit ? `${text} ${unit}` : text;
-}
-
-export function HotspotPanel({
-  title,
-  subtitle,
-  alert,
-  fields,
-  onClose,
-}: {
-  title: string;
-  subtitle: string | null;
-  alert?: { level: "danger" | "caution"; title: string; detail?: string };
-  fields: HotspotField[];
-  onClose: () => void;
-}) {
-  const site = useSite();
-  const shown = useMemo(() => fields.filter((f) => !f.eventOnly), [fields]);
-  const rows = useMemo(() => {
-    const out: HotspotField[][] = [];
-    for (let i = 0; i < shown.length; i += 2) out.push(shown.slice(i, i + 2));
-    return out;
-  }, [shown]);
-
+function TileGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Panel width="52%" maxHeight="62%" onDismiss={onClose}>
-      <PanelHeader
-        title={title}
-        subtitle={subtitle ?? undefined}
-        onClose={onClose}
-        backIcon={null}
-        closeIcon={<X {...SMALL_ICON} />}
-      />
-      {alert && (
-        <Container
-          flexDirection="column"
-          gapRow={4}
-          padding={14}
-          borderRadius={RADIUS.row}
-          backgroundColor={alert.level === "danger" ? "#6e1f19" : "#5a4210"}
-          borderWidth={1}
-          borderColor={alert.level === "danger" ? COLOR.alert : COLOR.warn}
-          flexShrink={0}
-        >
-          <VrText fontSize={TEXT.label} fontWeight="bold" color={COLOR.text}>
-            {alert.title.toUpperCase()}
-          </VrText>
-          {alert.detail && (
-            <VrText fontSize={TEXT.body} color={COLOR.text}>
-              {alert.detail}
-            </VrText>
-          )}
-        </Container>
-      )}
-      <List>
-        {rows.map((pair, i) => (
-          <Container key={i} flexDirection="row" gapColumn={24} flexShrink={0}>
-            {pair.map((f) => {
-              const tone = f.pending ? undefined : site.toneFor(f.value, f.tone);
-              return (
-                <Container
-                  key={f.name}
-                  flexDirection="column"
-                  gapRow={4}
-                  width="48%"
-                  paddingY={10}
-                  borderBottomWidth={1}
-                  borderColor={COLOR.divider}
-                >
-                  <VrText fontSize={TEXT.meta} fontWeight="semi-bold" color={COLOR.text}>
-                    {f.label.toUpperCase()}
-                  </VrText>
-                  <VrText
-                    fontSize={TEXT.value}
-                    fontWeight="bold"
-                    color={tone ? TONE_COLOR[tone] : COLOR.text}
-                  >
-                    {formatValue(f)}
-                  </VrText>
-                </Container>
-              );
-            })}
-          </Container>
-        ))}
-      </List>
-    </Panel>
-  );
-}
-
-function InputLabel({ children }: { children: string }) {
-  return (
-    <Container width={170} flexShrink={0}>
-      <VrText fontSize={TEXT.body} fontWeight="semi-bold" color={COLOR.accentBright}>
+    <Container flexDirection="column" gapRow={10} width="100%" flexShrink={0}>
+      <GroupLabel>{label}</GroupLabel>
+      <Container flexDirection="row" flexWrap="wrap" justifyContent="space-between" gapRow={SPACE.row} width="100%">
         {children}
-      </VrText>
-    </Container>
-  );
-}
-
-function Chip({ icon }: { icon: ReactNode }) {
-  return (
-    <Container width={170} flexShrink={0}>
-      <Container
-        width={40}
-        height={40}
-        alignItems="center"
-        justifyContent="center"
-        borderRadius={RADIUS.dot}
-        backgroundColor={COLOR.rowRest}
-        borderWidth={1}
-        borderColor={COLOR.rowBorder}
-      >
-        {icon}
       </Container>
     </Container>
   );
 }
 
-function InstructionRow({ control, text }: { control: ReactNode; text: string }) {
+function ButtonTiles() {
   return (
-    <Container flexDirection="row" alignItems="center" gapColumn={SPACE.icon} width="100%" flexShrink={0} minHeight={40}>
-      {control}
-      <VrText flexGrow={1} flexShrink={1} fontSize={TEXT.body} color={COLOR.text}>
-        {text}
-      </VrText>
-    </Container>
+    <TileGroup label="Buttons">
+      <Tile icon={<House {...TILE_ICON} />} text="The home position" />
+      <Tile icon={<PersonStanding {...TILE_ICON} />} text="The first person view" />
+      <Tile icon={<Box {...TILE_ICON} />} text="See the terminal from outside" />
+      <Tile icon={<Info {...TILE_ICON} />} text="Show these instructions again" />
+      <Tile icon={<MapIcon {...TILE_ICON} />} text="Map - see where you are, teleport" />
+      <Tile icon={<Images {...TILE_ICON} />} text="Resources - any layout or hotspot" />
+      <Tile icon={<EyeOff {...TILE_ICON} />} text={`Hide the icons - ${HIDE_HINT}`} />
+      <Tile icon={<LogOut {...TILE_ICON} />} text="Leave VR" />
+    </TileGroup>
   );
 }
-
-export function PrimaryButton({ label, onSelect }: { label: string; onSelect: () => void }) {
-  return (
-    <Container
-      width="100%"
-      height={56}
-      flexShrink={0}
-      alignItems="center"
-      justifyContent="center"
-      borderRadius={RADIUS.row}
-      backgroundColor={COLOR.accent}
-      cursor="pointer"
-      hover={{ backgroundColor: COLOR.accentBright }}
-      onPointerDown={onSelect}
-    >
-      <VrText pointerEvents="none" fontSize={TEXT.body} fontWeight="semi-bold" color={COLOR.text}>
-        {label}
-      </VrText>
-    </Container>
-  );
-}
-
-const ACCENT_ICON = { width: 22, height: 22, color: COLOR.accentBright } as const;
 
 export function InstructionsPanel({ view, onDismiss }: { view: VrView; onDismiss: () => void }) {
   const firstPerson = view === "firstPerson";
   return (
-    <Panel width="52%" maxHeight="66%" onDismiss={onDismiss}>
-      <VrText fontSize={TEXT.title} fontWeight="bold" color={COLOR.text}>
-        {firstPerson ? "First Person View" : "Doll House View"}
-      </VrText>
+    <Panel width="56%" maxHeight="44%" align="center" onDismiss={onDismiss}>
+      <Container flexDirection="column" alignItems="center" gapRow={6} flexShrink={0}>
+        <VrText fontSize={TEXT.title} fontWeight="semi-bold" color={COLOR.text}>
+          {firstPerson ? "First Person View" : "Doll House View"}
+        </VrText>
+        <VrText fontSize={TEXT.label} fontWeight="medium" color={COLOR.text} opacity={OPACITY.muted}>
+          {firstPerson ? "Walk the terminal with your controllers" : "The whole terminal, seen from above"}
+        </VrText>
+      </Container>
       <List>
-        {firstPerson ? (
-          <>
-            <InstructionRow control={<InputLabel>Left stick</InputLabel>} text="Walk in the direction you are looking" />
-            <InstructionRow control={<InputLabel>Left grip</InputLabel>} text="Hold while walking to run" />
-            <InstructionRow control={<InputLabel>Right stick</InputLabel>} text="Turn left or right" />
-            <InstructionRow control={<InputLabel>Trigger</InputLabel>} text="Press a hotspot, a button or a row the ray points at" />
-            <InstructionRow control={<Chip icon={<House {...ACCENT_ICON} />} />} text="Back to the home position" />
-            <InstructionRow control={<Chip icon={<PersonStanding {...ACCENT_ICON} />} />} text="The first person view" />
-            <InstructionRow control={<Chip icon={<Box {...ACCENT_ICON} />} />} text="See the terminal from outside again" />
-            <InstructionRow control={<Chip icon={<Library {...ACCENT_ICON} />} />} text="Resources - go to any layout or hotspot" />
-          </>
-        ) : (
-          <>
-            <InstructionRow control={<InputLabel>Look around</InputLabel>} text="See the whole terminal from above" />
-            <InstructionRow control={<InputLabel>Trigger twice</InputLabel>} text="Go down to the home position" />
-            <InstructionRow control={<Chip icon={<House {...ACCENT_ICON} />} />} text="Go down to the home position" />
-          </>
-        )}
-        <InstructionRow control={<Chip icon={<Info {...ACCENT_ICON} />} />} text="Show these instructions again" />
-        <InstructionRow control={<Chip icon={<LogOut {...ACCENT_ICON} />} />} text="Leave VR" />
+        <Container flexDirection="column" gapRow={SPACE.section} width="100%" flexShrink={0}>
+          {firstPerson ? (
+            <>
+              <TileGroup label="Controllers">
+                <Tile control="Left stick" text="Walk where you look" />
+                <Tile control="Left grip" text="Hold while walking to run" />
+                <Tile control="Right stick" text="Push left or right to turn" />
+                <Tile control="Right stick" text="Push up or down to scroll a card" />
+                <Tile control="Trigger" text="Press a hotspot, button or row" />
+              </TileGroup>
+              <ButtonTiles />
+            </>
+          ) : (
+            <>
+              <TileGroup label="Controllers">
+                <Tile control="Stick" text="Push left or right to turn the terminal" />
+                <Tile control="Trigger twice" text="Go down to the home position" />
+                <Tile control="Trigger" text="Press a button" />
+              </TileGroup>
+              <ButtonTiles />
+            </>
+          )}
+        </Container>
       </List>
-      <PrimaryButton label={firstPerson ? "Start walking" : "Start exploring"} onSelect={onDismiss} />
+      <GlassButton label={firstPerson ? "Start walking" : "Start exploring"} onSelect={onDismiss} />
     </Panel>
   );
 }

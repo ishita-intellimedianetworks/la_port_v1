@@ -6,6 +6,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useCoarsePointer, useIsMobile } from "@/shared/responsive";
 import { NAV_GLASS } from "../../overlay/glass-theme";
+import { markerScale } from "@/shared/runtime/marker-scale";
 
 /** Rings in flight at once, evenly staggered through one cycle. */
 const PING_COUNT = 2;
@@ -117,7 +118,7 @@ export function Hotspot({
       const worldPerPx = (2 * Math.tan((cam.fov * Math.PI) / 360) * dist) / viewportHeight;
       const wanted = (beadPx / 2) * worldPerPx;
       const s = Math.min(maxScale, Math.max(MIN_SCALE, wanted / size));
-      sizer.scale.setScalar(s);
+      sizer.scale.setScalar(s * markerScale.value);
     }
 
     const [period, reach, peak, breathRate] = hovered

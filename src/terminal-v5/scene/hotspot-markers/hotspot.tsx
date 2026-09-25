@@ -6,6 +6,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useCoarsePointer, useIsMobile } from "@/shared/responsive";
 import { NAV_GLASS } from "../../overlay/glass-theme";
+import { markerScale } from "@/shared/runtime/marker-scale";
 
 const PING_COUNT = 2;
 
@@ -113,7 +114,7 @@ export function Hotspot({
         screenLocked ? MAX_SCALE_LOCKED : maxScale,
         Math.max(screenLocked ? MIN_SCALE_LOCKED : MIN_SCALE, wanted / size),
       );
-      sizer.scale.setScalar(s);
+      sizer.scale.setScalar(s * markerScale.value);
     }
 
     if (still && !hovered) {

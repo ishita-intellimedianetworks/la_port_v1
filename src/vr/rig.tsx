@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useXR, useXRInputSourceState } from "@react-three/xr";
 import * as THREE from "three";
+import { useWorldStore } from "@/shared/stores/world-store";
 import { useVrBridge, type VrView } from "./bridge";
 
 export const VR_LOCOMOTION = {
@@ -15,6 +16,11 @@ export const VR_LOCOMOTION = {
   snapRelease: 0.3,
   jumpUnits: 2,
   jumpYaw: 0.2,
+  orbitRadiansPerSecond: THREE.MathUtils.degToRad(60),
+  orbitNear: 0.6,
+  orbitFallbackUnits: 300,
+  orbitMinUnits: 20,
+  orbitMaxUnits: 4000,
 } as const;
 
 type Pose = { x: number; y: number; z: number; yaw: number };
@@ -29,6 +35,27 @@ const _step = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
+const _look = new THREE.Vector3();
+
+type Orbit = { px: number; py: number; pz: number; anchor: THREE.Vector3; centred: boolean };
+
+function orbitPivot(pose: { position: number[]; rotation: number[] }, groundY: number) {
+  const [x, y, z] = pose.position;
+  _euler.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], "YXZ");
+  _look.set(0, 0, -1).applyEuler(_euler);
+  const reach =
+    _look.y < -0.05
+      ? THREE.MathUtils.clamp((y - groundY) / -_look.y, VR_LOCOMOTION.orbitMinUnits, VR_LOCOMOTION.orbitMaxUnits)
+      : VR_LOCOMOTION.orbitFallbackUnits;
+  return { x: x + _look.x * reach, z: z + _look.z * reach };
+}
+
+function rotateAbout(next: Pose, px: number, pz: number, angle: number) {
+  const moved = new THREE.Vector3(next.x - px, 0, next.z - pz).applyAxisAngle(UP, angle);
+  next.x = moved.x + px;
+  next.z = moved.z + pz;
+  next.yaw += angle;
+}
 
 function axis(v: number | undefined) {
   const x = v ?? 0;
@@ -55,6 +82,7 @@ export function VrRig() {
   const applied = useRef<Pose>({ x: 0, y: 0, z: 0, yaw: 0 });
   const followed = useRef<Followed | null>(null);
   const snapArmed = useRef(true);
+  const orbit = useRef<Orbit | null>(null);
 
   useEffect(() => {
     const xrCamera = gl.xr.getCamera();
@@ -90,7 +118,8 @@ export function VrRig() {
       target = { x: p.x, y: p.y, z: p.z, yaw: ctrl.getRotationY(), foot: ctrl.getFootPosition().y, view: "firstPerson" };
     } else if (br.view === "dollhouse" && br.dollhousePose) {
       const [x, y, z] = br.dollhousePose.position;
-      target = { x, y, z, yaw: br.dollhousePose.rotation[1], foot: y - localY, view: "dollhouse" };
+      const held = followed.current?.view === "dollhouse" ? followed.current.foot : y - localY;
+      target = { x, y, z, yaw: br.dollhousePose.rotation[1], foot: held, view: "dollhouse" };
     }
     if (!target) return;
 
@@ -116,6 +145,53 @@ export function VrRig() {
     }
     followed.current = target;
 
+    if (target.view !== "dollhouse" || !br.dollhousePose) {
+      orbit.current = null;
+    } else {
+      if (jump || !orbit.current) {
+        const centre = useWorldStore.getState().bounds?.center;
+        const ground = orbitPivot(br.dollhousePose, br.groundY);
+        const px = centre ? centre[0] : ground.x;
+        const py = centre ? centre[1] : br.groundY;
+        const pz = centre ? centre[2] : ground.z;
+        const anchor = new THREE.Vector3(target.x, target.y, target.z);
+        const k = VR_LOCOMOTION.orbitNear - 1;
+        const dx = (anchor.x - px) * k;
+        const dy = (anchor.y - py) * k;
+        const dz = (anchor.z - pz) * k;
+        next.x += dx;
+        next.y += dy;
+        next.z += dz;
+        anchor.set(anchor.x + dx, anchor.y + dy, anchor.z + dz);
+        orbit.current = { px, py, pz, anchor, centred: !!centre };
+      }
+      const o = orbit.current;
+      if (!o.centred) {
+        const centre = useWorldStore.getState().bounds?.center;
+        if (centre) {
+          o.px = centre[0];
+          o.py = centre[1];
+          o.pz = centre[2];
+          o.centred = true;
+        }
+      }
+      if (!br.fadeVisible) {
+        const dt = Math.min(delta, 0.1);
+        const ls = left?.gamepad?.["xr-standard-thumbstick"];
+        const rs = right?.gamepad?.["xr-standard-thumbstick"];
+        const lx = axis(ls?.xAxis);
+        const rx = axis(rs?.xAxis);
+        const turn = Math.abs(lx) > Math.abs(rx) ? lx : rx;
+        if (turn !== 0) {
+          const angle = -turn * VR_LOCOMOTION.orbitRadiansPerSecond * dt;
+          rotateAbout(next, o.px, o.pz, angle);
+          o.anchor.set(o.anchor.x - o.px, o.anchor.y, o.anchor.z - o.pz).applyAxisAngle(UP, angle);
+          o.anchor.x += o.px;
+          o.anchor.z += o.pz;
+        }
+      }
+    }
+
     if (ctrl && !br.fadeVisible && !br.hotspot) {
       const dt = Math.min(delta, 0.1);
 
@@ -124,11 +200,7 @@ export function VrRig() {
       if (snapArmed.current && Math.abs(turn) > VR_LOCOMOTION.snapEngage) {
         snapArmed.current = false;
         const angle = turn > 0 ? -VR_LOCOMOTION.snapTurnRadians : VR_LOCOMOTION.snapTurnRadians;
-        const pivot = new THREE.Vector3(_head.x, 0, _head.z);
-        const moved = new THREE.Vector3(next.x, 0, next.z).sub(pivot).applyAxisAngle(UP, angle).add(pivot);
-        next.x = moved.x;
-        next.z = moved.z;
-        next.yaw += angle;
+        rotateAbout(next, _head.x, _head.z, angle);
       }
 
       const stick = left?.gamepad?.["xr-standard-thumbstick"];

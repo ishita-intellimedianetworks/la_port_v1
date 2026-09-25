@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useRef, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Container, Fullscreen, VanillaFullscreen } from "@react-three/uikit";
+import { X } from "@react-three/uikit-lucide";
 import * as THREE from "three";
+import { useStickScroll } from "./stick-scroll";
 import { VrText } from "./text";
 import {
+  BAR_BUTTON,
   COLOR,
   OPACITY,
   PANEL_DISTANCE,
@@ -39,36 +42,88 @@ export function HeadLocked(props: ComponentProps<typeof Fullscreen>) {
   );
 }
 
-export function Glass({ radius = RADIUS.panel, fillOpacity = OPACITY.panel }: { radius?: number; fillOpacity?: number }) {
-  const fill = {
+export function Glass({
+  radius = RADIUS.panel,
+  fill = COLOR.panel,
+  fillOpacity = OPACITY.panel,
+  border = COLOR.border,
+  borderOpacity = OPACITY.border,
+  borderWidth = 1.5,
+}: {
+  radius?: number;
+  fill?: string;
+  fillOpacity?: number;
+  border?: string;
+  borderOpacity?: number;
+  borderWidth?: number;
+}) {
+  const layer = {
     positionType: "absolute",
+    positionTop: 0,
+    positionLeft: 0,
     width: "100%",
     height: "100%",
     pointerEvents: "none",
+    borderRadius: radius,
   } as const;
   return (
     <>
-      <Container {...fill} borderRadius={radius} backgroundColor={COLOR.panel} opacity={fillOpacity} />
-      <Container
-        {...fill}
-        borderRadius={radius}
-        borderWidth={1.5}
-        borderColor={COLOR.border}
-        opacity={OPACITY.border}
-      />
+      <Container {...layer} backgroundColor={fill} opacity={fillOpacity} />
+      {borderOpacity > 0 && (
+        <Container {...layer} borderWidth={borderWidth} borderColor={border} opacity={borderOpacity} />
+      )}
     </>
+  );
+}
+
+const CLOSE = {
+  size: 36,
+  inset: -14,
+  fill: "#e5484d",
+  hover: "#f2555a",
+  icon: 18,
+} as const;
+
+export function RedClose({ onClose }: { onClose: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Container
+      positionType="absolute"
+      positionTop={CLOSE.inset}
+      positionRight={CLOSE.inset}
+      width={CLOSE.size}
+      height={CLOSE.size}
+      alignItems="center"
+      justifyContent="center"
+      borderRadius={RADIUS.dot}
+      backgroundColor={hovered ? CLOSE.hover : CLOSE.fill}
+      borderWidth={1.5}
+      borderColor="rgba(255, 255, 255, 0.55)"
+      cursor="pointer"
+      transformScaleX={hovered ? 1.08 : 1}
+      transformScaleY={hovered ? 1.08 : 1}
+      onHoverChange={(h: boolean) => setHovered(h)}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <X width={CLOSE.icon} height={CLOSE.icon} color={COLOR.text} />
+    </Container>
   );
 }
 
 export function Panel({
   children,
   width = "44%",
-  maxHeight = "58%",
+  maxHeight = "40%",
+  align = "stretch",
   onDismiss,
 }: {
   children: ReactNode;
   width?: `${number}%` | number;
   maxHeight?: `${number}%` | number;
+  align?: "stretch" | "center";
   onDismiss: () => void;
 }) {
   return (
@@ -77,14 +132,17 @@ export function Panel({
       <Container
         positionType="relative"
         flexDirection="column"
+        alignItems={align}
         padding={SPACE.panel}
         gapRow={SPACE.section}
         width={width}
         maxHeight={maxHeight}
         borderRadius={RADIUS.panel}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <Glass />
         {children}
+        <RedClose onClose={onDismiss} />
       </Container>
     </HeadLocked>
   );
@@ -92,10 +150,11 @@ export function Panel({
 
 export function IconButton({
   icon,
-  size = 60,
+  size = BAR_BUTTON,
   active = false,
   tone = "default",
   disabled = false,
+  onHover,
   onSelect,
 }: {
   icon: ReactNode;
@@ -103,11 +162,13 @@ export function IconButton({
   active?: boolean;
   tone?: "default" | "danger";
   disabled?: boolean;
+  onHover?: (hovered: boolean) => void;
   onSelect: () => void;
 }) {
-  const danger = tone === "danger";
-  const rest = danger ? COLOR.danger : active ? COLOR.accent : COLOR.rowRest;
-  const hover = danger ? COLOR.dangerHover : active ? COLOR.accentBright : COLOR.rowHover;
+  const [hovered, setHovered] = useState(false);
+  const lit = hovered && !disabled;
+  const fill = active ? COLOR.accent : lit && tone === "danger" ? COLOR.danger : COLOR.glass;
+  const fillOpacity = active || (lit && tone === "danger") ? 1 : lit ? OPACITY.chipHover : OPACITY.chip;
   return (
     <Container
       width={size}
@@ -116,15 +177,30 @@ export function IconButton({
       alignItems="center"
       justifyContent="center"
       borderRadius={RADIUS.dot}
-      borderWidth={1.5}
-      borderColor={active ? COLOR.border : COLOR.rowBorder}
-      backgroundColor={rest}
-      opacity={disabled ? 0.45 : 1}
+      opacity={disabled ? OPACITY.disabled : 1}
       cursor={disabled ? "default" : "pointer"}
-      {...(disabled ? {} : { hover: { backgroundColor: hover } })}
+      transformScaleX={lit ? 1.06 : 1}
+      transformScaleY={lit ? 1.06 : 1}
+      onHoverChange={(h: boolean) => {
+        setHovered(h);
+        onHover?.(h);
+      }}
       onPointerDown={disabled ? undefined : onSelect}
     >
-      <Container pointerEvents="none" width="100%" height="100%" alignItems="center" justifyContent="center">
+      <Glass
+        radius={RADIUS.dot}
+        fill={fill}
+        fillOpacity={fillOpacity}
+        borderOpacity={active ? OPACITY.activeBorder : OPACITY.chipBorder}
+      />
+      <Container
+        pointerEvents="none"
+        width="100%"
+        height="100%"
+        alignItems="center"
+        justifyContent="center"
+        opacity={active || lit ? 1 : OPACITY.icon}
+      >
         {icon}
       </Container>
     </Container>
@@ -151,6 +227,8 @@ export function Row({
   onSelect: () => void;
 }) {
   const pressed = useRef(new Map<number, THREE.Vector3>());
+  const [hovered, setHovered] = useState(false);
+  const lit = hovered && !disabled;
   return (
     <Container
       width="100%"
@@ -160,14 +238,11 @@ export function Row({
       alignItems="center"
       gapColumn={SPACE.icon}
       paddingX={SPACE.rowX}
-      paddingY={8}
+      paddingY={10}
       borderRadius={RADIUS.row}
-      borderWidth={1}
-      borderColor={active ? COLOR.accentBright : COLOR.rowBorder}
-      backgroundColor={active ? COLOR.rowActive : COLOR.rowRest}
-      opacity={disabled ? 0.45 : 1}
+      opacity={disabled ? OPACITY.disabled : 1}
       cursor={disabled ? "default" : "pointer"}
-      {...(disabled ? {} : { hover: { backgroundColor: COLOR.rowHover } })}
+      onHoverChange={(h: boolean) => setHovered(h)}
       onPointerDown={(e) => {
         if (disabled || e.pointerId == null) return;
         pressed.current.set(e.pointerId, e.point.clone());
@@ -182,26 +257,115 @@ export function Row({
         if (from && from.distanceTo(e.point) <= DRAG_SLOP) onSelect();
       }}
     >
-      {icon && (
-        <Container pointerEvents="none" flexShrink={0}>
-          {icon}
-        </Container>
-      )}
+      <Glass
+        radius={RADIUS.row}
+        fill={active ? COLOR.accent : COLOR.tile}
+        fillOpacity={active ? 1 : lit ? OPACITY.tileHover : OPACITY.tile}
+        borderOpacity={active ? OPACITY.activeBorder : lit ? OPACITY.border : OPACITY.chipBorder}
+      />
+      {icon && <IconChip icon={icon} />}
       <Container pointerEvents="none" flexDirection="column" flexGrow={1} flexShrink={1} gapRow={2}>
-        <VrText fontSize={TEXT.body} fontWeight="semi-bold" color={COLOR.text}>
+        <VrText fontSize={TEXT.tile + 1} fontWeight="semi-bold" color={COLOR.text}>
           {label}
         </VrText>
         {meta && (
-          <VrText fontSize={TEXT.meta} color={COLOR.text}>
+          <VrText fontSize={TEXT.meta} color={COLOR.text} opacity={OPACITY.muted}>
             {meta}
           </VrText>
         )}
       </Container>
       {trailing && (
-        <Container pointerEvents="none" flexShrink={0}>
+        <Container pointerEvents="none" flexShrink={0} opacity={OPACITY.muted}>
           {trailing}
         </Container>
       )}
+    </Container>
+  );
+}
+
+export function IconChip({ icon, size = 40 }: { icon: ReactNode; size?: number }) {
+  return (
+    <Container
+      pointerEvents="none"
+      width={size}
+      height={size}
+      flexShrink={0}
+      alignItems="center"
+      justifyContent="center"
+      borderRadius={RADIUS.dot}
+    >
+      <Glass radius={RADIUS.dot} fill={COLOR.tile} fillOpacity={OPACITY.tile} borderOpacity={0} />
+      {icon}
+    </Container>
+  );
+}
+
+export function Tile({ icon, control, text }: { icon?: ReactNode; control?: string; text: string }) {
+  return (
+    <Container
+      flexDirection="row"
+      alignItems="center"
+      gapColumn={SPACE.icon}
+      paddingX={SPACE.rowX}
+      paddingY={SPACE.tile}
+      borderRadius={RADIUS.tile}
+      width="48.5%"
+      flexShrink={0}
+    >
+      <Glass radius={RADIUS.tile} fill={COLOR.tile} fillOpacity={OPACITY.tile} borderOpacity={OPACITY.chipBorder} />
+      {control ? (
+        <Container width={118} flexShrink={0}>
+          <VrText fontSize={TEXT.tile} fontWeight="semi-bold" color={COLOR.accentBright}>
+            {control}
+          </VrText>
+        </Container>
+      ) : (
+        <IconChip icon={icon} />
+      )}
+      <VrText flexGrow={1} flexShrink={1} fontSize={TEXT.tile} fontWeight="semi-bold" color={COLOR.text}>
+        {text}
+      </VrText>
+    </Container>
+  );
+}
+
+export function GroupLabel({ children }: { children: string }) {
+  return (
+    <VrText
+      fontSize={TEXT.group}
+      fontWeight="semi-bold"
+      letterSpacing={2}
+      color={COLOR.text}
+      opacity={OPACITY.muted}
+    >
+      {children.toUpperCase()}
+    </VrText>
+  );
+}
+
+export function GlassButton({ label, onSelect }: { label: string; onSelect: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Container
+      height={52}
+      paddingX={40}
+      flexShrink={0}
+      alignItems="center"
+      justifyContent="center"
+      borderRadius={RADIUS.button}
+      cursor="pointer"
+      onHoverChange={(h: boolean) => setHovered(h)}
+      onPointerDown={onSelect}
+    >
+      <Glass
+        radius={RADIUS.button}
+        fill={hovered ? COLOR.accent : COLOR.tile}
+        fillOpacity={hovered ? 1 : OPACITY.tile}
+        borderOpacity={hovered ? OPACITY.activeBorder : OPACITY.border}
+      />
+      <VrText pointerEvents="none" fontSize={TEXT.label + 2} fontWeight="semi-bold" color={COLOR.text}>
+        {label}
+      </VrText>
     </Container>
   );
 }
@@ -210,40 +374,41 @@ export function PanelHeader({
   title,
   subtitle,
   onBack,
-  onClose,
   backIcon,
-  closeIcon,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
-  onClose: () => void;
   backIcon: ReactNode;
-  closeIcon: ReactNode;
 }) {
   return (
-    <Container flexDirection="row" alignItems="flex-start" gapColumn={12} flexShrink={0}>
-      {onBack && <IconButton size={40} icon={backIcon} onSelect={onBack} />}
+    <Container flexDirection="row" alignItems="center" gapColumn={14} flexShrink={0} paddingRight={20}>
+      {onBack && <IconButton size={44} icon={backIcon} onSelect={onBack} />}
       <Container flexDirection="column" flexGrow={1} flexShrink={1} gapRow={4}>
-        <VrText fontSize={TEXT.title} fontWeight="bold" color={COLOR.text}>
+        <VrText fontSize={TEXT.title} fontWeight="semi-bold" color={COLOR.text}>
           {title}
         </VrText>
         {subtitle && (
-          <VrText fontSize={TEXT.label} fontWeight="medium" color={COLOR.text}>
+          <VrText fontSize={TEXT.label} fontWeight="medium" color={COLOR.text} opacity={OPACITY.muted}>
             {subtitle}
           </VrText>
         )}
       </Container>
-      <IconButton size={40} icon={closeIcon} onSelect={onClose} />
     </Container>
   );
 }
 
-export function List({ children }: { children: ReactNode }) {
+export function List({ children, wrap = false }: { children: ReactNode; wrap?: boolean }) {
+  const [scrollRef, onScrollHover] = useStickScroll();
   return (
     <Container
-      flexDirection="column"
+      ref={scrollRef}
+      onHoverChange={onScrollHover}
+      flexDirection={wrap ? "row" : "column"}
+      flexWrap={wrap ? "wrap" : "no-wrap"}
+      justifyContent={wrap ? "space-between" : "flex-start"}
       gapRow={SPACE.row}
+      width="100%"
       flexShrink={1}
       overflow="scroll"
       scrollbarWidth={6}
@@ -253,5 +418,11 @@ export function List({ children }: { children: ReactNode }) {
     >
       {children}
     </Container>
+  );
+}
+
+export function Divider() {
+  return (
+    <Container width="100%" height={1} flexShrink={0} backgroundColor={COLOR.border} opacity={OPACITY.divider} />
   );
 }

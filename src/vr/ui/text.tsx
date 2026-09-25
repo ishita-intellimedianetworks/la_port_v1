@@ -47,5 +47,9 @@ export function VrText({ children, ...props }: ComponentProps<typeof Text>) {
       : Array.isArray(children)
         ? children.map((c) => (typeof c === "string" ? fontSafe(c) : c))
         : children;
-  return <Text {...props}>{safe}</Text>;
+  return (
+    <Text minWidth={0} {...props}>
+      {safe}
+    </Text>
+  );
 }

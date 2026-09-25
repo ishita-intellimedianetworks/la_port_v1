@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 import type { HotspotConfig } from "@/config/schema";
 
 type Vec3 = [number, number, number];
@@ -22,6 +22,40 @@ export interface VrController {
 
 export type VrView = "dollhouse" | "firstPerson";
 
+export interface VrMapPin {
+  id: string;
+  num: number;
+  name: string;
+  x: number;
+  z: number;
+  camera: { position: Vec3; rotation: Vec3 } | null;
+}
+
+export interface VrMapCategory {
+  key: string;
+  label: string;
+  pins: VrMapPin[];
+}
+
+export interface VrMap {
+  imageUrl: string;
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  categories: VrMapCategory[];
+  metersPerUnit: number;
+  currentId: string | null;
+  teleport: (pin: VrMapPin) => void;
+}
+
+export interface VrCardInfo {
+  destId: string;
+  index: number;
+  hotspotId?: string;
+}
+
+export interface VrCardProps extends VrCardInfo {
+  onClose: () => void;
+}
+
 export interface VrLoaderState {
   show: boolean;
   othersCached: boolean;
@@ -37,8 +71,11 @@ export interface VrBridge {
   fadeVisible: boolean;
   groups: VrResourceGroup[];
   hotspot: HotspotConfig | null;
-  hotspotLayoutName: string | null;
+  card: VrCardInfo | null;
+  map: VrMap | null;
+  Card: ComponentType<VrCardProps>;
   dollhousePose: { position: Vec3; rotation: Vec3 } | null;
+  groundY: number;
   controller: () => VrController | null;
   prepare: () => void;
   enterHome: () => void;
@@ -46,6 +83,7 @@ export interface VrBridge {
   goHome: () => void;
   goFirstPerson: (() => void) | null;
   goToHotspot: (id: string) => void;
+  runQueued: () => void;
   closeHotspot: () => void;
 }
 

@@ -7,6 +7,8 @@ const MAX_BLACKOUT_WAIT_MS = 8000;
 
 const SWAP_BUFFER_MS = 120;
 
+const POLL_MS = 16;
+
 export interface FadeTransitionAPI {
   /** Bind to `<FadeScreen visible={...}/>`. */
   visible: boolean;
@@ -24,12 +26,12 @@ export function useFadeTransition(): FadeTransitionAPI {
   const [visible, setVisible] = useState(false);
   const [fadeInMs, setFadeInMs] = useState(FADE_IN_MS);
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rafRef     = useRef<number | null>(null);
+  const pollRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   const clearPending = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current);   timerRef.current = null; }
-    if (rafRef.current)   { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (pollRef.current)  { clearTimeout(pollRef.current);    pollRef.current = null; }
   }, []);
 
   useEffect(() => {
@@ -63,13 +65,13 @@ export function useFadeTransition(): FadeTransitionAPI {
     const tick = () => {
       if (!mountedRef.current) return;
       if (waitUntil() || performance.now() - start >= MAX_BLACKOUT_WAIT_MS) {
-        rafRef.current = null;
+        pollRef.current = null;
         lower();
         return;
       }
-      rafRef.current = requestAnimationFrame(tick);
+      pollRef.current = setTimeout(tick, POLL_MS);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    pollRef.current = setTimeout(tick, POLL_MS);
   }, []);
 
   const transition = useCallback((swap?: () => void, waitUntil?: () => boolean, fadeMs: number = FADE_IN_MS) => {

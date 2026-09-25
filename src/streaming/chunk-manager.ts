@@ -10,6 +10,7 @@ import type { StreamHideRule } from "@/config/schema";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
 import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
 import { prefetchUrls } from "@/shared/runtime/prefetch";
+import { clearStreamReach, publishStreamReach } from "./reach";
 
 interface ChunkState {
   entry: ChunkEntry;
@@ -615,6 +616,7 @@ export class ChunkManager {
     // Residency is a different strategy — see updateResident().
     if (this.mode === "adaptive" && this.cfg.geometryMode === "resident") {
       this.updateResident();
+      this.publishReach();
       return;
     }
     // Stream culling: only chunks the camera can see load, except a 360° bubble
@@ -723,6 +725,7 @@ export class ChunkManager {
 
     // Redraw the shared instance buffers; early-outs unless the set changed.
     this.instances?.sync(this.instResident);
+    this.publishReach();
 
     if (this.boundsOn) {
       for (const st of this.states.values()) {
@@ -736,6 +739,18 @@ export class ChunkManager {
         }
       }
     }
+  }
+
+  private publishReach() {
+    let reach = Infinity;
+    for (const st of this.states.values()) {
+      if (this.hidden.has(st.entry.id) || !st.entry.lods.length) continue;
+      if ((this.mountFails.get(st.entry.id) ?? 0) >= ChunkManager.MAX_MOUNT_FAILS) continue;
+      if (st.current !== null && st.group !== null) continue;
+      const d = this.surfaceDist(this._cam, st.entry);
+      if (d < reach) reach = d;
+    }
+    publishStreamReach(reach);
   }
 
   private residentBytes(): number {
@@ -1682,6 +1697,7 @@ export class ChunkManager {
 
   dispose() {
     this.disposed = true;
+    clearStreamReach();
     this.setBoundsVisible(false);
     for (const g of this.gizmos.values()) {
       g.geometry.dispose();

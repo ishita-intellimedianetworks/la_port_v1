@@ -18,13 +18,16 @@ layer, and the decisions behind both.
 > mode rule, a config key) should land here in the same change.
 
 > **VR.** `/v5/vr`, like `/v2/vr` to `/v4/vr`, is a separate page described in
-> `docs/vr.md`. It lives in `terminal-v5/vr/` and `src/vr/` and changes no
-> other file in this tree: it mounts the same provider, scene and overlays and
+> `docs/vr.md`. It lives in `terminal-v5/vr/` and `src/vr/`; the one line it
+> needs elsewhere in this tree is `hotspot.tsx` multiplying the marker scale by
+> `markerScale.value`, which is 1 outside a VR session. It mounts the same provider, scene and overlays and
 > moves the headset by following `PlayerController`. In the headset, the
 > security group heads the Resources menu, Home and Dollhouse reset the security
-> store as the 3D bar does, and a security hotspot's card shows its live fields
-> from `useSecurityStore`. The designed security layouts are not drawn there
-> yet.
+> store as the 3D bar does, and a security hotspot's card is this tree's
+> `HotspotDataCard` rebuilt in uikit (`terminal-v5/vr/hotspot-card.tsx`): the
+> designed S01-S06 layouts with clip or still, hero and alerts, the S07
+> command-and-incident view, source incidents and the audit log, all reading
+> `useSecurityStore`. When the 3D card changes, change that file too.
 
 ---
 

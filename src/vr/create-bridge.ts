@@ -1,8 +1,9 @@
-import type { MutableRefObject } from "react";
+import type { ComponentType, MutableRefObject } from "react";
 import type { Site } from "@/config";
 import type { HotspotConfig } from "@/config/schema";
 import { useProgressStore } from "@/shared/stores/progress-store";
-import type { VrBridge, VrController, VrResourceGroup } from "./bridge";
+import type { DestinationsByCategory } from "@/shared/types";
+import type { VrBridge, VrCardInfo, VrCardProps, VrController, VrMap, VrMapCategory, VrResourceGroup } from "./bridge";
 
 type Vec3 = [number, number, number];
 type Pose = { position: number[]; rotation: number[] };
@@ -14,6 +15,7 @@ export interface TransitionOptions {
 
 interface TreeFloor {
   id: string;
+  dests?: DestinationsByCategory;
   startPosition?: Vec3;
   startRotation?: Vec3;
   dollHouseCamera?: { position: Vec3; rotation: Vec3 };
@@ -38,6 +40,49 @@ interface TreeUi {
     dollHouseCamera?: { position: Vec3; rotation: Vec3 };
     dollHousePreviewUrl?: string;
   };
+}
+
+interface MapSource {
+  minimap: { imageUrl: string; bounds: VrMap["bounds"] } | null;
+  categories: readonly { key: string; short: string }[];
+  metersPerUnit: number;
+  currentId: string | null;
+}
+
+const MAP_SKIP = new Set(["seatviews", "eventupdates"]);
+
+let queued: (() => void) | null = null;
+
+function destCamera(dests: DestinationsByCategory | undefined, id: string) {
+  if (!dests) return null;
+  for (const list of Object.values(dests)) {
+    const hit = list?.find((d) => d.id === id);
+    if (hit?.camera) return hit.camera;
+  }
+  return null;
+}
+
+function mapCategories(dests: DestinationsByCategory | undefined, categories: MapSource["categories"]): VrMapCategory[] {
+  if (!dests) return [];
+  return categories
+    .filter((c) => !MAP_SKIP.has(c.key))
+    .map((c) => {
+      const list = dests[c.key as keyof DestinationsByCategory] ?? [];
+      const pins = list.flatMap((dest, i) => {
+        const at = dest.hotspot?.position ?? dest.camera?.position;
+        if (!at) return [];
+        return [{
+          id: dest.id,
+          num: i + 1,
+          name: dest.label,
+          x: at[0],
+          z: at[2],
+          camera: dest.camera ? { position: dest.camera.position, rotation: dest.camera.rotation } : null,
+        }];
+      });
+      return { key: c.key, label: c.short, pins };
+    })
+    .filter((c) => c.pins.length > 0);
 }
 
 interface NavUi {
@@ -95,26 +140,30 @@ export function createVrBridge({
   transition,
   navUi,
   groups,
-  hotspotId,
+  card,
+  Card,
   resolveHotspot,
   goToHotspot,
   firstPersonPose,
   onFirstPerson,
   firstPersonWait,
   onReset,
+  mapSource,
 }: {
   site: Site;
   ui: TreeUi;
   transition: (swap: () => void, opts?: TransitionOptions) => void;
   navUi: NavUi;
   groups: VrResourceGroup[];
-  hotspotId: string | null;
+  card: VrCardInfo | null;
+  Card: ComponentType<VrCardProps>;
   resolveHotspot?: (id: string) => HotspotConfig | undefined;
   goToHotspot: (id: string) => void;
   firstPersonPose: Pose | null | undefined;
   onFirstPerson?: () => void;
   firstPersonWait?: () => () => boolean;
   onReset?: () => void;
+  mapSource?: MapSource;
 }): VrBridge {
   const activeFloor = ui.floors[ui.activeFloorIndex];
   const homePosition = (activeFloor?.startPosition ?? ui.startPosition ?? [0, 0, 0]) as Vec3;
@@ -133,9 +182,24 @@ export function createVrBridge({
     navUi.setAtHome(true);
   };
 
+  const inFirstPerson = ui.phase === "firstPerson";
+
+  const enterAt = (position: Vec3, rotation: Vec3, then?: () => void) => {
+    navUi.setAtHome(false);
+    navUi.setHotspotInfo(null);
+    queued = then ?? null;
+    ui.sceneContent.handleEnterFirstPerson(position, rotation);
+  };
+
   const goFirstPerson = () => {
+    if (!firstPersonPose) return;
+    if (!inFirstPerson) {
+      onFirstPerson?.();
+      enterAt(firstPersonPose.position as Vec3, firstPersonPose.rotation as Vec3);
+      return;
+    }
     const ctrl = ui.playerControllerRef.current;
-    if (!ctrl || !firstPersonPose) return;
+    if (!ctrl) return;
     onFirstPerson?.();
     const p = firstPersonPose.position as Vec3;
     const r = firstPersonPose.rotation as Vec3;
@@ -164,6 +228,52 @@ export function createVrBridge({
     transition(() => ui.setPhase("dollhouse"), { expectedKey: activeFloor?.id });
   };
 
+  const teleportPin: VrMap["teleport"] = (pin) => {
+    if (!pin.camera) return;
+    if (!inFirstPerson) {
+      enterAt(pin.camera.position, pin.camera.rotation);
+      return;
+    }
+    const ctrl = ui.playerControllerRef.current;
+    if (!ctrl) return;
+    const [x, y, z] = pin.camera.position;
+    const surfaceY = ctrl.probeFloorY(x, z, y) ?? y;
+    navUi.setHotspotInfo(null);
+    transition(() => ctrl.teleportTo([x, surfaceY, z], pin.camera!.rotation));
+  };
+  const map: VrMap | null = mapSource?.minimap
+    ? {
+        imageUrl: mapSource.minimap.imageUrl,
+        bounds: mapSource.minimap.bounds,
+        categories: mapCategories(activeFloor?.dests, mapSource.categories),
+        metersPerUnit: mapSource.metersPerUnit,
+        currentId: mapSource.currentId,
+        teleport: teleportPin,
+      }
+    : null;
+
+  const layoutPose = (layoutId: string | undefined) =>
+    (layoutId ? destCamera(activeFloor?.dests, layoutId) : null) ??
+    (firstPersonPose ? { position: firstPersonPose.position as Vec3, rotation: firstPersonPose.rotation as Vec3 } : null);
+
+  const reachableGroups = inFirstPerson
+    ? groups
+    : groups.map((g) => {
+        const pose = g.travel ? layoutPose(g.id) : null;
+        return { ...g, travel: pose ? () => enterAt(pose.position, pose.rotation) : g.travel };
+      });
+
+  const reachHotspot = (id: string) => {
+    if (inFirstPerson) {
+      goToHotspot(id);
+      return;
+    }
+    const layoutId = (resolveHotspot?.(id) ?? site.hotspotById[id] ?? site.securityHotspotById[id])?.layoutId;
+    const pose = layoutPose(layoutId);
+    if (pose) enterAt(pose.position, pose.rotation, () => goToHotspot(id));
+  };
+
+  const hotspotId = card?.hotspotId ?? (card ? site.layoutById[card.destId]?.hotspots[card.index - 1] : undefined);
   const hotspot = hotspotId
     ? resolveHotspot?.(hotspotId) ??
       site.hotspotById[hotspotId] ??
@@ -182,10 +292,13 @@ export function createVrBridge({
     },
     view,
     fadeVisible: ui.fadeVisible,
-    groups,
+    groups: reachableGroups,
     hotspot,
-    hotspotLayoutName: hotspot ? site.layoutById[hotspot.layoutId]?.name ?? null : null,
+    card: hotspot ? card : null,
+    map,
+    Card,
     dollhousePose: activeFloor?.dollHouseCamera ?? ui.sceneContent.dollHouseCamera ?? null,
+    groundY: homePosition[1],
     controller: () => ui.playerControllerRef.current,
     prepare: () => {
       if (ui.phase === "overlay") ui.setPhase("dollhouse");
@@ -194,7 +307,12 @@ export function createVrBridge({
     goDollhouse,
     goHome,
     goFirstPerson: firstPersonPose ? goFirstPerson : null,
-    goToHotspot,
+    goToHotspot: reachHotspot,
+    runQueued: () => {
+      const next = queued;
+      queued = null;
+      next?.();
+    },
     closeHotspot: () => navUi.setHotspotInfo(null),
   };
 }

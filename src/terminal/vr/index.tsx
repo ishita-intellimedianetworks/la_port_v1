@@ -8,12 +8,14 @@ import { SITE_NODE_ID } from "@/shared/scene-data/adapter";
 import { EnterVrPrompt } from "@/vr/enter-vr-prompt";
 import { VrLoader } from "@/vr/vr-loader";
 import { VrSession } from "@/vr/session";
+import { useVrStreaming } from "@/vr/vr-streaming";
 import TerminalProvider from "../provider";
 import { initStores } from "../stores/init-stores";
 import SceneGraph from "../scene-graph";
 import { V2VrBridge } from "./bridge";
 
 export default function TerminalExperienceVr({ site = "v2" }: { site?: SiteId }) {
+  useVrStreaming();
   initStores(getSite(site));
   return (
     <SiteProvider id={site}>

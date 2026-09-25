@@ -287,6 +287,10 @@ function lowProfile(c: StreamingConfig): StreamingConfig {
 }
 
 export function detectProfile(): DeviceProfile {
+  return vrStreaming ? "mobile" : detectDevice();
+}
+
+function detectDevice(): DeviceProfile {
   if (typeof navigator === "undefined" || typeof window === "undefined") return "desktop";
   const uaMobile = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile;
   if (uaMobile === true) return "mobile";
@@ -304,18 +308,36 @@ export function detectProfile(): DeviceProfile {
 let _constrained: boolean | null = null;
 
 export function isConstrainedDevice(): boolean {
-  if (_constrained === null) _constrained = detectProfile() !== "desktop";
+  if (_constrained === null) _constrained = detectDevice() !== "desktop";
   return _constrained;
 }
 
 let _mobile: boolean | null = null;
 
 export function isMobileDevice(): boolean {
-  if (_mobile === null) _mobile = detectProfile() === "mobile";
+  if (_mobile === null) _mobile = detectDevice() === "mobile";
   return _mobile;
 }
 
+let vrStreaming = false;
+
+export function setVrStreaming(on: boolean) {
+  vrStreaming = on;
+}
+
+function vrClamp<C extends StreamingConfig | null>(c: C): C {
+  if (!vrStreaming || !c) return c;
+  return { ...c, transmission: "off", adaptiveDpr: false };
+}
+
 export function resolveStreamConfig(
+  variant: StreamVariantId,
+  profile?: DeviceProfile,
+): StreamingConfig {
+  return vrClamp(resolveGroundConfig(variant, profile));
+}
+
+function resolveGroundConfig(
   variant: StreamVariantId,
   profile?: DeviceProfile,
 ): StreamingConfig {
@@ -363,6 +385,13 @@ function residencyClamp(c: StreamingConfig, p: DeviceProfile): StreamingConfig {
 }
 
 export function resolveAerialConfig(
+  variant: StreamVariantId,
+  profile?: DeviceProfile,
+): StreamingConfig | null {
+  return vrClamp(resolveAerialBase(variant, profile));
+}
+
+function resolveAerialBase(
   variant: StreamVariantId,
   profile?: DeviceProfile,
 ): StreamingConfig | null {
@@ -414,6 +443,13 @@ function buildDollhouse(raw: StreamConfig): StreamingConfig | null {
 }
 
 export function resolveDollhouseConfig(
+  variant: StreamVariantId,
+  profile?: DeviceProfile,
+): StreamingConfig | null {
+  return vrClamp(resolveDollhouseBase(variant, profile));
+}
+
+function resolveDollhouseBase(
   variant: StreamVariantId,
   profile?: DeviceProfile,
 ): StreamingConfig | null {
