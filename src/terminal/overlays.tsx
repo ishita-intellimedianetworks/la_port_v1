@@ -18,7 +18,6 @@ import { useStreamVariantId } from "@/streaming/variant";
 import { BottomBar } from "./overlay/bottom-bar";
 import { SpeedControl } from "./overlay/speed-control";
 import { useTerminalUi } from "./context/ui-context";
-import { useIsVr } from "@/vr/vr-mode";
 import type { DestinationCategory, DestinationsByCategory } from "@/shared/types";
 import { useNavUiStore } from "./stores/nav-ui-store";
 import { NAV_GLASS_PANEL } from "./overlay/glass-theme";
@@ -28,18 +27,13 @@ import { tick } from "@/shared/runtime/diagnostics";
 import { useSite } from "@/config/context";
 import { edgeFeather } from "./scene/model-loader/edge-feather";
 
-// "Home" / "currently at" are decided purely by XZ proximity to the fixed start
-// / destination spot (rotation is irrelevant). Tight, so any real step away clears them.
 const HOME_REACH_UNITS = 0.8;
 const CURRENT_REACH_UNITS = 0.8;
 
 export default function Overlays() {
   tick("render:Overlays");
-  // Dev-only (?diag=true): a frozen page is either a render storm or a blocked
-  // main thread. Counting store writes, renders and frames separates the two.
   useEffect(() => useNavUiStore.subscribe(() => tick("write:navUiStore")), []);
   const ui = useTerminalUi();
-  const vr = useIsVr();
   const {
     inlineMode, unitName,
     floors, startPosition, startRotation,
@@ -49,8 +43,6 @@ export default function Overlays() {
     fadeVisible, handleFloorSelect,
     playerControllerRef, triggerFloorTransition,
   } = ui;
-  // Persisted "dollhouse instructions seen" flag — once the overlay's Enter is
-  // tapped we mark it seen so the instructions don't reappear next visit.
   const markInstructionsSeen = useAppStore((s) => s.markInstructionsSeen);
   const markFpInstructionsSeen = useAppStore((s) => s.markFpInstructionsSeen);
   const fpInstructionsSeen = useAppStore((s) => s.fpInstructionsSeen);
@@ -71,8 +63,6 @@ export default function Overlays() {
   const setMapExpanded = useNavUiStore((s) => s.setMapExpanded);
   const mapExpanded = useNavUiStore((s) => s.mapExpanded);
   const eventsOpen = useNavUiStore((s) => s.eventsOpen);
-  // Only walks started from a label/directions panel raise the turn HUD; manual
-  // map clicks and 3D double-clicks walk silently (see navigateToFloor).
   const navHud = useNavUiStore((s) => s.navHud);
   const hotspotInfo = useNavUiStore((s) => s.hotspotInfo);
   const setHotspotInfo = useNavUiStore((s) => s.setHotspotInfo);
@@ -85,8 +75,6 @@ export default function Overlays() {
   }, [isMoving]);
 
   const [venuesOpen, setVenuesOpen] = useState(false);
-  // The one edge flap ("Resources": layouts + their hotspots), mutually
-  // exclusive with the map.
   const [hotspotsFlapOpen, setHotspotsFlapOpen] = useState(false);
   const [homeCardDismissed, setHomeCardDismissed] = useState(false);
   const leftPanelOpen = mapExpanded || openLabel !== null || eventsOpen;
@@ -115,16 +103,12 @@ export default function Overlays() {
       const p = ctrl.getPosition();
       const moving = ctrl.isMoving();
 
-      // A walk that just STARTED closes the open panel so nothing stale lights
-      // up after it (the highlight comes back from position once stopped).
       if (moving && !wasMovingRef.current) { store.setOpenLabel(null); store.setEventsOpen(false); store.setHotspotInfo(null); }
       wasMovingRef.current = moving;
 
       const hp = homeRef.current;
       store.setAtHome(!moving && Math.hypot(p.x - hp[0], p.z - hp[2]) < HOME_REACH_UNITS);
 
-      // Recompute "currently at" only while stopped — during a walk it's hidden
-      // (gated on !isMoving) and keeping the last value avoids mid-walk churn.
       if (!moving) {
         const dests = destsRef.current;
         const prev = store.currentDest;
@@ -195,15 +179,9 @@ export default function Overlays() {
     if (dataCardOpen) closeOverlays("data");
   }, [dataCardOpen, closeOverlays]);
 
-  // "Explore the accommodation" — the floor authored as a transition. Used only
-  // to label the accommodation overlay now that the enter-interior action is off.
   const exploreT = activeFloor?.transitions?.[0];
 
-  // Apartment-interior floors get a stripped-down UI (no minimap / toggle /
-  // nav-path); the Home button there EXITS back to the exterior village.
   const inInterior = !!activeFloor?.interior;
-  // Index of the hotel-room interior floor — the village "Explore Hotel Room"
-  // tab blacks out and swaps straight into it (no fly-in, no double-click).
   const hotelIndex = useMemo(() => floors.findIndex((f) => f.id === "hotel-room"), [floors]);
   const exitToVillage = useCallback(() => {
     const idx = floors.findIndex((f) => !f.interior);
@@ -225,8 +203,6 @@ export default function Overlays() {
   const handleHome = useCallback(() => {
     closeOverlays();
     setVenuesOpen(false);
-    // Clicking Home only ever (re)opens the at-home card — re-clicking never
-    // closes it; only the card's X does.
     setHomeCardDismissed(false);
     goHome();
     const ctrl = playerControllerRef.current;
@@ -235,8 +211,6 @@ export default function Overlays() {
     const p = (floorStart ?? startPosition ?? [0, 0, 0]) as [number, number, number];
     const r = (activeFloor?.startRotation ?? startRotation ?? [0, 0, 0]) as [number, number, number];
     const surfaceY = ctrl?.probeFloorY(p[0], p[2], p[1]) ?? p[1];
-    // Fade to black → snap to the start pose → fade back in. No walking or
-    // gliding across the scene — the same soft transition the destination teleport uses.
     triggerFloorTransition(() => {
       ctrl?.teleportTo([p[0], surfaceY, p[2]], r);
     });
@@ -299,31 +273,25 @@ export default function Overlays() {
     wasCrowdOpen.current = crowdOpen;
   }, [crowdOpen, crowdFly, playerControllerRef, triggerFloorTransition]);
 
-  // The loader completes only when the progress bar has filled to 100% AND both
-  // models are downloaded — so it never hides early.
   const revealProgress = useProgressStore((s) => s.revealProgress);
   const loaderDone = revealProgress >= 0.999 && othersCached;
 
   return (
     <>
       <ForceLandscape />
-      {/* Device fullscreen toggle — self-gates to touch devices in landscape. */}
-      {/* <FullscreenButton /> */}
       {!inlineMode && showHud && (
         <HoloTwinHud
           progress={0}
           visible={!loaderDone}
           onFadeComplete={() => setShowHud(false)}
           unitName={unitName}
-          // A preview point-cloud is loading on the canvas behind — let it
-          // show through the loading screen once it starts glowing in.
           revealVeil={!!ui.sceneContent.dollHousePreviewUrl}
         />
       )}
       {!inlineMode && hasDollHouse && (
         <InstructionsCard
           mode="dollhouse"
-          visible={isReady && phase === "overlay" && !vr}
+          visible={isReady && phase === "overlay"}
           onDismiss={() => {
             markInstructionsSeen();
             setPhase("dollhouse");
@@ -347,8 +315,6 @@ export default function Overlays() {
         <Minimap entered={mapEntered} onExpandedChange={handleMapExpanded} />
       )}
 
-      {/* Google-Maps-style turn-by-turn banner — mirrors the 3D route ribbon.
-          Hidden inside apartment interiors. */}
       <NavHud ctrlRef={playerControllerRef} visible={phase === "firstPerson" && isMoving && !inInterior && navHud} dests={activeFloor?.dests} />
 
       {isReady && hotspotInfo && !fadeVisible && (
@@ -391,7 +357,6 @@ export default function Overlays() {
             className="ui-scrollbar nav-body mt-3 flex max-h-[46dvh] flex-col gap-2.5 overflow-y-auto text-[13px] font-normal leading-relaxed short:mt-2 short:max-h-[52dvh] short:gap-2 short:text-[12px]"
             style={{ color: "var(--nav-text-dim)" }}
           >
-            {/* Two paragraphs, split exactly as on the official la28.org venue page. */}
             <p>
               LA Memorial Coliseum is one of the most illustrious stadiums in the United States.
               Built in 1923, it serves as a living memorial to all who served in the U.S. Armed
@@ -408,8 +373,6 @@ export default function Overlays() {
         </div>
       )}
 
-      {/* Interior exit tab — top-left corner; leaves the apartment back to the
-          village. */}
       {isReady && phase === "firstPerson" && inInterior && (
         <button
           type="button"
@@ -425,8 +388,6 @@ export default function Overlays() {
             border: "1.5px solid var(--nav-border)",
             boxShadow: "var(--nav-shadow-chip)",
             opacity: mapEntered && !fadeVisible && !mapExpanded ? 1 : 0,
-            // Leaves the way the Resources panel beside it does — off the left
-            // edge — so the whole left side clears as one movement.
             transform: mapExpanded ? "translateX(calc(-100% - 24px))" : "translateX(0)",
             pointerEvents: mapExpanded ? "none" : undefined,
           }}
@@ -436,8 +397,6 @@ export default function Overlays() {
         </button>
       )}
 
-      {/* Interior dock: just a small round Home (reset to the interior's start)
-          or a red Stop while moving — nothing else (no speed, no labels). */}
       {phase === "firstPerson" && inInterior && (
         <button
           type="button"
@@ -472,21 +431,16 @@ export default function Overlays() {
             setHotspotsFlapOpen(next);
           }}
           disabled={fadeVisible}
-          // The map is the widest overlay there is and it opens over this edge,
-          // so the panel slides out rather than sitting under it.
           tucked={isMoving || instructionsOpen || dataCardOpen || mapExpanded}
         />
       )}
 
-      {/* Bottom dock: the four actions that work from anywhere. */}
       {phase === "firstPerson" && (
         <BottomBar
           visible={mapEntered && !fadeVisible && !isMoving && !instructionsOpen && !dataCardOpen}
           tucked={hotspotsFlapOpen || mapExpanded}
           mapOpen={mapExpanded}
           onOpenMap={() => {
-            // Read the toggle BEFORE closeOverlays sets it false, or the map
-            // could never be opened — only closed and immediately reopened.
             const next = !mapExpanded;
             closeOverlays("map");
             setMapExpanded(next);
@@ -507,8 +461,6 @@ export default function Overlays() {
         />
       )}
 
-      {/* Stop + speed — bottom-centre glass dock while walking (the rail keeps its
-          icons). The open map window has its own Stop, so hide this then. */}
       {phase === "firstPerson" && !inInterior && isMoving && !mapExpanded && (
         <div
           className="fixed bottom-6 left-1/2 z-120 flex items-center gap-1.5 rounded-[14px] p-[5px_7px] transition-[opacity,transform] duration-[280ms] ease-out short:bottom-2 short:rounded-[10px] short:p-[4px_6px]"

@@ -14,12 +14,8 @@ import {
   type CameraPatch,
 } from "./camera-json";
 
-/** Matches the debug panel's own readback cadence — fast enough to read as
- *  live while walking, slow enough not to re-render on every frame. */
 const POLL_MS = 120;
 
-/** How long a finished save stays on screen before the card goes back to its
- *  buttons. Long enough to read, short enough not to be in the way. */
 const DONE_MS = 4000;
 
 type Stage = "idle" | "confirm" | "saving" | "done" | "error";
@@ -140,8 +136,6 @@ export function DebugCameraEditor() {
             primary={cameraEdit}
             onClick={() => {
               setCameraEdit(!cameraEdit);
-              // Popping the panel open is the point of arming: the six
-              // draggable inputs live there, not here.
               if (!cameraEdit) setPanelCollapsed(false);
             }}
           >

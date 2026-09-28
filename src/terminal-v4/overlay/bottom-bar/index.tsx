@@ -83,7 +83,6 @@ export function BottomBar({
   );
 }
 
-/** Loose enough to take both lucide icons and the local SVG glyph. */
 type BarIcon = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
 function BarButton({
@@ -97,8 +96,6 @@ function BarButton({
   label: string;
   onClick: () => void;
   active?: boolean;
-  /** Sets the NATIVE disabled attribute as well as the styling, so the circle
-   *  leaves the tab order too rather than merely being unclickable. */
   disabled?: boolean;
 }) {
   return (
@@ -117,8 +114,6 @@ function BarButton({
       )}
       style={{
         ...NAV_GLASS_PANEL,
-        // The circle IS the surface now, so it carries the glass and the ring
-        // the dock used to carry.
         background: active ? "var(--nav-accent)" : "var(--nav-glass-strong)",
         border: active ? "1.5px solid rgba(255,255,255,0.5)" : "1.5px solid var(--nav-border)",
         ...(active ? { color: "#ffffff" } : null),
@@ -129,7 +124,6 @@ function BarButton({
   );
 }
 
-/** An isometric-box glyph — lucide has no dollhouse/overview equivalent. */
 function DollhouseGlyph({ size = 18, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg

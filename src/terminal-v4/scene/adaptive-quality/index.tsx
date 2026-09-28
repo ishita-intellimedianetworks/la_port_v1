@@ -5,10 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 
 const SLOW_MS = 50;
 const FAST_MS = 36;
-/** Seconds of frames per decision. */
 const WINDOW = 1;
-/** How far quality may fall. Below 0.75 the canvas is soft enough that the
- *  scene reads as broken rather than as low-detail. */
 const MIN_DPR = 0.75;
 const STEP = 0.25;
 

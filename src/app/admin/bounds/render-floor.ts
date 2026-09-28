@@ -15,7 +15,6 @@ export interface WorldBbox {
 export interface Bbox extends WorldBbox {
   dx: number; dy: number; dz: number;
   cx: number; cz: number;
-  /** dx / dz — the PNG must carry this aspect or overlays drift. */
   aspect: number;
 }
 
@@ -40,7 +39,6 @@ function dracoLoader(): DRACOLoader {
   return _draco;
 }
 
-/** `src` is a File (upload) or a URL string (the in-project model). */
 export async function loadGlb(src: File | string): Promise<THREE.Object3D> {
   const loader = new GLTFLoader();
   loader.setDRACOLoader(dracoLoader());
@@ -63,7 +61,6 @@ export function measureBbox(scene: THREE.Object3D): WorldBbox {
   };
 }
 
-/** Both dims come from the bbox, so image aspect == world aspect. */
 export function pixelDimsFor(bbox: Bbox, ppm: number): { w: number; h: number } {
   return {
     w: Math.max(2, Math.round((bbox.dx * ppm) / 2) * 2),
@@ -72,7 +69,6 @@ export function pixelDimsFor(bbox: Bbox, ppm: number): { w: number; h: number } 
 }
 
 let _maxTex = 0;
-/** GPU limit. A render past this silently produces a blank or clamped image. */
 export function maxTextureSize(): number {
   if (_maxTex) return _maxTex;
   try {
@@ -85,8 +81,6 @@ export function maxTextureSize(): number {
   return _maxTex;
 }
 
-// One renderer for the session: context release is GC-driven, so allocating per
-// render exhausts the browser's WebGL contexts and render() silently no-ops.
 let _renderer: THREE.WebGLRenderer | null = null;
 function getRenderer(): THREE.WebGLRenderer {
   if (_renderer) return _renderer;
@@ -103,7 +97,6 @@ function getRenderer(): THREE.WebGLRenderer {
 }
 
 export interface RenderResult {
-  /** Object URL for the PNG. Revoke when replacing. */
   url: string;
   bytes: number;
   w: number;
@@ -190,8 +183,6 @@ function addLighting(scene: THREE.Scene, bbox: Bbox): void {
   scene.add(fill.target, fill);
 }
 
-// Reads as a schematic whatever the source materials do. Geometries are shared;
-// only the materials and EdgesGeometry are ours to dispose.
 function buildSilhouette(src: THREE.Object3D): { root: THREE.Object3D; dispose: () => void } {
   src.updateWorldMatrix(true, true);
   const root = new THREE.Group();

@@ -9,8 +9,6 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
   const scene = useThree((s) => s.scene);
   const range = fogRange(config);
   const authored = config.fog.color;
-  // Own the Fog we installed, so the frame loop never recolours one that
-  // something else (an interior's HDR environment) put there.
   const ours = useRef<THREE.Fog | null>(null);
 
   useEffect(() => {
@@ -36,8 +34,6 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
     const fog = ours.current;
     if (!fog || scene.fog !== fog) return;
     const bg = scene.background;
-    // Only a Color background is something to match. Inside an interior the
-    // background is the HDR texture, and there is no streamed fog there anyway.
     if (bg instanceof THREE.Color) fog.color.copy(bg);
   });
 

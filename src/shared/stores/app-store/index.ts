@@ -19,7 +19,6 @@ function writeSeen(key: string): void {
   try {
     window.localStorage.setItem(key, "1");
   } catch {
-    /* storage unavailable — the flag simply doesn't persist */
   }
 }
 
@@ -31,7 +30,6 @@ export type AppState = {
   markInstructionsSeen: () => void;
   fpInstructionsSeen: boolean;
   markFpInstructionsSeen: () => void;
-  /** Clear both flags (both cards show again on the next visit). */
   resetInstructionsSeen: () => void;
 };
 
@@ -55,7 +53,6 @@ export const useAppStore = createStore<AppState>((set) => ({
         window.localStorage.removeItem(SEEN_KEYS.dollhouse);
         window.localStorage.removeItem(SEEN_KEYS.firstPerson);
       } catch {
-        /* nothing to clear */
       }
     }
     set({ instructionsSeen: false, fpInstructionsSeen: false });

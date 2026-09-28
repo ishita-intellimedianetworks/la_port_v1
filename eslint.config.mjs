@@ -6,15 +6,6 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
 
-  // `src/terminal` and `src/shared` are VENDORED — the holotwin-la-v3-sofi
-  // scene engine, taken wholesale so its navmesh / walking / overlay behaviour
-  // is the proven one rather than a re-derivation. It was written against an
-  // older lint config, and the React-compiler rules below flag long-standing
-  // patterns in it (imperative refs driven from useFrame, DOM writes in
-  // effects). Rewriting them would fork the code away from its source and
-  // defeat the point of vendoring it, so they are warnings here.
-  //
-  // Everything we author (src/app, src/config, scripts) keeps the full rule set.
   {
     files: ["src/terminal/**", "src/shared/**", "src/lib/**"],
     rules: {
@@ -36,7 +27,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Not app source: bundled skill fixtures and the CommonJS bake script.
     ".claude/**",
     "scripts/**",
   ]),

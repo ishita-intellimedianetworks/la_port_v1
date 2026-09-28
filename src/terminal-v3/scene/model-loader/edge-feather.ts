@@ -2,8 +2,6 @@ import * as THREE from "three";
 
 export const edgeFeather = { enabled: { value: 0 } };
 
-// Where the edge fade begins, as a fraction of the half-extent (0..1).
-// 0.62 → fully solid out to 62% of the way to each edge, then fades by the rim.
 const EDGE_FADE_START = 0.62;
 
 export function softenModelEdges(
@@ -32,8 +30,6 @@ export function softenModelEdges(
         shader.uniforms.uEdgeHalf = { value: half };
         shader.uniforms.uEdgeStart = { value: EDGE_FADE_START };
         shader.uniforms.uEdgeEnabled = edgeFeather.enabled;
-        // Own world-position varying (vEdgeWPos) so we don't depend on the reveal
-        // patch's vWPos and never redeclare it.
         shader.vertexShader = shader.vertexShader
           .replace("#include <common>", "#include <common>\nvarying vec3 vEdgeWPos;")
           .replace(

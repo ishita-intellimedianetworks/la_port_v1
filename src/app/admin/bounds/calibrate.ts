@@ -2,16 +2,12 @@
 
 import type { Bbox } from "./render-floor";
 
-/** Where the model render sits on the site image, in site-image pixels. */
 export interface Placement {
   ox: number; oy: number;
   ow: number; oh: number;
-  /** Diagnostic only — `bounds` cannot express rotation. Non-zero means the
-   *  site image needs straightening before it will ever line up. */
   rotDeg: number;
 }
 
-/** The shape `use-minimap-bounds` produces and `worldToPixel` consumes. */
 export interface RuntimeBounds {
   minX: number; maxX: number;
   minZ: number; maxZ: number;
@@ -19,14 +15,10 @@ export interface RuntimeBounds {
 
 export interface CalibrationResult {
   bounds: RuntimeBounds;
-  /** Plain world rect, for sanity-reading. */
   world: { minX: number; maxX: number; minZ: number; maxZ: number };
   metresPerPixelX: number;
   metresPerPixelZ: number;
-  /** 100 = the two scales agree exactly. Below ~98 means the alignment is off
-   *  or the image is non-uniformly stretched. */
   agreementPct: number;
-  /** Metres the site image spans on each axis. */
   spanX: number;
   spanZ: number;
 }
@@ -63,7 +55,6 @@ export function calibrate(
   };
 }
 
-/** Centre the render at a guessed scale, so calibration only has to nudge. */
 export function initialPlacement(
   siteW: number,
   siteH: number,
@@ -81,7 +72,6 @@ export function initialPlacement(
   };
 }
 
-/** Scale about the placement's centre, so nudging and zooming don't fight. */
 export function scalePlacement(p: Placement, factor: number): Placement {
   const cx = p.ox + p.ow / 2;
   const cy = p.oy + p.oh / 2;
@@ -95,7 +85,6 @@ const r = (n: number, d = 3): number => {
   return Math.round(n * k) / k;
 };
 
-/** The `map.site` block to paste into the site file. */
 export function toJson(
   c: CalibrationResult,
   p: Placement,

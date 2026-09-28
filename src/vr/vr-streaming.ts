@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { setVrStreaming } from "@/streaming/config";
+import { setVrStreaming } from "./engine/stream";
 
 export function useVrStreaming() {
   setVrStreaming(true);

@@ -10,18 +10,14 @@ type Side = "left" | "right";
 
 interface EdgeFlapProps {
   side: Side;
-  /** Stacked one letter per line down the flap. */
   label: string;
   title: string;
   subtitle?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Set while a detail view is showing — renders the header's back arrow. */
   onBack?: () => void;
   toolbar?: ReactNode;
   disabled?: boolean;
-  /** Tuck the whole flap off its edge — while walking, and while a
-   *  full-screen card owns the view. */
   tucked?: boolean;
   children: ReactNode;
 }
@@ -42,15 +38,11 @@ export function EdgeFlap({
   const short = useShortViewport();
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Click-outside + Escape close. Bound only while actually open, so the
-  // listeners are not sitting on the document for the whole session.
   useEffect(() => {
     if (!open || disabled) return;
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      // The tab lives inside `rootRef` too, so its own toggle still works
-      // instead of being closed here and reopened by its click handler.
       if (target && rootRef.current?.contains(target)) return;
       onOpenChange(false);
     };
@@ -66,8 +58,6 @@ export function EdgeFlap({
     };
   }, [open, disabled, onOpenChange]);
 
-  // The flap must stay shorter than the viewport on a landscape phone, so the
-  // stacked letters shrink rather than overflow.
   const dim = short
     ? { w: 38, h: Math.min(150, label.length * 17), r: 9 }
     : { w: 52, h: Math.min(260, label.length * 30), r: 12 };
@@ -98,8 +88,6 @@ export function EdgeFlap({
         onClick={() => !disabled && onOpenChange(!open)}
       />
 
-      {/* Kept mounted and faded rather than unmounted: animating a
-          backdrop-filter surface in and out janks, and opacity does not. */}
       <div
         inert={!open}
         className={cn(

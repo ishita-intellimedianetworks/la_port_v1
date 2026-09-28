@@ -40,7 +40,6 @@ export class HoloTwinPreview {
     this.sharedUniforms = sharedUniforms;
   }
 
-  /** Fetch + decode + create the Points object. */
   async loadPreview(url: string): Promise<void> {
     const data = await loadPreviewBin(url);
     this.ingest(data);
@@ -53,7 +52,6 @@ export class HoloTwinPreview {
     this.ingest(mergePreviews(parts));
   }
 
-  /** Use a pre-parsed PreviewBin (e.g. cached / passed from outside). */
   ingest(data: PreviewBin): void {
     const { geometry, bounds } = data;
     const size = bounds.max.clone().sub(bounds.min);
@@ -72,17 +70,14 @@ export class HoloTwinPreview {
     if (this.points) scene.add(this.points);
   }
 
-  /** Drive the silhouette density (0..1). Smoothed internally per-frame. */
   setProgress(p: number): void {
     this.targetProgress = Math.max(0, Math.min(1, p));
   }
 
-  /** Smoothed display value — feed this to your HUD's % text. */
   getDisplayedProgress(): number {
     return this.displayedProgress;
   }
 
-  /** Call from YOUR render loop with elapsed seconds. */
   update(elapsed: number): void {
     this.displayedProgress += (this.targetProgress - this.displayedProgress) * 0.06;
     if (this.material) {
@@ -100,7 +95,6 @@ export class HoloTwinPreview {
     return (this.bounds.radius / Math.sin(fitFov / 2)) * padding;
   }
 
-  /** Remove from scene and free GPU memory. */
   dispose(): void {
     if (this.points && this.points.parent) this.points.parent.remove(this.points);
     if (this.geometry) this.geometry.dispose();
@@ -125,7 +119,7 @@ function createPointMaterial(sharedUniforms: SharedUniforms): THREE.ShaderMateri
       uColor:       { value: new THREE.Color(POINT_COLOR_HEX) },
       uGlobalAlpha: sharedUniforms.uGlobalAlpha,
     },
-    vertexShader: /* glsl */ `
+    vertexShader: `
       attribute vec3 aNormal;
       uniform float uTime;
       uniform float uReveal;
@@ -154,13 +148,11 @@ function createPointMaterial(sharedUniforms: SharedUniforms): THREE.ShaderMateri
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
 
-        // Size grows from 0 → 4.5px as the point becomes revealed
-        // (Smart-Loader V2 demo formula — silhouette from frame 1).
         float size = 4.5 * vDensity;
         gl_PointSize = size * (300.0 / max(-mv.z, 0.1));
       }
     `,
-    fragmentShader: /* glsl */ `
+    fragmentShader: `
       uniform vec3 uColor;
       uniform float uOpacity;
       uniform float uGlobalAlpha;

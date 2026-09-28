@@ -19,7 +19,6 @@ export function NavHud({
 }: {
   ctrlRef: RefObject<PlayerControllerHandle | null>;
   visible: boolean;
-  /** destinations on the active floor — used to name the destination from the route end. */
   dests?: DestinationsByCategory;
 }) {
   const info = useNavInfo(ctrlRef, visible);
@@ -76,7 +75,6 @@ export function NavHud({
           opacity: show ? 1 : 0,
         }}
       >
-        {/* Next-turn arrow badge. */}
         <div
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] short:h-10 short:w-10 short:rounded-[8px]"
           style={{ background: "rgba(41,151,255,0.18)", border: "1.5px solid rgba(41,151,255,0.42)" }}
@@ -84,7 +82,6 @@ export function NavHud({
           <Icon size={24} strokeWidth={2.6} color="#d6e6ff" className="short:h-5 short:w-5" />
         </div>
 
-        {/* Distance-to-turn (big) + the maneuver. */}
         <div className="flex shrink-0 flex-col">
           <div className="flex items-baseline gap-1 whitespace-nowrap leading-none">
             <span className="nav-display text-[23px] font-bold leading-none text-white short:text-[19px]">{turnVal}</span>
@@ -95,7 +92,6 @@ export function NavHud({
           </span>
         </div>
 
-        {/* Destination + ETA. */}
         <div className="ml-1 h-9 w-px shrink-0 short:h-8" style={{ background: "rgba(255,255,255,0.14)" }} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="nav-display line-clamp-2 text-[14px] font-semibold leading-tight text-white short:text-[12.5px]">

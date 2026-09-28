@@ -35,8 +35,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            // Every marker is white — the pulse alone marks the selection, so
-            // the discs stay one consistent thing rather than two kinds.
             pulse={isSelected}
             onHotspotClick={() =>
               setHotspotInfo({

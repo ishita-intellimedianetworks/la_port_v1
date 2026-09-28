@@ -4,7 +4,6 @@ import type { ChunkEntry } from "./types";
 
 export class InstanceLayer {
   private group = new THREE.Group();
-  /** One entry per palette primitive, flattened across palette entries. */
   private prims: {
     entry: number;
     geometry: THREE.BufferGeometry;
@@ -12,7 +11,6 @@ export class InstanceLayer {
     mesh: THREE.InstancedMesh | null;
     capacity: number;
   }[] = [];
-  /** palette entry index -> indices into `prims`. */
   private byEntry: number[][] = [];
   private matrices: Float32Array | null = null;
   private loaded = false;
@@ -23,12 +21,9 @@ export class InstanceLayer {
     private scene: THREE.Scene,
     private assetBase: string,
     private loader: GLTFLoader,
-    /** Builds the material for a source material index (ChunkManager owns that). */
     private makeMaterial: (matIdx: number) => THREE.Material,
   ) {
     this.group.name = "instances";
-    // The palette is world-space geometry placed by per-instance matrices, so the
-    // group itself must never carry a transform.
     this.group.matrixAutoUpdate = false;
   }
 
@@ -36,7 +31,6 @@ export class InstanceLayer {
     return this.loaded;
   }
 
-  /** Fetch palette.glb + instances.bin. Returns false when the model has none. */
   async load(): Promise<boolean> {
     let gltf;
     try {
@@ -132,7 +126,6 @@ export class InstanceLayer {
     }
   }
 
-  /** Rebuild materials (used when the texture tier changes). */
   refreshMaterials() {
     for (const p of this.prims) {
       if (!p.mesh) continue;

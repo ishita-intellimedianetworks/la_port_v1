@@ -7,7 +7,6 @@ const BASE: CSSProperties = {
   willChange: "backdrop-filter",
 };
 
-/** Chip / pill / dock / toggle weight. */
 export const NAV_GLASS: CSSProperties = {
   ...BASE,
   background: "var(--nav-glass)",
@@ -15,7 +14,6 @@ export const NAV_GLASS: CSSProperties = {
   boxShadow: "var(--nav-shadow-chip)",
 };
 
-/** Heavier panel weight (label panel, nav banner, map card). */
 export const NAV_GLASS_PANEL: CSSProperties = {
   ...BASE,
   background: "var(--nav-glass-strong)",

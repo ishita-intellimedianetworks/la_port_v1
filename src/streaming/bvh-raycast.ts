@@ -12,8 +12,6 @@ export function lazyBvhRaycast(
 ) {
   const geo = this.geometry as BvhGeometry;
   if (!geo.boundsTree) {
-    // `.array` too: under `freeCpuArrays` the attribute survives with its array
-    // nulled, and `new MeshBVH(geo)` would throw on every ray reaching it.
     if (!geo.attributes.position?.array) return;
     if (!geo.boundingSphere) geo.computeBoundingSphere();
     if (!geo.boundingSphere) return;
@@ -24,7 +22,6 @@ export function lazyBvhRaycast(
   acceleratedRaycast.call(this, raycaster, intersects);
 }
 
-/** `geometry.dispose()` frees GPU buffers but not the tree, which is plain JS memory. */
 export function dropBoundsTree(geometry: THREE.BufferGeometry) {
   delete (geometry as BvhGeometry).boundsTree;
 }

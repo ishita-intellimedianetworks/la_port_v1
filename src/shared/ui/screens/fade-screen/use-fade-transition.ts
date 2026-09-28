@@ -10,15 +10,11 @@ const SWAP_BUFFER_MS = 120;
 const POLL_MS = 16;
 
 export interface FadeTransitionAPI {
-  /** Bind to `<FadeScreen visible={...}/>`. */
   visible: boolean;
-  /** Current fade-IN duration for this transition. Bind to
-   *  `<FadeScreen fadeInMs={...}/>` so the CSS ramp matches the swap timing. */
   fadeInMs: number;
   transition: (swap?: () => void, waitUntil?: () => boolean, fadeInMs?: number) => void;
   cue: (waitUntil?: () => boolean) => void;
   raise: () => void;
-  /** Manually lower the fade (start fade-out). Pairs with `raise()`. */
   lower: () => void;
 }
 

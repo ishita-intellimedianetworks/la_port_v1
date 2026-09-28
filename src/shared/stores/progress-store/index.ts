@@ -1,10 +1,8 @@
 import { createStore } from "../create-store";
 
 export type ProgressState = {
-  /** Raw 0..100 blend of model load and byte prefetch. */
   progress: number;
   revealProgress: number;
-  /** Byte-accurate warm of the secondary assets, 0..1. */
   prefetchProgress: number;
   streamProgress: number;
   streamDressing: number;
@@ -16,14 +14,11 @@ export type ProgressState = {
   setRevealProgress: (value: number) => void;
   setPrefetchProgress: (value: number) => void;
   setStreamProgress: (value: number) => void;
-  /** Free-moving, unlike the setters above — see `streamDressing`. */
   setStreamDressing: (value: number) => void;
-  /** Back to 0 for a fresh streamer mount. See `streamProgress`. */
   resetStreamProgress: () => void;
   setAssetsWarmed: (value: boolean) => void;
   setLoaded: (value: boolean) => void;
   setRevealed: (value: boolean) => void;
-  /** Back to the start of a load. Warm-cache progress deliberately survives. */
   reset: () => void;
 };
 
@@ -48,7 +43,5 @@ export const useProgressStore = createStore<ProgressState>((set, get) => ({
   setLoaded: (value) => set({ isLoaded: value }),
   setRevealed: (value) => set({ isRevealed: value }),
 
-  // prefetchProgress / assetsWarmed are NOT reset: the HTTP cache stays warm for
-  // the whole session, so that work is done once and must survive a scene reset.
   reset: () => set({ progress: 0, revealProgress: 0, streamProgress: 0, isLoaded: false, isRevealed: false }),
 }));

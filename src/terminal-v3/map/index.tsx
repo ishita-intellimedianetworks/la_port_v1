@@ -19,8 +19,6 @@ export type { MinimapData };
 interface MinimapProps {
   entered?: boolean;
   onReturnToExterior?: () => void;
-  /** Fired whenever the full map opens/closes — lets the parent close the 3D
-   *  overlays (label panel + selection) while the map covers the screen. */
   onExpandedChange?: (expanded: boolean) => void;
 }
 
@@ -34,8 +32,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
     selectedPoi, startSelectedDest, teleportSelectedDest, clearDestSelection,
   } = useMinimap();
 
-  // List-mode (memorial): ONE destination row per destination (its pins share the
-  // number), in numbering order.
   const destSeen = new Set<string>();
   const dests = listMode ? mapDests.filter((p) => !destSeen.has(p.id) && (destSeen.add(p.id), true)) : [];
   const short = useShortViewport();
@@ -61,13 +57,9 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
     return () => document.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
   }, [expanded]);
 
-  // The collapsed opener lives in the left sidebar (see Sidebar). `entered` is
-  // kept in the props for call-site symmetry but no longer gates a tab here.
   void entered;
 
   return (
-    // A floating, corner-resizable map window (NOT full-screen) — anchored beside
-    // the sidebar, using the same glass surface as the other overlays.
     <div
       ref={rootRef}
       className="fixed left-[88px] top-4 z-[260] flex max-h-[calc(100dvh-24px)] select-none flex-col overflow-hidden rounded-[14px] short:left-[54px] short:top-1 short:max-h-[calc(100dvh-8px)] short:overflow-y-auto short:overflow-x-hidden"
@@ -79,8 +71,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
         transition: "opacity 0.25s ease-out",
       }}
     >
-      {/* Title bar — "Map" + Exterior + close. List-mode (memorial) has NO
-          hairline separators between sections (design: spacing only). */}
       <div
         className="flex h-11 shrink-0 items-center gap-2.5 px-3 short:h-9 short:gap-2 short:px-2.5"
         style={listMode ? undefined : { borderBottom: "1px solid rgba(255,255,255,0.08)" }}
@@ -98,8 +88,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
               <span>Exterior</span>
             </button>
           )}
-          {/* Expand / shrink — in the title bar so it never overlaps the action
-              footer (Start / Teleport) below. */}
           <button
             onClick={toggleFullScreen}
             aria-label={fullScreen ? "Shrink map" : "Expand map"}
@@ -113,7 +101,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
               <Maximize2 className="h-[14px] w-[14px]" strokeWidth={2} color="var(--nav-text-2)" />
             )}
           </button>
-          {/* Same hairline-circle close as the other overlays (PanelHeader). */}
           <button
             onClick={closeMap}
             aria-label="Close map"
@@ -129,8 +116,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
       {listMode && destCats.length > 0 && (
         <div
           className="relative z-20 flex shrink-0 items-start gap-2 px-3.5 pb-3 short:gap-1.5 short:px-2.5 short:pb-2"
-          // Span the plan + the phone side legend so the pills get the full
-          // window width (labels show whole, not "L…").
           style={{ width: mapWidth + (sideLegend ? SIDE_LEGEND_W : 0) }}
         >
           <div className="max-w-[52%] flex-none">
@@ -166,8 +151,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
         </div>
       )}
 
-      {/* Crowd Flow: colour legend for the zone overlays drawn on the plan —
-          same tiers/colours as the 3D heatmap (red high · yellow med · blue low). */}
       {listMode && destLabel === "crowdflow" && (
         <div
           className="flex shrink-0 items-center gap-3 px-3.5 pb-2 short:gap-2.5 short:px-2.5 short:pb-1.5"
@@ -182,8 +165,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
         </div>
       )}
 
-      {/* Body — floor plan on the left, category radios on the right (classic).
-          List-mode insets the plan with the design's curved corners instead. */}
       <div className="flex">
         <div
           className={listMode ? "relative mx-3.5 overflow-hidden rounded-[14px] short:mx-2.5" : "relative"}
@@ -213,8 +194,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
           )}
         </div>
 
-        {/* Phone list-mode: destination legend BESIDE the plan — a compact
-            side column ("N on map" + numbered rows), scrolling on its own. */}
         {sideLegend && (
           <div className="flex flex-col overflow-hidden pr-2" style={{ width: SIDE_LEGEND_W, height: mapHeight }}>
             {dests.length === 0 ? (
@@ -249,8 +228,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
                         <span className="nav-display min-w-0 flex-1 truncate text-[11px] font-semibold" style={{ color: "var(--nav-text)" }}>
                           {d.name}
                         </span>
-                        {/* Crowd tier — dot + word, exactly like the overlay
-                            lists ("● Moderate"); the number chip stays neutral. */}
                         {d.crowd && CROWD_DOT[d.crowd] && (
                           <span className="flex shrink-0 items-center gap-1">
                             <span
@@ -324,8 +301,6 @@ export function Minimap({ entered = true, onReturnToExterior, onExpandedChange }
                   <span className="nav-display min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--nav-text)" }}>
                     {d.name}
                   </span>
-                  {/* Crowd tier — dot + word, exactly like the overlay lists
-                      ("● Moderate"); the number chip stays neutral. */}
                   {d.crowd && CROWD_DOT[d.crowd] && (
                     <span className="flex shrink-0 items-center gap-1">
                       <span

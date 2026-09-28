@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useState, type ComponentProps, type ReactNode } from "react";
 import { Container, Fullscreen, VanillaFullscreen } from "@react-three/uikit";
 import { X } from "@react-three/uikit-lucide";
-import * as THREE from "three";
-import { useStickScroll } from "./stick-scroll";
+import { noDragScroll, useStickScroll } from "./stick-scroll";
 import { VrText } from "./text";
 import {
   BAR_BUTTON,
@@ -207,8 +206,6 @@ export function IconButton({
   );
 }
 
-const DRAG_SLOP = 0.02;
-
 export function Row({
   label,
   meta,
@@ -216,6 +213,7 @@ export function Row({
   trailing,
   active = false,
   disabled = false,
+  compact = false,
   onSelect,
 }: {
   label: string;
@@ -224,15 +222,15 @@ export function Row({
   trailing?: ReactNode;
   active?: boolean;
   disabled?: boolean;
+  compact?: boolean;
   onSelect: () => void;
 }) {
-  const pressed = useRef(new Map<number, THREE.Vector3>());
   const [hovered, setHovered] = useState(false);
   const lit = hovered && !disabled;
   return (
     <Container
       width="100%"
-      minHeight={ROW_HEIGHT}
+      minHeight={compact ? ROW_HEIGHT - 12 : ROW_HEIGHT}
       flexShrink={0}
       flexDirection="row"
       alignItems="center"
@@ -243,19 +241,7 @@ export function Row({
       opacity={disabled ? OPACITY.disabled : 1}
       cursor={disabled ? "default" : "pointer"}
       onHoverChange={(h: boolean) => setHovered(h)}
-      onPointerDown={(e) => {
-        if (disabled || e.pointerId == null) return;
-        pressed.current.set(e.pointerId, e.point.clone());
-      }}
-      onPointerLeave={(e) => {
-        if (e.pointerId != null) pressed.current.delete(e.pointerId);
-      }}
-      onPointerUp={(e) => {
-        if (e.pointerId == null) return;
-        const from = pressed.current.get(e.pointerId);
-        pressed.current.delete(e.pointerId);
-        if (from && from.distanceTo(e.point) <= DRAG_SLOP) onSelect();
-      }}
+      onPointerDown={disabled ? undefined : onSelect}
     >
       <Glass
         radius={RADIUS.row}
@@ -264,8 +250,8 @@ export function Row({
         borderOpacity={active ? OPACITY.activeBorder : lit ? OPACITY.border : OPACITY.chipBorder}
       />
       {icon && <IconChip icon={icon} />}
-      <Container pointerEvents="none" flexDirection="column" flexGrow={1} flexShrink={1} gapRow={2}>
-        <VrText fontSize={TEXT.tile + 1} fontWeight="semi-bold" color={COLOR.text}>
+      <Container pointerEvents="none" flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} gapRow={2}>
+        <VrText fontSize={compact ? TEXT.tile - 1 : TEXT.tile + 1} fontWeight="semi-bold" color={COLOR.text}>
           {label}
         </VrText>
         {meta && (
@@ -404,6 +390,7 @@ export function List({ children, wrap = false }: { children: ReactNode; wrap?: b
     <Container
       ref={scrollRef}
       onHoverChange={onScrollHover}
+      onScroll={noDragScroll}
       flexDirection={wrap ? "row" : "column"}
       flexWrap={wrap ? "wrap" : "no-wrap"}
       justifyContent={wrap ? "space-between" : "flex-start"}

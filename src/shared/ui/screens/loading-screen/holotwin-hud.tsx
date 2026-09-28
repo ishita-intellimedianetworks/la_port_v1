@@ -6,9 +6,7 @@ import { useProgressStore } from '@/shared/stores/progress-store';
 export interface HoloTwinHudProps {
   progress: number;
   visible: boolean;
-  /** Called once the fade-out animation completes (~350 ms). */
   onFadeComplete?: () => void;
-  /** Dynamic unit/space name (e.g., "unit 25") */
   unitName?: string;
   revealVeil?: boolean;
 }
@@ -51,8 +49,6 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
 
   useEffect(() => {
     if (visible || !onFadeComplete) return;
-    // Matches the 0.35s opacity transition in .htl-hidden (globals.css) plus a
-    // small safety margin so the unmount happens after pointer-events releases.
     const t = window.setTimeout(onFadeComplete, 400);
     return () => window.clearTimeout(t);
   }, [visible, onFadeComplete]);
@@ -71,13 +67,10 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
   aria-live="polite"
   aria-label="Loading digital twin"
 >
-  {/* Behind everything else in the root (z-index -1), exactly where the root's
-      own background-color used to sit — so the stacking is unchanged. */}
   <HtlVeil revealVeil={revealVeil} />
 
   <div className="htl-bg-radial" />
 
-  {/* Spacer to push hud to vertical center */}
   <div />
 
   <div className="htl-hud" style={{ marginTop: 0 }}>
@@ -93,7 +86,6 @@ export const HoloTwinHud: React.FC<HoloTwinHudProps> = ({
     <div className="htl-brand">HOLOTWIN<sup>™</sup></div>
   </footer>
 
-  {/* {error && <div className="htl-error" role="alert">{error}</div>} */}
 </div>
   );
 };

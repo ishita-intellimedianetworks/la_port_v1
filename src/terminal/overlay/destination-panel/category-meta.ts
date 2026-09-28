@@ -26,19 +26,15 @@ import type { DestinationCategory } from "@/shared/types";
 
 export interface CategoryMeta {
   key: DestinationCategory;
-  /** Title shown in the panel header. */
   label: string;
-  /** Short word used on the launcher button. */
   short: string;
   icon: LucideIcon;
-  /** Subtitle noun, e.g. "12 {unit} · sorted by nearest". */
   unit: string;
   segmentBy?: "kind" | "sport" | "option";
   flatOptions?: boolean;
   notices?: { text: string; tone?: "ok" | "warn" | "alert" }[];
 }
 
-/** Canonical order + presentation for the three destination labels. */
 export const DEST_CATEGORIES: CategoryMeta[] = [
   { key: "waterside", label: "Waterside",      short: "Waterside", icon: Ship,       unit: "layouts" },
   { key: "yard",      label: "Container Yard", short: "Yard",      icon: Warehouse,  unit: "layouts" },
@@ -50,8 +46,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
   { key: "crowdflow",    label: "Crowd Flow",             short: "Crowd",         icon: Users,         unit: "zones",   segmentBy: "option" },
   { key: "seating",      label: "Seat Views",             short: "Seat Views",    icon: Eye,           unit: "views",   segmentBy: "option", flatOptions: true },
   { key: "accessibility",label: "Accessibility Planning", short: "Accessibility", icon: Accessibility, unit: "points",  segmentBy: "option" },
-  // flatOptions: updates read as ONE notice-board list (option = the update's
-  // type chip on each card), not sub-category tabs.
   { key: "eventupdates", label: "Event Updates",          short: "Updates",       icon: Megaphone,     unit: "updates", segmentBy: "option", flatOptions: true },
   { key: "services",     label: "Nearby Services",        short: "Services",      icon: Store,         unit: "places",  segmentBy: "option" },
   { key: "infra",        label: "IT Services",            short: "IT Services",   icon: Network,       unit: "systems", segmentBy: "option" },
@@ -69,8 +63,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
     short: "Practice",
     icon: Dumbbell,
     unit: "venues",
-    // No list segmentation — the venue's sports show as pills in the directions
-    // card, not as filter chips above the list.
   },
   {
     key: "wellness",
@@ -147,7 +139,6 @@ export const DEST_CATEGORIES: CategoryMeta[] = [
   },
 ];
 
-/** Fixed segment labels for the Dining "kind" split. */
 export const DINING_SEGMENTS = [
   { id: "campus", label: "Campus Dining" },
   { id: "restaurant", label: "Restaurants" },

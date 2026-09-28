@@ -16,7 +16,6 @@ import type {
   Vec3,
 } from "./schema";
 
-/** Every model the app can serve, in route order: `/`, `/v2`, `/v3`, `/v4`. */
 export const SITE_IDS = ["v1", "v2", "v3", "v4", "v5"] as const;
 export type SiteId = (typeof SITE_IDS)[number];
 
@@ -28,40 +27,28 @@ function floorplanUrl(imageUrl: string): string {
 
 export interface Site {
   id: SiteId;
-  /** The document this was resolved from, for the rare reader that wants a key
-   *  no view exposes. */
   doc: SiteConfig;
   scene: SceneConfig;
   ui: UiConfig;
   hotspots: HotspotConfig[];
   securityHotspots: HotspotConfig[];
-  /** The layouts table, each row given back its child-id list. */
   layouts: LayoutConfig[];
   layoutById: Record<string, LayoutConfig>;
   hotspotById: Record<string, HotspotConfig>;
-  /** Security rows by id, for the same reason `hotspotById` exists. */
   securityHotspotById: Record<string, HotspotConfig>;
   worldModels: string[];
   startLayoutId: string;
-  /** Where the experience begins. Every "default pose" — the Canvas camera, the
-   *  first-person start, the fallback for an unauthored layout — reads THIS. */
   startPose: CameraPose;
   poseForLayout: (layoutId: string) => CameraPose;
   poseForHotspot: (hotspotId: string, mobile?: boolean) => CameraPose;
-  /** True when a layout's camera is authored in the AIR rather than on the
-   *  ground — see `resolveSite`. */
   isFlyLayout: (layoutId: string | null | undefined) => boolean;
-  /** A resource has no camera of its own — it is viewed from its layout's. */
   isFlyHotspot: (hotspotId: string) => boolean;
-  /** Explicit `tone` wins; otherwise the enum value is matched against
-   *  `<site>.json › tones`. */
   toneFor: (value: string | number | boolean, explicit?: Tone) => Tone | undefined;
 }
 
 const ORIGIN_POSE: CameraPose = { position: [0, 0, 0], rotation: [0, 0, 0] };
 
 function resolveSite(id: SiteId, doc: SiteConfig): Site {
-  /** `map` with its image URLs resolved, so no reader has to know about the base. */
   const map: SceneConfig["map"] = doc.map && {
     ...doc.map,
     ...(doc.map.plan && { plan: { ...doc.map.plan, imageUrl: floorplanUrl(doc.map.plan.imageUrl) } }),
@@ -164,7 +151,6 @@ function resolveSite(id: SiteId, doc: SiteConfig): Site {
   };
 }
 
-/** Every model, resolved once. The route picks one — see `./context`. */
 export const SITES: Record<SiteId, Site> = {
   v1: resolveSite("v1", v1Json as unknown as SiteConfig),
   v2: resolveSite("v2", v2Json as unknown as SiteConfig),
@@ -240,8 +226,6 @@ if (process.env.NODE_ENV !== "production") {
         problems.push(`hotspot ${h.id} references unknown layout "${h.layoutId}"`);
       }
 
-      // The demo's one cross-row invariant: every mention of the hero container
-      // is the same container, so the H09 → H14 → H24 → H30 story cannot fork.
       h.fields.forEach((f) => {
         if (f.ref === "hero" && f.value !== s.scene.globals.heroContainerId) {
           problems.push(

@@ -6,7 +6,6 @@ import type { Destination, DestinationCategory } from "@/shared/types";
 import { useScene } from "../context/scene-context";
 import { useNavUiStore } from "../stores/nav-ui-store";
 
-/** A layout as the engine holds it: the destination plus the zone it sits in. */
 export interface LayoutEntry {
   destination: Destination;
   category: DestinationCategory;
@@ -50,8 +49,6 @@ export function useLayoutNavigation() {
             : controller.probeFloorY(x, z, footGuess) ?? footGuess;
 
         controller.teleportTo([x, y, z], camera.rotation);
-        // Latch immediately rather than waiting for the position poll, so the
-        // markers and the hotspot list update with the move, not after it.
         useNavUiStore.getState().setCurrentDest({
           id: entry.destination.id,
           label: entry.destination.label,
@@ -59,8 +56,6 @@ export function useLayoutNavigation() {
           option: entry.destination.option,
         });
 
-        // Runs INSIDE the swap, at full black — so a caller never has to guess
-        // how long the blackout takes.
         onArrive?.();
       });
     },
@@ -81,8 +76,6 @@ export function useLayoutNavigation() {
 
       triggerFloorTransition(() => {
         const [x, authoredY, z] = pose.position;
-        // Same seating rule as a layout: an aerial pose keeps its authored
-        // height, a ground one snaps to the navmesh probed AT that height.
         const cameraHeight = controller.getPosition().y - controller.getFootPosition().y;
         const footGuess = authoredY ? authoredY - cameraHeight : 0;
         const y =
@@ -100,8 +93,6 @@ export function useLayoutNavigation() {
             option: entry.destination.option,
           });
         }
-        // Inside the swap, at full black, so the bead is already placed and
-        // its siblings already gone by the time the picture comes back.
         useNavUiStore.getState().setSelectedHotspotId(hotspotId);
       });
     },

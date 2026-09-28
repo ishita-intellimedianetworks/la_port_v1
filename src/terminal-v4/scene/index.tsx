@@ -8,10 +8,6 @@ import * as THREE from "three";
 import type { FloorConfig, FloorTransition, FurnitureConfig } from "@/shared/types";
 import { useScene } from "../context/scene-context";
 import { PlayerController } from "./player";
-import { probeFloorY } from "./player/utils/probe-floor-y";
-import { navConfig } from "../navigation-config";
-import { VrPlayerController } from "@/vr/player-controller";
-import { useIsVr } from "@/vr/vr-mode";
 import { NavPath3D } from "./route-line";
 import { HotspotMarkers } from "./hotspot-markers";
 import { ZoneGeofence } from "./zone-geofence";
@@ -56,7 +52,6 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 const REVEAL_PEAK = 0.75;
 
-/** Dev-only frame counter — see diagnostics.ts. */
 function FrameCounter() {
   useFrame(() => tick("frame"));
   return null;
@@ -87,8 +82,6 @@ function ProgressSmoother() {
     const combined = Math.min((eFrac * 0.5 + store.prefetchProgress * 0.5) * 90, 90);
     store.setProgress(combined);
     const cap = isFurnitureToggleReadyRef.current ? 1.0 : REVEAL_PEAK - 0.01;
-    // The HUD bar target reads the SAME combined value (store.progress is
-    // monotonic, so use-scene-loading's final 100 also flows through here).
     targetRef.current = Math.max(targetRef.current, Math.min(useProgressStore.getState().progress / 100, cap));
 
     const inTail =
@@ -124,7 +117,6 @@ function ScenePreview({
 }: {
   previewUrls: string[];
   sharedUniforms: SharedUniforms;
-  /** Fired once every floor's Points object is in the scene. */
   onLoaded?: () => void;
 }) {
   const { scene: threeScene } = useThree();
@@ -148,8 +140,6 @@ function ScenePreview({
           previews[idx].points!.visible = false;
           threeScene.add(previews[idx].points!);
           loadedCount += 1;
-          // Reveal gate only releases once every floor's points are in the
-          // scene; otherwise late arrivals would pop in mid-fade.
           if (loadedCount === previewUrls.length) onLoadedRef.current?.();
         })
         .catch((err: unknown) => {
@@ -201,8 +191,6 @@ function RevealBlurFade({ sharedUniforms }: { sharedUniforms: SharedUniforms }) 
   const { gl } = useThree();
   const driving = useRef(false);
   const done = useRef(false);
-  // Must mirror the .htl-main-revealing values (globals.css) so the takeover
-  // is seamless: desktop blur(10px) brightness(0.8) scale(1.02), phone 6px.
   const base = useRef({ blur: 10, bright: 0.8, scale: 1.02 });
 
   useEffect(() => {
@@ -297,9 +285,7 @@ interface SceneContentProps {
     position: [number, number, number];
     rotation: [number, number, number];
   };
-  /** Separate dollhouse model — loaded behind HoloTwinHud on initial entry. */
   dollHouseModelUrl?: string;
-  /** Point-cloud preview for the dollhouse model. */
   dollHousePreviewUrl?: string;
   firstPersonStart?: {
     position: [number, number, number];
@@ -311,17 +297,13 @@ interface SceneContentProps {
   ) => void;
   onTransitionCue?: () => void;
   cinematicActive?: boolean;
-  /** Toggles the cinematic flag (disables the player) while the portal fly runs. */
   setCinematicActive?: (v: boolean) => void;
   onLoaded: () => void;
-  /** Fires whenever a model key finishes loading (dollhouse, each floor).
-   *  Used by the parent to gate fade-out duration on real model readiness. */
   onModelLoaded?: (key: string) => void;
   onRevealStart?: () => void;
   onRevealDone?: () => void;
   sharedUniforms?: SharedUniforms;
   debug?: boolean;
-  /** Skip point-cloud previews and canvas blur (inline/orchestrated mode) */
   skipEffects?: boolean;
 }
 
@@ -364,12 +346,9 @@ export function SceneContent({
     viewMode,
   } = useScene();
 
-  // The debug panel's "show navmesh" switch. Only ever true when the URL
-  // carries ?debug=true — the overlay geometry is not even captured otherwise.
   const showNavmesh = useDebugStore((s) => s.showNavmesh);
   const navmeshDepth = useDebugStore((s) => s.navmeshDepth);
 
-  const vr = useIsVr();
   const pathfinding = useMemo(() => new Pathfinding(), []);
   const { camera, raycaster, gl, scene } = useThree();
 
@@ -395,8 +374,6 @@ export function SceneContent({
 
   const streaming = !!activeFloor?.streamed;
   const walking = streaming && viewMode === "firstPerson";
-  // Desktop on the first render — which is also what SSR produces, so hydration
-  // is stable — then the real device profile once mounted.
   const [deviceProfile, setDeviceProfile] = useState<DeviceProfile>("desktop");
   useEffect(() => setDeviceProfile(detectProfile()), []);
   const streamVariantId = useStreamVariantId();
@@ -419,8 +396,6 @@ export function SceneContent({
 
   const navmeshUrl = streaming ? streamVariant.navmeshUrl : activeFloor?.navmeshUrl;
 
-  // Preview point-cloud is dollhouse-only — first-person floors no longer
-  // ship a preview. Past initial load we use blackouts for swaps.
   const previewUrls = useMemo(
     () => (viewMode === "dollhouse" && dollHousePreviewUrl ? [dollHousePreviewUrl] : []),
     [viewMode, dollHousePreviewUrl],
@@ -569,8 +544,6 @@ export function SceneContent({
       camera,
     );
     furnitureToggleRef.current = toggle;
-    // Apply the current toggle state immediately so the new model never
-    // shows the wrong (default-from-GLB) materials for even one frame.
     toggle(showFurnitureRef.current ?? false);
     setFurnitureToggleReady(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -635,10 +608,8 @@ export function SceneContent({
     const c = cineRef.current;
     if (!c) return;
     c.t = Math.min(1, c.t + dt / c.dur);
-    const e = c.t < 0.5 ? 4 * c.t * c.t * c.t : 1 - Math.pow(-2 * c.t + 2, 3) / 2; // easeInOutCubic
+    const e = c.t < 0.5 ? 4 * c.t * c.t * c.t : 1 - Math.pow(-2 * c.t + 2, 3) / 2;
     camera.position.copy(c.curve.getPoint(e));
-    // Roll-free orientation: pick the keyframe segment for this arc fraction and
-    // lerp yaw (shortest way) + pitch, roll fixed at 0.
     const n = c.yps.length - 1;
     const f = e * n;
     const seg = Math.min(n - 1, Math.floor(f));
@@ -666,8 +637,6 @@ export function SceneContent({
         return;
       }
       const target = floors[idx];
-      // Swap fires at fade-peak (under black); clear the cinematic flag there so
-      // the destination floor's PlayerController activates while hidden.
       const swap = () =>
         triggerFloorTransition(
           () => { setActiveFloorIndex(idx); setCinematicActive?.(false); },
@@ -735,8 +704,6 @@ export function SceneContent({
         />
       )}
 
-      {/* Canvas blur fades in lockstep with the crossfade (same uGlobalAlpha
-          the points + mesh read), instead of a hard sharpen at the end. */}
       {needsPreview && viewMode !== "firstPerson" && !revealComplete && (
         <RevealBlurFade sharedUniforms={sharedUniforms!} />
       )}
@@ -751,7 +718,7 @@ export function SceneContent({
             onLoaded={modelCallbacksFor(currentModelKey).onLoaded}
           />
           <StreamFog config={streamConfig} />
-          {streamConfig.adaptiveDpr && !vr && <AdaptiveQuality maxDpr={streamConfig.maxDpr} />}
+          {streamConfig.adaptiveDpr && <AdaptiveQuality maxDpr={streamConfig.maxDpr} />}
         </>
       ) : (
         currentModelUrl && (
@@ -812,22 +779,7 @@ export function SceneContent({
         />
       )}
 
-      {viewMode === "firstPerson" && vr && (
-        <VrPlayerController
-          ref={playerControllerRef}
-          enabled={navReady && !cinematicActive}
-          cameraHeight={activeFloor?.cameraHeight ?? cameraHeight}
-          metersPerUnit={navConfig.logic.displayMetersPerUnit}
-          startPosition={firstPersonStart?.position ?? activeFloor?.startPosition ?? startPosition}
-          startRotation={firstPersonStart?.rotation ?? activeFloor?.startRotation ?? startRotation}
-          pathfinding={pathfinding}
-          initialZone={zoneNameForFloor(activeFloor?.id ?? floors[0].id)}
-          onZoneChange={handleZoneChange}
-          probeFloorY={probeFloorY}
-        />
-      )}
-
-      {viewMode === "firstPerson" && !vr && (
+      {viewMode === "firstPerson" && (
         <>
           <PlayerController
             ref={playerControllerRef}
@@ -846,8 +798,6 @@ export function SceneContent({
             routeSanitize={activeFloor?.routeSanitize !== false}
             debug={debug}
           />
-          {/* Same route the minimap draws, laid on the floor as a 3D ribbon —
-              plain blue. Hidden inside apartment interiors — no pin / path there. */}
           {!activeFloor?.interior && <NavPath3D ctrlRef={playerControllerRef} />}
         </>
       )}

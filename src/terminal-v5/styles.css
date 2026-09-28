@@ -3,8 +3,6 @@
 :root {
   --ui-loadblur-tint: rgba(0, 0, 0, 0.7);
 
-  /* ── v5 typography — Inter everywhere (matches 20hatsfira.com). Overriding the
-     font tokens flips every component that reads them; body text inherits. ── */
   --font-geist-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
   --font-geist-mono: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
   --font-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
@@ -17,7 +15,7 @@
   --ui-glass-border-active: rgba(255, 255, 255, 0.48);
 
   --ui-glass-blur: 22px;
-  --ui-glass-saturate: 180%;     /* Apple's vibrancy value */
+  --ui-glass-saturate: 180%;
   --ui-glass-brightness: 1.05;
   --ui-glass-backdrop: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
 
@@ -29,7 +27,6 @@
     0 12px 36px -14px rgba(0, 0, 0, 0.62);
 }
 
-/* Inter throughout v5 (loaded after globals.css on v5 routes, so it wins). */
 body {
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   letter-spacing: 0.01em;
@@ -43,8 +40,6 @@ body {
   border-color: var(--ui-glass-border);
 }
 
-/* Instructions overlay panel — same liquid-glass effect as the rest (sheen +
-   dark tint + specular edge + border), replacing its flat black fill. */
 .instr-panel {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%),
@@ -53,8 +48,6 @@ body {
   border: 1px solid var(--ui-glass-border);
 }
 
-/* Scale the blur down on small screens so the blur:surface ratio matches
-   desktop (a fixed 22px reads ~2× heavier on small phone panels). */
 @media (max-width: 1023px) {
   :root { --ui-glass-blur: 13px; }
 }
@@ -97,7 +90,6 @@ body {
 }
 
 @media (max-width: 640px) {
-  /* Heavy blur is GPU-expensive on phones — scale it down to avoid load-time jank. */
   .ui-load-blur--strong {
     backdrop-filter: blur(32px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));
     -webkit-backdrop-filter: blur(32px) saturate(var(--ui-glass-saturate)) brightness(var(--ui-glass-brightness));

@@ -29,11 +29,9 @@ export interface Manifest {
 
 export interface TexSlot {
   image: number;
-  /** Which UV set to sample: 0 -> TEXCOORD_0, 1 -> TEXCOORD_1. */
   uv: number;
   wrapS?: number;
   wrapT?: number;
-  /** KHR_texture_transform, when the source declared one for this slot. */
   transform?: {
     offset: [number, number];
     scale: [number, number];

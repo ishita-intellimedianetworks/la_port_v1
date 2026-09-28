@@ -6,8 +6,6 @@ import { cn } from "@/lib/utils";
 interface TravelRowProps {
   name: string;
   onSelect: () => void;
-  /** Trailing affordance. Off wherever a LEADING expand chevron already sits
-   *  beside the row — two arrows on one line read as two separate controls. */
   showChevron?: boolean;
   onWalk?: () => void;
   disabled?: boolean;
@@ -58,8 +56,6 @@ export function TravelRow({
 
       {onWalk && (
         <>
-          {/* Hairline, not a gap: the two targets have to read as one row split
-              in two, not as two chips that happen to be adjacent. */}
           <span aria-hidden className="my-2 w-px shrink-0" style={{ background: "var(--nav-divider)" }} />
           <button
             type="button"

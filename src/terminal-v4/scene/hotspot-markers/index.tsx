@@ -15,8 +15,6 @@ const NEARBY_UNITS = 150;
 const NEARBY_SAMPLE = 0.25;
 
 interface HotspotMarkersProps {
-  /** Base marker radius in world units (FloorConfig.hsSize). Markers draw at a
-   *  constant screen size; this is what that scaling starts from and clamps to. */
   hsSize?: number;
 }
 
@@ -54,8 +52,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
         .filter((h) => h.enabled !== false && isFieldHotspot(h.id) && within(h.position))
         .map((h) => h.id),
     ];
-    // Only on a CHANGE of set: this runs four times a second and a new object
-    // every time would re-render the whole marker tree for nothing.
     setGround((prev) =>
       prev.on && prev.ids.length === ids.length && prev.ids.every((id, i) => id === ids[i])
         ? prev
@@ -68,8 +64,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
     : currentLayoutId
       ? (site.layoutById[currentLayoutId]?.hotspots ?? [])
       : [];
-  // A picked resource shows that disc alone — but not on the ground, where the
-  // pick came with a standpoint and the point is to look around from it.
   const picked = selectedHotspotId && !ground.on ? [selectedHotspotId] : own;
 
   const alwaysOn = useMemo(
@@ -103,7 +97,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
             rotation={hotspot.rotation}
             title={hotspot.name}
             size={hsSize ?? 0.6}
-            // Markers are all white; the pulse alone marks the selection.
             pulse={isSelected}
             onHotspotClick={() =>
               setHotspotInfo({

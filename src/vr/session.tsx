@@ -4,18 +4,17 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { XR, useXR } from "@react-three/xr";
 import * as THREE from "three";
-import { setMarkerScale } from "@/shared/runtime/marker-scale";
 import { useProgressStore } from "@/shared/stores/progress-store";
-import { streamReach } from "@/streaming/reach";
+import { streamReach } from "./engine/stream";
 import { useVrBridge } from "./bridge";
 import { VrFog } from "./fog";
 import { VrHud } from "./hud";
+import { VrMarkers } from "./markers";
 import { VrRig } from "./rig";
 import { exitVr, xrStore } from "./xr-store";
 
 const FADE_PER_SECOND = 4;
 const BEFORE_SCENE = -1;
-const MARKER_SCALE = 0.65;
 const _head = new THREE.Vector3();
 
 const SETTLE = {
@@ -118,11 +117,6 @@ function HeadPose() {
 
 function InSession() {
   const presenting = useXR((s) => s.session != null);
-  useEffect(() => {
-    if (!presenting) return;
-    setMarkerScale(MARKER_SCALE);
-    return () => setMarkerScale(1);
-  }, [presenting]);
   if (!presenting) return null;
   return (
     <>
@@ -130,6 +124,7 @@ function InSession() {
       <VrRig />
       <VrFog />
       <VrHud />
+      <VrMarkers />
       <Blackout />
     </>
   );

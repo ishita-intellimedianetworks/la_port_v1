@@ -41,8 +41,6 @@ export function containRect(
   const imgAspect   = img.naturalWidth / img.naturalHeight;
   const innerAspect = innerW / innerH;
   let dw: number, dh: number;
-  // CONTAIN: scale so the WHOLE image is visible (no crop), then centre it so
-  // the spare space is balanced on all sides.
   if (imgAspect > innerAspect) {
     dw = innerW; dh = innerW / imgAspect;
   } else {
@@ -306,16 +304,9 @@ export interface MapHotspot {
   x: number;
   z: number;
   distLabel: string;
-  /** false = dot only, no name pill (secondary pins of a multi-hotspot destination —
-   *  only its first pin carries the label so 8 restrooms ≠ 8 pills). */
   labeled?: boolean;
-  /** List-mode (memorial): the destination's number, drawn INSIDE the dot and
-   *  matching its row in the destination list below the plan. */
   num?: number;
-  /** The player is standing at this destination → green "You're here" dot. */
   here?: boolean;
-  /** Heat-map tint for the dot (red/yellow/green by crowd level) — destinations
-   *  with an authored crowd tier colour their pin like a congestion heat map. */
   crowdColor?: string;
 }
 
@@ -327,8 +318,6 @@ export function drawHotspots(
   H: number,
   scale: number,
   selectedId: string | null,
-  /** List-mode (memorial): NUMBERED dots only — no leader lines / name pills
-   *  (names live in the destination list under the plan instead). */
   numbered = false,
   zoom = 1,
 ) {
@@ -406,7 +395,7 @@ export function drawHotspots(
   const r = Math.max(3, 4 * scale) / zoom;
   const boxH = Math.max(14, 17 * scale) / zoom;
   const padX = Math.max(5, 7 * scale) / zoom;
-  const leader = Math.max(12, 16 * scale) / zoom; // vertical line from dot → pill
+  const leader = Math.max(12, 16 * scale) / zoom;
 
   const dots = hotspots.map((h) => {
     const { px, py } = worldToPixel(h.x, h.z, bounds, W, H);
@@ -500,8 +489,6 @@ export function drawPlayerFOV(
   markerScale?: number,
 ) {
   const { px, py } = worldToPixel(pos.x, pos.z, bounds, W, H);
-  // `markerScale` (when given) keeps the player dot + FOV cone a small, fixed
-  // size on the full-screen map (Google-Maps style) rather than scaling up.
   const scale = markerScale ?? W / DEFAULT_MAP_SIZE;
   const scaledFovLen = FOV_LENGTH * scale;
   const scaledPlayerSize = PLAYER_SIZE * scale;

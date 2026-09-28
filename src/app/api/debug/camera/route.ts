@@ -1,11 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-/** The models that have a file, and the only values that may reach a path. */
 const SITE_IDS = ["v1", "v2", "v3", "v4", "v5"] as const;
 type SiteId = (typeof SITE_IDS)[number];
 
-/** Where one model's document lives, relative to the dev server's cwd. */
 const siteFileFor = (id: SiteId) =>
   path.join(process.cwd(), "src", "config", "sites", `${id}.json`);
 
@@ -47,7 +45,6 @@ function withCamera(row: CameraRow, camera: { position: Vec3; rotation: Vec3 }):
     out[key] = value;
     if (key === "rotation") out.camera = camera;
   }
-  // No `rotation` to anchor to (a layout row) — the key simply goes last.
   if (!out.camera) out.camera = camera;
   return out as unknown as CameraRow;
 }

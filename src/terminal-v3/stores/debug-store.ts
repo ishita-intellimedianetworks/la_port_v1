@@ -1,7 +1,6 @@
 import { createStore } from "@/shared/stores/create-store";
 
 export type DebugState = {
-  /** Draw the walkable surface as the green fill + wireframe overlay. */
   showNavmesh: boolean;
   setShowNavmesh: (v: boolean) => void;
   navmeshDepth: boolean;

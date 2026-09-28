@@ -19,7 +19,6 @@ import { useStreamVariantId } from "@/streaming/variant";
 import { BottomBar } from "./overlay/bottom-bar";
 import { SpeedControl } from "./overlay/speed-control";
 import { useTerminalUi } from "./context/ui-context";
-import { useIsVr } from "@/vr/vr-mode";
 import type { DestinationCategory, DestinationsByCategory } from "@/shared/types";
 import { useNavUiStore } from "./stores/nav-ui-store";
 import { useSecurityStore } from "./stores/security-store";
@@ -62,7 +61,6 @@ export default function Overlays() {
   tick("render:Overlays");
   useEffect(() => useNavUiStore.subscribe(() => tick("write:navUiStore")), []);
   const ui = useTerminalUi();
-  const vr = useIsVr();
   const {
     inlineMode, unitName,
     floors, startPosition, startRotation,
@@ -360,7 +358,7 @@ export default function Overlays() {
       {!inlineMode && hasDollHouse && (
         <InstructionsCard
           mode="dollhouse"
-          visible={isReady && phase === "overlay" && !vr}
+          visible={isReady && phase === "overlay"}
           onDismiss={() => {
             markInstructionsSeen();
             setPhase("dollhouse");

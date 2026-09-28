@@ -6,7 +6,6 @@ import { useProgressStore } from "@/shared/stores/progress-store";
 const FADE_MS = 700;
 
 interface LoadBlurOverlayProps {
-  /** Also wait for the whole-project cache warm (exterior loader behaviour). */
   requireWarm?: boolean;
 }
 
@@ -25,8 +24,6 @@ export default function LoadBlurOverlay({ requireWarm = false }: LoadBlurOverlay
       setMounted(true);
       return;
     }
-    // Loader finished — fade out, then unmount after the fade so the
-    // backdrop-filter stops sampling the live canvas.
     const t = window.setTimeout(() => setMounted(false), FADE_MS);
     return () => window.clearTimeout(t);
   }, [done]);

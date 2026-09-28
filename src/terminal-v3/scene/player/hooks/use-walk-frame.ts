@@ -102,7 +102,6 @@ export interface UseWalkFrameOptions {
   currentZone:  React.MutableRefObject<string>;
   onNavComplete:  React.MutableRefObject<(() => void) | null>;
   vizGrp:         React.MutableRefObject<THREE.Group | null>;
-  /** When true, suppress the automatic idle-drift start on first-enable */
   skipFirstIdle?: React.MutableRefObject<boolean>;
   enabled:        boolean;
   lookEnabled?:   boolean;
@@ -113,8 +112,6 @@ export interface UseWalkFrameOptions {
   pathfinding:  Pathfinding;
 }
 
-// Plain function — NOT a hook or component, so its parameters are not subject
-// to the react-hooks/immutability rule. All ref mutations happen here.
 function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
   const {
     prevEnabled, idleOn, idleAcc,
@@ -143,8 +140,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
         idleAcc.current += step;
         if (idleAcc.current >= Math.PI * 2) idleOn.current = false;
       }
-      // Ease yaw toward its target (drag also writes rot.y directly, so this is a
-      // no-op mid-drag and just carries idle drift when the user isn't dragging).
       const yawAlpha = 1 - Math.exp(-IDLE_YAW_RATE * dt);
       rot.current.y = lerpAngle(rot.current.y, yawT.current, yawAlpha);
       camera.position.copy(pos.current);
@@ -181,8 +176,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
     const dz     = wp.z - pos.current.z;
     const distXZ = Math.sqrt(dx * dx + dz * dz);
 
-    // Walk-start ease-in: speed scales 0→1 over WALK_RAMP_SEC (smoothstep) so the
-    // first moment of the walk glides in instead of snapping to full pace.
     if (!_walkRamp.prevMoving) {
       _walkRamp.t = 0;
       _moveDir.x = 0;
@@ -200,8 +193,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       if (pathI.current < path.current.length - 1) {
         pathI.current++;
       } else {
-        // Reached final waypoint — stop here without snap (the 8cm overshoot
-        // is invisible and avoids a noticeable end-of-walk jerk).
         setMoving(false);
         path.current = [];
         vizGrp.current?.clear();
@@ -212,8 +203,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
       }
     } else {
       const step = Math.min(stepLen, distXZ);
-      // Steer toward the segment direction instead of snapping to it — the
-      // eased direction carves a smooth arc through corners (see _moveDir).
       const ux = dx / distXZ;
       const uz = dz / distXZ;
       let mx = ux;
@@ -324,8 +313,6 @@ function runWalkFrame(o: UseWalkFrameOptions, delta: number): void {
         if (cached !== null && Math.abs(cached - expectedSurfaceY) < 0.5) {
           y = cached;
         } else {
-          // Either the XZ left the triangle, or the triangle belongs to a
-          // different floor. Invalidate so SLOW PATH picks the correct one.
           _probeCache.groupIdx = -1;
           _probeCache.nodeIdx = -1;
         }

@@ -16,7 +16,6 @@ const FETCH_TIMEOUT_MS = 25_000;
 const FETCH_TRIES = 4;
 
 const STANDING_AMBIENT = ["ContainerIdle", "TruckHaul", "SceneTour"];
-/** The beat between the First Person click and those clips starting. */
 const STANDING_AMBIENT_DELAY_MS = 2_500;
 
 async function loadJson<T>(url: string): Promise<T> {
@@ -32,12 +31,11 @@ async function loadJson<T>(url: string): Promise<T> {
         return (await r.json()) as T;
       }
     } catch (e) {
-      // A 4xx thrown above is final; anything else is worth another go.
       if (e instanceof Error && /-> 4\d\d$/.test(e.message)) throw e;
       lastErr = e;
     }
     if (attempt < FETCH_TRIES) {
-      const wait = 400 * 3 ** (attempt - 1); // 0.4s, 1.2s, 3.6s
+      const wait = 400 * 3 ** (attempt - 1);
       console.warn(
         `[stream] ${url.split("/").pop()} attempt ${attempt}/${FETCH_TRIES} failed ` +
           `(${lastErr instanceof Error ? lastErr.message : String(lastErr)}); retrying in ${wait}ms`,
@@ -50,11 +48,8 @@ async function loadJson<T>(url: string): Promise<T> {
 
 export interface StreamedModelProps {
   config: StreamingConfig;
-  /** Fires once with the manifest's baked world bounds. */
   onBounds?: (bbox: THREE.Box3) => void;
-  /** Fires once, when the opening view has stopped filling in. */
   onLoaded?: () => void;
-  /** Fires on every streaming tick with the live counters. Debug HUD only. */
   onStats?: (s: StreamStats) => void;
 }
 
@@ -65,8 +60,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const mgr = useRef<ChunkManager | null>(null);
   const acc = useRef(0);
 
-  // The construction effect must not list `config` as a dependency — it is
-  // swapped in place by the effect below.
   const [managerBorn, setManagerBorn] = useState(0);
 
   const cfgRef = useRef(config);
@@ -84,8 +77,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const stallTicks = useRef(0);
 
   useEffect(() => {
-    // Back to 0 for this mount. The entry blackout holds until this reaches 1,
-    // so a second walk-in must wait for its own fill, not inherit the first's.
     useProgressStore.getState().resetStreamProgress();
     let alive = true;
     (async () => {
@@ -148,8 +139,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const site = useSite();
   const { viewMode } = useScene();
   const selectedHotspotId = useNavUiStore((s) => s.selectedHotspotId);
-  // Ticks on every pick, including a repeat of the current one, so pressing the
-  // same row twice fires the clip twice.
   const selectionSeq = useNavUiStore((s) => s.selectionSeq);
 
   const claimed = useMemo(() => {
@@ -188,8 +177,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
     const cycle = (wait: number) => {
       timer = setTimeout(() => {
         if (cancelled) return;
-        // `mgr.current` rather than a captured manager: `animated.glb` lands on
-        // its own schedule and the manager is rebuilt under a config swap.
         const m = mgr.current;
         if (m?.playClipOnce(anim.clip) === false) {
           console.warn(
@@ -206,8 +193,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
     mgr.current?.stopClip(anim.clip);
     cycle(Math.max(0, (anim.delaySeconds ?? 2) * 1000));
 
-    // Leaving cancels the whole chain rather than letting one more cycle land
-    // on whatever is being looked at next.
     return () => {
       cancelled = true;
       clearTimeout(timer);

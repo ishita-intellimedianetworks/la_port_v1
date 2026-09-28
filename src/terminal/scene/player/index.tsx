@@ -101,8 +101,6 @@ export const PlayerController = forwardRef<PlayerControllerHandle, PlayerControl
 
     useImperativeHandle(ref, () => ({
       navigateToPoint: (pos, targetZone, onDone) => {
-        // A committed walk supersedes any preview route — and any fly-over
-        // yaw-only look lock (walking resumes normal ground look control).
         clearPreview();
         state.pitchLock.current = false;
         return navigateToPoint(pos, targetZone, onDone);

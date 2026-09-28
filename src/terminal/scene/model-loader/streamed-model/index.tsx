@@ -17,11 +17,8 @@ async function loadJson<T>(url: string): Promise<T> {
 
 export interface StreamedModelProps {
   config: StreamingConfig;
-  /** Fires once with the manifest's baked world bounds. */
   onBounds?: (bbox: THREE.Box3) => void;
-  /** Fires once, when the opening view has stopped filling in. */
   onLoaded?: () => void;
-  /** Fires on every streaming tick with the live counters. Debug HUD only. */
   onStats?: (s: StreamStats) => void;
 }
 
@@ -32,8 +29,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const mgr = useRef<ChunkManager | null>(null);
   const acc = useRef(0);
 
-  // The construction effect must not list `config` as a dependency — it is
-  // swapped in place by the effect below.
   const cfgRef = useRef(config);
   cfgRef.current = config;
 
@@ -49,8 +44,6 @@ export function StreamedModel({ config, onBounds, onLoaded, onStats }: StreamedM
   const stallTicks = useRef(0);
 
   useEffect(() => {
-    // Back to 0 for this mount. The entry blackout holds until this reaches 1,
-    // so a second walk-in must wait for its own fill, not inherit the first's.
     useProgressStore.getState().resetStreamProgress();
     let alive = true;
     (async () => {

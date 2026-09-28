@@ -4,8 +4,6 @@ import { useOrientation } from "@/shared/stores/use-orientation";
 import { usePortrait } from "@/shared/responsive";
 
 const ForceLandscape = () => {
-  // A selector, not the whole store: a no-selector subscription re-renders on
-  // every write because zustand's set() always makes a new state object.
   const setLandscape = useOrientation((s) => s.setLandscape);
   const portrait = usePortrait();
 

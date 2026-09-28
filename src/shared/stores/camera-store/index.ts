@@ -3,11 +3,9 @@ import type { Site } from "@/config";
 import { createSeededStore } from "../create-store";
 
 export type CameraState = {
-  /** The live three.js camera, registered by the scene on mount. */
   camera: THREE.Camera | null;
   setCamera: (camera: THREE.Camera) => void;
   fov: number;
-  /** What this model authored, for the panel's reset. */
   fovSeed: number;
   setFov: (deg: number) => void;
 };

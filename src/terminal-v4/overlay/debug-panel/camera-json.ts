@@ -5,11 +5,8 @@ import type { Site, SiteId } from "@/config";
 import type { Vec3 } from "@/config/schema";
 import { useNavUiStore } from "../../stores/nav-ui-store";
 
-/** The live pose, in the runtime's own terms: world position of the EYE, and a
- *  YXZ euler in radians. */
 export interface LivePose {
   position: Vec3;
-  /** YXZ `[pitch, yaw, roll]`, radians. */
   rotation: Vec3;
 }
 
@@ -17,25 +14,18 @@ export interface CameraTarget {
   kind: "hotspot" | "layout";
   id: string;
   name: string;
-  /** Where a saved block goes, as a path a person can search for. */
   path: string;
-  /** Aerial poses keep their authored Y; ground ones are seated on the navmesh
-   *  (see `goToLayout`). Decides how an edited Y is written back. */
   aerial: boolean;
   inherited: boolean;
 }
 
-/** What goes in the file, and on the clipboard. */
 export interface CameraPatch {
   position: Vec3;
-  /** XYZ, the order the site file stores. */
   rotation: Vec3;
 }
 
 const scratch = new THREE.Euler();
 
-/** Read a camera's orientation in an order it was not necessarily set in.
- *  Goes through the quaternion, which is order-free, so this is exact. */
 function eulerFrom(camera: THREE.Camera, order: "YXZ" | "XYZ"): Vec3 {
   scratch.setFromQuaternion(camera.quaternion, order);
   return [scratch.x, scratch.y, scratch.z];
@@ -85,8 +75,6 @@ export function cameraTargetFor(
   return null;
 }
 
-/** The same thing, read straight off the store — for callbacks and buttons,
- *  which fire outside React's render and have nothing to subscribe with. */
 export function activeCameraTarget(site: Site): CameraTarget | null {
   const { selectedHotspotId, currentDest } = useNavUiStore.getState();
   return cameraTargetFor(site, selectedHotspotId, currentDest?.id ?? null);
@@ -102,7 +90,6 @@ export function buildCameraPatch(camera: THREE.Camera): CameraPatch {
   };
 }
 
-/** The clipboard form: the block, and above it the path it replaces. */
 export function formatCameraPatch(patch: CameraPatch, target: CameraTarget | null): string {
   const head = target ? `// ${target.path}\n` : "// no authored camera selected\n";
   return head + JSON.stringify(patch, null, 2);
@@ -126,8 +113,6 @@ export async function saveCamera(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ site, kind: target.kind, id: target.id, ...patch }),
     });
-    // A 404 here is the production guard, not a missing row — the route is not
-    // served outside `next dev`, and saying so beats "Not found".
     if (res.status === 404 && !res.headers.get("content-type")?.includes("json")) {
       return { ok: false, error: "Saving is dev-only — the route is not served in this build" };
     }

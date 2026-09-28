@@ -1,10 +1,8 @@
 import { create, type StoreApi } from "zustand";
 
-/** A patch, or a reducer producing one. Returning `{}` means "no change". */
 type Patch<T> = Partial<T> | ((state: T) => Partial<T>);
 
 export type StoreHook<T> = {
-  /** Selector is REQUIRED — see the note above. */
   <U>(selector: (state: T) => U): U;
   getState: StoreApi<T>["getState"];
   setState: StoreApi<T>["setState"];
@@ -42,8 +40,6 @@ export function createStore<T extends object>(
 }
 
 export type SeededStoreHook<T, S> = StoreHook<T> & {
-  /** Build the store from `seed`. A no-op while the seed is the one it already
-   *  holds; a different seed rebuilds. */
   init: (seed: S) => void;
 };
 

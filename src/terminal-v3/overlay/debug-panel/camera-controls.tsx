@@ -17,12 +17,8 @@ import {
 const DEG = 180 / Math.PI;
 const RAD = Math.PI / 180;
 
-/** How often the panel re-reads the camera, ms. Fast enough to read as live
- *  while walking, slow enough that it is not re-rendering inputs every frame. */
 const POLL_MS = 120;
 
-/** How long after an edit the readback stays quiet, ms. Long enough to cover a
- *  drag's pointer-move cadence, short enough that letting go feels immediate. */
 const EDIT_QUIET_MS = 400;
 
 type Setter = (patch: Record<string, unknown>) => void;
@@ -32,8 +28,6 @@ const round = (n: number, d = 3) => Number(n.toFixed(d));
 export default function DebugCameraControls() {
   const { playerControllerRef } = useTerminalUi();
   const setFov = useCameraStore((s) => s.setFov);
-  // Both the authored poses and the FOV the "reset" buttons mean belong to the
-  // model this route is running, not to a shared config.
   const site = useSite();
   const fovSeed = useCameraStore((s) => s.fovSeed);
   const setShowNavmesh = useDebugStore((s) => s.setShowNavmesh);
@@ -45,7 +39,6 @@ export default function DebugCameraControls() {
   const setRef = useRef<Setter>(() => {});
   const push = useCallback<Setter>((patch) => setRef.current(patch), []);
 
-  /** Timestamp of the last panel-originated edit — see the quiet window above. */
   const lastEditRef = useRef(0);
 
   const eyeHeight = useCallback(() => {
@@ -74,8 +67,6 @@ export default function DebugCameraControls() {
     [playerControllerRef, eyeHeight],
   );
 
-  /** One position/rotation input. Writes only when the edit came from the panel
-   *  AND the editor is armed — see `cameraEdit` in the debug store. */
   const edit =
     (key: "x" | "y" | "z" | "pitch" | "yaw" | "roll") =>
     (v: number, _path: string, ctx?: { fromPanel?: boolean }) => {
@@ -103,8 +94,6 @@ export default function DebugCameraControls() {
     ctrl.teleportTo([x, y, z], pose.rotation);
   }, [site, playerControllerRef, eyeHeight]);
 
-  /** The same block the camera card copies and the save writes — one builder,
-   *  so the three cannot disagree about what "this pose" is. */
   const copyPose = useCallback(() => {
     const camera = useCameraStore.getState().camera;
     if (!camera) return;
@@ -143,8 +132,6 @@ export default function DebugCameraControls() {
           if (ctx?.fromPanel) setNavmeshDepth(v);
         },
       },
-      // The readout that separates "the overlay is off" from "the overlay is on
-      // and there is no mesh behind it" — two identical blank screens.
       "navmesh mesh": { value: "waiting…", editable: false },
     }),
 
@@ -160,8 +147,6 @@ export default function DebugCameraControls() {
       x: { value: 0, step: 0.25, onChange: edit("x") },
       y: { value: 0, step: 0.25, hint: "EYE height, as the site file stores it", onChange: edit("y") },
       z: { value: 0, step: 0.25, onChange: edit("z") },
-      // Angles ARE bounded, so these are sliders. Degrees, because nobody
-      // frames a shot in radians; the export converts back.
       pitch: { value: 0, min: -89, max: 89, step: 0.5, onChange: edit("pitch") },
       yaw: { value: 0, min: -180, max: 180, step: 0.5, onChange: edit("yaw") },
       roll: { value: 0, min: -180, max: 180, step: 0.5, onChange: edit("roll") },
@@ -174,8 +159,6 @@ export default function DebugCameraControls() {
     setRef.current = setTyped as unknown as Setter;
   }, [setTyped]);
 
-  // The navmesh arrives after the panel is built (it streams with the chunks),
-  // so the readout is pushed in when it lands rather than seeded.
   useEffect(() => {
     push({
       "navmesh mesh":
@@ -185,14 +168,10 @@ export default function DebugCameraControls() {
     });
   }, [navmeshTriangles, push]);
 
-  // The arming switch can also be flipped from the camera card, so mirror the
-  // store back into the panel rather than letting the checkbox go stale.
   useEffect(() => {
     push({ "edit camera": cameraEdit });
   }, [cameraEdit, push]);
 
-  // The readback. Everything the panel shows about the camera is derived here,
-  // so there is exactly one place that decides what "current" means.
   useEffect(() => {
     let lastLabel: string | null = null;
     const id = window.setInterval(() => {

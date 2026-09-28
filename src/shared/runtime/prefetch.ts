@@ -1,10 +1,6 @@
 const inFlight = new Set<string>();
 const done     = new Set<string>();
 const queue: string[] = [];
-/** Enough to keep the pipe busy behind a queue of small files, few enough that
- *  `priority: "low"` still means what it says next to the streamer's own
- *  fetches. One at a time could not drain a view's worth of rungs in the time
- *  the dollhouse is up. */
 const MAX_PARALLEL = 4;
 let active = 0;
 
@@ -39,7 +35,6 @@ export function prefetchUrls(urls: (string | undefined | null)[]): void {
   for (let i = 0; i < MAX_PARALLEL; i++) void pump();
 }
 
-/** Reset the prefetch tracker — useful in tests / hot-reload. */
 export function _resetPrefetch(): void {
   inFlight.clear();
   done.clear();

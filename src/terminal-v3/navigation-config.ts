@@ -7,8 +7,6 @@ export const navConfig = {
     destRed: "#e8453c",
   },
 
-  // ── 3D route (sizes in REAL-WORLD METRES; auto-scaled to world units so the
-  //    visuals stay human-scale regardless of how big the model's units are) ──
   scene3d: {
     lineWidthM: 0.18,
     liftM: 0.04,
@@ -35,8 +33,6 @@ export const navConfig = {
 
   logic: {
     siteSpanMeters: 990,
-    /** Walking speed in metres/second (constant pace → realistic ETA).
-     *  6 km/h = 6000 / 3600 ≈ 1.667 m/s (average human walking speed). */
     walkMps: 6000 / 3600,
     defaultSpeedMult: 10,
 

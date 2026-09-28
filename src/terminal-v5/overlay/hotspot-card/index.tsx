@@ -93,8 +93,6 @@ function Field({
 }: {
   field: HotspotField;
   color?: string;
-  /** Let a long reading take a second line instead of losing its tail. Set on
-   *  a clip card, whose four columns are narrower than a value can need. */
   wrap?: boolean;
 }) {
   const tone = useSite().toneFor(field.value, field.tone);
@@ -142,9 +140,6 @@ function Field({
   );
 }
 
-/** A reading with nothing in it. An em dash is a placeholder for a value that
- *  has not happened yet, and a row that says nothing is a row that should not
- *  be on the card at all. */
 function isBlank(field: HotspotField): boolean {
   if (field.pending) return false;
   const v = field.value;
@@ -463,7 +458,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                 </ol>
               </div>
             )}
-
 
             {hotspotId === SECURITY_CENTRE_ID && (
               <>
@@ -855,8 +849,6 @@ function FieldAlerts({ hotspotId }: { hotspotId: string }) {
   );
 }
 
-/** The camera id a clip card badges its feed with, read off the row's own
- *  readings so the badge and the grid can never disagree. */
 function cameraIdOf(hotspot: HotspotConfig): string | null {
   const f = hotspot.fields.find((x) => x.name === "camera_id");
   return f && typeof f.value === "string" ? f.value : null;
@@ -1141,8 +1133,6 @@ function StillPreload({ ready }: { ready?: boolean }) {
     const seen = new Map<string, NonNullable<HotspotConfig["poster"]>>();
     for (const h of rows) {
       if (h.poster && !seen.has(h.poster.url)) seen.set(h.poster.url, h.poster);
-      // A clip's first frame is the one thing on a clip card that can be
-      // painted before the video has a byte, so it warms like a poster.
       if (h.clip?.poster && !seen.has(h.clip.poster)) {
         seen.set(h.clip.poster, {
           url: h.clip.poster,

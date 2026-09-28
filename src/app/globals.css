@@ -55,7 +55,6 @@
 
 :root {
   --radius: 0.5rem;
-  /* base radius for Tailwind rounded-* scale (rounded-xl = 0.7rem ≈ 11px) */
 
   --ui-white-glass-bg: rgba(255, 255, 255, 0.12);
   --ui-glass-bg: rgba(0, 0, 0, 0.4);
@@ -70,20 +69,18 @@
   --ui-text-faint: rgba(255, 255, 255, 0.6);
   --ui-accent-cyan: rgba(34, 211, 238, 0.75);
 
-  --nav-accent: #0071e3;          /* solid blue — active fills (pills, CTAs) */
-  --nav-accent-bright: #2997ff;   /* bright blue — text, underline, ring */
-  --nav-brand: #fb5b2d;           /* poppy — LA28 lockup accent only */
-  /* Apple "liquid glass" surface fill (ported from the ARCHVIZ v5 glass): a faint
-     top-down white sheen layered over a dark tint. Used as a `background` value. */
+  --nav-accent: #0071e3;
+  --nav-accent-bright: #2997ff;
+  --nav-brand: #fb5b2d;
   --nav-glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0) 100%);
-  --nav-glass: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);       /* chips / dock / toggle */
-  --nav-glass-strong: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);/* label panel + nav banner */
+  --nav-glass: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);
+  --nav-glass-strong: var(--nav-glass-sheen), rgba(9, 11, 15, 0.52);
   --nav-border: rgba(255, 255, 255, 0.14);
   --nav-divider: rgba(255, 255, 255, 0.08);
-  --nav-text: #f4f6f8;            /* primary */
-  --nav-text-2: rgba(255, 255, 255, 0.82);   /* strong secondary — soft white */
-  --nav-text-dim: rgba(255, 255, 255, 0.82); /* secondary / meta — same soft white */
-  --nav-text-faint: rgba(255, 255, 255, 0.6); /* tertiary / muted — fainter white */
+  --nav-text: #f4f6f8;
+  --nav-text-2: rgba(255, 255, 255, 0.82);
+  --nav-text-dim: rgba(255, 255, 255, 0.82);
+  --nav-text-faint: rgba(255, 255, 255, 0.6);
   --nav-glass-blur: 22px;
   --nav-backdrop: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
   --nav-backdrop-panel: blur(var(--nav-glass-blur)) saturate(180%) brightness(1.05);
@@ -118,8 +115,6 @@
 @media (max-width: 1023px) {
   :root {
     --ui-glass-blur: 5px;
-    /* Keep the overlay frost:surface ratio matched to desktop (a fixed 22px reads
-       ~2× heavier on small panels) — same scaling the ARCHVIZ glass uses. */
     --nav-glass-blur: 13px;
   }
 }
@@ -129,8 +124,6 @@ body {
   -webkit-user-select: none;
   font-family: var(--font-barlow), system-ui, sans-serif;
 }
-
-/* ── Interior scene UI utilities ─────────────────────────────────────────── */
 
 .ui-white-glass {
   background: var(--ui-white-glass-bg);
@@ -247,7 +240,6 @@ body {
   border-color: var(--ui-glass-border-active);
 }
 
-/* 10 px all-caps spaced label — font-weight set per-component */
 .ui-label {
   font-size: 8px;
   letter-spacing: 0.35em;
@@ -274,7 +266,6 @@ body {
   }
 }
 
-/* Circular 48 × 48 icon button */
 .ui-icon-btn {
   width: 48px;
   height: 48px;
@@ -296,13 +287,10 @@ body {
   transform: scale(1.05);
 }
 
-/* ── layouts-info classes ─────────────────────────────────────────────── */
-
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px 12px;
-  /* margin-bottom: 1px; */
 }
 
 @media (min-width: 1024px) {
@@ -318,13 +306,11 @@ body {
   position: relative;
   padding-left: 20px;
   justify-content: center;
-  /* min-height: 24px; */
 }
 
 @media (min-width: 1024px) {
   .meta-block {
     padding-left: 44px;
-    /* min-height: 36px; */
   }
 }
 
@@ -353,7 +339,6 @@ body {
   }
 }
 
-/* ── Hide scrollbar cross-browser ────────────────────────────────────────── */
 .scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -362,7 +347,6 @@ body {
   display: none;
 }
 
-/* Hide scrollbar only on phone (below lg = 1024px) */
 @media (max-width: 1023px) {
   .scrollbar-none-mobile {
     scrollbar-width: none;
@@ -423,7 +407,6 @@ body {
   }
 }
 
-/* ── meta-block icon variants (mobile: 10×10 svg in 20×20 circle) ─────────── */
 .meta-block--area::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'); }
 .meta-block--floors::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'); }
 .meta-block--bed::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4"/><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M10 9V6"/><path d="M14 9V6"/></svg>'); }
@@ -441,19 +424,14 @@ body {
 .meta-block--retail::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>'); }
 .meta-block--stairs::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'); }
 
-/* Stairs row has no second meta-block, so let the single block span the
-   full grid width instead of being squeezed into one 2-col cell. */
 .meta-block--stairs {
   grid-column: 1 / -1;
 }
 
-/* Any lone block (e.g. Common Space) spans the full grid width so its text
-   isn't squeezed into one 2-col cell and forced to wrap onto two lines. */
 .meta-block--full {
   grid-column: 1 / -1;
 }
 
-/* ── meta-block icon variants (desktop: 14×14 svg in 32×32 circle) ─────────── */
 @media (min-width: 1024px) {
   .meta-block--area::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'); }
   .meta-block--floors::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'); }
@@ -473,10 +451,6 @@ body {
   .meta-block--stairs::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'); }
 }
 
-/* loader holotwin */
-
-/* HoloTwin Smart Loader — branded HUD overlay (V2.4) */
-
 .htl-root {
   position: fixed;
   inset: 0;
@@ -484,7 +458,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* content anchored to top */
+  justify-content: flex-start;
   background: transparent;
   color: var(--htl-color);
   font-family:
@@ -646,8 +620,6 @@ body {
   }
 }
 
-/* ---- canvas blur-to-clear loading transition ---- */
-
 canvas.htl-main-loading {
   filter: blur(24px) brightness(0.55) saturate(0.85);
   transform: scale(1.045);
@@ -676,9 +648,8 @@ canvas.htl-main-ready {
 }
 
 @media (max-width: 640px), (max-height: 540px) {
-  /* Tighten the whole HUD so it fits inside the visible viewport on phones */
   .htl-hud {
-    padding: 22vh 16px 0;     /* center-ish via top padding, narrower side gutters */
+    padding: 22vh 16px 0;
     gap: 6px;
     max-width: 92vw;
   }
@@ -693,7 +664,7 @@ canvas.htl-main-ready {
     word-break: break-word;
   }
   .htl-progress {
-    width: min(82vw, 360px);   /* don't blow past the screen */
+    width: min(82vw, 360px);
     margin-top: 12px;
     gap: 8px;
   }
@@ -701,14 +672,12 @@ canvas.htl-main-ready {
     font-size: 11px;
   }
   .htl-footer {
-    bottom: 6vh;               /* keep brand on screen regardless of nav-bar height */
+    bottom: 6vh;
   }
   .htl-brand {
     font-size: 11px;
     letter-spacing: 0.32em;
   }
-  /* Lighter canvas blur on mobile — 24px blur is GPU-expensive on phones and
-     contributes to the loading-screen jank / crashes. */
   canvas.htl-main-loading {
     filter: blur(12px) brightness(0.6) saturate(0.9);
     transform: scale(1.02);
@@ -719,8 +688,6 @@ canvas.htl-main-ready {
   }
 }
 
-/* Very small landscape phones — HUD was overflowing vertically. Stacks on top
-   of the phone block above, which already matched at this height. */
 @media (max-height: 480px) {
   .htl-hud {
     padding-top: 14vh;

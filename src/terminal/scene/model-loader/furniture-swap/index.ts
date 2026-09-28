@@ -15,7 +15,7 @@ function matchesKey(matNorm: string, keyNorm: string): boolean {
   if (matNorm === keyNorm) return true;
   if (matNorm.startsWith(keyNorm)) {
     const suffix = matNorm.slice(keyNorm.length);
-    return /^\d+$/.test(suffix); // wall001, wall002 … all match "wall"
+    return /^\d+$/.test(suffix);
   }
   return false;
 }
@@ -28,8 +28,6 @@ export function setupFurnitureToggle(
 ): (visible: boolean) => void {
   const { groups = [], textureSwaps = {} } = config;
 
-  // PHASE 1 — Traverse the entire scene once.
-  //           Build a map of: normalised material name → { mat, meshes[] }
   const byMat = new Map<string, { mat: StdMat; meshes: THREE.Mesh[] }>();
 
   scene.traverse((obj) => {

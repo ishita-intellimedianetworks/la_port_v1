@@ -1,9 +1,7 @@
 import type { SharedUniforms } from './point-cloud-preview';
 
 export interface CrossfadeOptions {
-  /** Total duration in ms. Default: 3500. */
   durationMs?: number;
-  /** Easing function 0..1 → 0..1. Default: smootherstep. */
   easing?: (k: number) => number;
 }
 

@@ -38,8 +38,6 @@ function patchOne(material: THREE.Material, sharedUniforms: SharedUniforms): voi
          vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
       );
 
-    // Fragment: inject the varying + uniform after #include <common>
-    // (always the first pars include), then discard before dithering.
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',

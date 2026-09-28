@@ -84,8 +84,6 @@ export function usePathfinding({
         const startNode = pathfinding.getClosestNode(fromPt, zone, group);
         const targetNode = pathfinding.getClosestNode(targetPt, zone, group);
         if (!startNode || !targetNode) return null;
-        // findPathWeighted, NOT pathfinding.findPath — the library's A* is
-        // direction-dependent and hop-count-based (see weighted-path.ts).
         let result = findPathWeighted(pathfinding, fromPt, targetNode.centroid, zone, group);
         if (!result?.length) result = findPathWeighted(pathfinding, startNode.centroid, targetNode.centroid, zone, group);
         if (!result?.length) return null;
@@ -190,8 +188,6 @@ export function usePathfinding({
           state.pos.current.z,
         );
 
-        // Single zone, single floor. Use the player's nearest group — pathfind
-        // entirely within it. No cross-group, no merged-zone retries.
         const group = pathfinding.getGroup(zone, fromPt) ?? 0;
 
         const startNode  = pathfinding.getClosestNode(fromPt,   zone, group);

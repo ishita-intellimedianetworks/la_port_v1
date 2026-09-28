@@ -1,5 +1,4 @@
 
-// Cache the mobile-detect once so we don't re-check per material.
 let _isLowPower: boolean | null = null;
 function isLowPower(): boolean {
   if (_isLowPower !== null) return _isLowPower;

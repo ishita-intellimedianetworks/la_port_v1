@@ -18,9 +18,8 @@ layer, and the decisions behind both.
 > mode rule, a config key) should land here in the same change.
 
 > **VR.** `/v5/vr`, like `/v2/vr` to `/v4/vr`, is a separate page described in
-> `docs/vr.md`. It lives in `terminal-v5/vr/` and `src/vr/`; the one line it
-> needs elsewhere in this tree is `hotspot.tsx` multiplying the marker scale by
-> `markerScale.value`, which is 1 outside a VR session. It mounts the same provider, scene and overlays and
+> `docs/vr.md`. It lives in `terminal-v5/vr/` and `src/vr/` and changes no
+> other file in this tree. It mounts the same provider and scene and
 > moves the headset by following `PlayerController`. In the headset, the
 > security group heads the Resources menu, Home and Dollhouse reset the security
 > store as the 3D bar does, and a security hotspot's card is this tree's

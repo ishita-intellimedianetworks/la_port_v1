@@ -2,19 +2,15 @@ import type { Site } from "@/config";
 import { createSeededStore } from "@/shared/stores/create-store";
 
 export type GradeValues = {
-  /** Multiplier, 1 = untouched. Read by the renderer, before tone mapping. */
   exposure: number;
-  /** Offsets, 0 = untouched. The CSS filter takes `1 + n`. */
   brightness: number;
   contrast: number;
   saturation: number;
 };
 
 export type GradeState = GradeValues & {
-  /** What the page LOADED with, so the panel's reset button can name it. */
   seed: GradeValues;
   set: (patch: Partial<GradeValues>) => void;
-  /** Back to whatever this model's file authored. */
   reset: () => void;
 };
 

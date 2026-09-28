@@ -17,28 +17,22 @@ interface HotspotsFlapProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
-  /** Tuck the flap off-edge (walking, or an overlay owns the view). */
   tucked?: boolean;
 }
 
-/** The synthetic row's id. Not a layout in `layouts[]` — see `rows` below. */
 const SECURITY_GROUP_ID = "SECURITY";
 
 interface TreeRow {
   id: string;
   name: string;
   children: HotspotConfig[];
-  /** Null on a row that is not a destination. */
   travelTo: (() => void) | null;
-  /** Children have a ground standpoint worth offering (operational only). */
   ground: boolean;
   autoOpen: boolean;
 }
 
 export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsFlapProps) {
   const { goToHotspot, goToHotspotGround, goToLayout } = useLayoutNavigation();
-  // The chevron is drawn by an SVG component, not a class, so the short
-  // viewport has to be read in JS to shrink it alongside its button.
   const chevronSize = useShortViewport() ? 15 : 18;
 
   const [query, setQuery] = useState("");
@@ -115,8 +109,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
       .filter((row) => row !== null);
   }, [site, q, securityHotspots, goToLayout]);
 
-  // Travelling is the end of the panel's job, so it closes and forgets the
-  // search — reopening onto a half-typed filter reads as a bug.
   const travel = useCallback(
     (go: () => void) => {
       go();
@@ -130,8 +122,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
     <EdgeFlap
       side="left"
       label={site.ui.panels.hotspotsFlapLabel}
-      // No in-panel title — the flap's own edge tab already reads "RESOURCES",
-      // and with no detail view there is nothing to go back FROM either.
       title=""
       subtitle=""
       open={open}
@@ -158,8 +148,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
           return (
             <li key={row.id} className="flex flex-col gap-1.5 short:gap-1">
               <div className="flex items-center gap-1.5 short:gap-1">
-                {/* Leaves keep the same empty slot rather than sliding left,
-                    so every row at one depth starts on the same line. */}
                 {hasChildren ? (
                   <button
                     type="button"
@@ -201,8 +189,6 @@ export function HotspotsFlap({ open, onOpenChange, disabled, tucked }: HotspotsF
                       <TravelRow
                         name={hp.name}
                         showChevron={false}
-                        // A row that is not a destination yet is listed, dim
-                        // and inert - see `enabled` in the schema.
                         disabled={hp.enabled === false}
                         onSelect={() =>
                           travel(() =>

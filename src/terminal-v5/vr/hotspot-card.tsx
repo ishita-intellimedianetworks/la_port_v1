@@ -53,7 +53,9 @@ import { useLayoutNavigation } from "../overlay/use-layout-navigation";
 type Row = { field: HotspotField; color?: string };
 
 const SECURITY_CENTRE_ID = "S07";
-const FIELDS_BESIDE_STILL = 4;
+const CARD = { width: "34%", maxHeight: "40%" } as const;
+
+const CARD_COLUMNS = 2;
 const TIME_FIELDS = new Set(["event_time", "detection_time", "duration"]);
 const HERO_FIELDS = ["security_status", "risk_state", "incident_status", "event_type", "zone_status"];
 const IDENTITY_FIELDS = new Set([
@@ -357,7 +359,7 @@ function IncidentDetailStrip({ incident }: { incident: SecurityIncident }) {
         </Label>
       </Container>
       <Container marginTop={px(12)}>
-        <Grid columns={4} gapX={px(20)}>
+        <Grid columns={CARD_COLUMNS} gapX={px(20)}>
           <DetailRow label="Acknowledged" value={incident.acknowledged ? "Yes" : "No"} />
           <DetailRow label="Location" value={incident.locationLabel} />
           <DetailRow label="Source" value={incident.source} />
@@ -606,7 +608,7 @@ function FilterSelect({
   );
 }
 
-function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
+function SecurityIncidentCentre() {
   const incidents = useSecurityStore((s) => s.incidents);
   const history = useSecurityStore((s) => s.history);
   const selectedId = useSecurityStore((s) => s.selectedIncidentId);
@@ -658,7 +660,7 @@ function SecurityIncidentCentre({ flush }: { flush?: boolean }) {
         justifyContent="space-between"
         gapColumn={px(12)}
         gapRow={px(8)}
-        marginTop={flush ? 0 : px(20)}
+        marginTop={px(20)}
         flexShrink={0}
       >
         <Container flexDirection="row" alignItems="center" gapColumn={px(8)}>
@@ -723,7 +725,7 @@ function SecurityCommandView({ fields, wide }: { fields: Row[]; wide: boolean })
     (f): f is Row => !!f,
   );
   return (
-    <Container flexDirection="column" paddingTop={px(4)} flexShrink={0} width="100%" flexGrow={wide ? 1 : 0}>
+    <Container flexDirection="column" paddingTop={px(4)} flexShrink={0} width="100%">
       <SectionLabel
         top={0}
         aside={
@@ -734,13 +736,13 @@ function SecurityCommandView({ fields, wide }: { fields: Row[]; wide: boolean })
       >
         Systems
       </SectionLabel>
-      <Grid columns={wide ? 2 : 3} gapX={px(26)}>
+      <Grid columns={CARD_COLUMNS} gapX={px(26)}>
         {systems.map((r) => (
           <SystemCell key={r.field.name} {...r} />
         ))}
       </Grid>
       {wide && (
-        <Container marginTop="auto" paddingTop={px(20)}>
+        <Container paddingTop={px(20)}>
           <Grid columns={2} gapX={px(12)} gapY={px(12)}>
             {counters.map((r) => (
               <StatTile key={r.field.name} {...r} />
@@ -758,24 +760,23 @@ function HotspotBody({ hotspot, hotspotId, fields }: { hotspot: HotspotConfig; h
 
   if (hotspot.clip || hotspot.image) {
     return (
-      <Container flexDirection="row" marginTop={px(FS.gap)} gapColumn={px(FS.gap * 1.4)} flexGrow={1} minHeight={0} width="100%">
-        <Container flexBasis={0} flexGrow={1.45} minWidth={0} minHeight={0} flexDirection="column" justifyContent="center" overflow="hidden">
-          {hotspot.clip ? (
-            <Clip clip={hotspot.clip} camera={cameraIdOf(hotspot)} />
-          ) : (
-            <StillPanel src={hotspot.image!} tag={hotspot.name} />
-          )}
-        </Container>
-        <Container flexBasis={0} flexGrow={1} minWidth={0} flexDirection="column" minHeight={0}>
-          <Scroll>
+      <Container flexDirection="column" marginTop={px(FS.gap)} flexGrow={1} flexShrink={1} minHeight={0} width="100%">
+        <Scroll>
+          <Container flexDirection="column" gapRow={px(FS.gap)} flexShrink={0} width="100%">
+            {hotspot.clip ? (
+              <Clip clip={hotspot.clip} camera={cameraIdOf(hotspot)} />
+            ) : (
+              <StillPanel src={hotspot.image!} tag={hotspot.name} />
+            )}
             {hero && <HeroTile {...hero} />}
-            {rest.map((r) => (
-              <ReadingRow key={r.field.name} {...r} />
-            ))}
-            <Container height={px(FS.gap)} flexShrink={0} />
+            <Container flexDirection="column" flexShrink={0} width="100%">
+              {rest.map((r) => (
+                <ReadingRow key={r.field.name} {...r} />
+              ))}
+            </Container>
             <FieldAlerts hotspotId={hotspotId} />
-          </Scroll>
-        </Container>
+          </Container>
+        </Scroll>
       </Container>
     );
   }
@@ -783,7 +784,7 @@ function HotspotBody({ hotspot, hotspotId, fields }: { hotspot: HotspotConfig; h
   const stats = rest.filter((f) => typeof f.field.value === "number");
   const idents = rest.filter((f) => typeof f.field.value !== "number");
   return (
-    <Container flexDirection="column" marginTop={px(FS.gap)} gapRow={px(FS.gap)} flexGrow={1} minHeight={0} width="100%">
+    <Container flexDirection="column" marginTop={px(FS.gap)} flexGrow={1} flexShrink={1} minHeight={0} width="100%">
       <Scroll>
         <Container flexDirection="column" gapRow={px(FS.gap)} flexShrink={0} width="100%">
           {hotspot.alert && <AlertBanner alert={hotspot.alert} marginBottom={0} />}
@@ -791,7 +792,7 @@ function HotspotBody({ hotspot, hotspotId, fields }: { hotspot: HotspotConfig; h
           {idents.length > 0 && (
             <Container padding={px(FS.tile)} borderRadius={px(12)} flexShrink={0} width="100%">
               <Surface radius={px(12)} fill={INK.white} fillOpacity={ALPHA.tileSoft} borderOpacity={ALPHA.divider} />
-              <Grid columns={Math.min(4, idents.length)} gapX={px(FS.gap * 1.2)} gapY={px(12)}>
+              <Grid columns={Math.min(CARD_COLUMNS, idents.length)} gapX={px(FS.gap)} gapY={px(14)}>
                 {idents.map((r) => (
                   <IdentCell key={r.field.name} {...r} />
                 ))}
@@ -799,7 +800,7 @@ function HotspotBody({ hotspot, hotspotId, fields }: { hotspot: HotspotConfig; h
             </Container>
           )}
           {stats.length > 0 && (
-            <Grid columns={Math.min(5, stats.length)} gapX={px(FS.gap * 0.8)} gapY={px(FS.gap * 0.8)}>
+            <Grid columns={Math.min(CARD_COLUMNS, stats.length)} gapX={px(FS.gap * 0.8)} gapY={px(FS.gap * 0.8)}>
               {stats.map((r) => (
                 <StatTile key={r.field.name} {...r} />
               ))}
@@ -814,32 +815,23 @@ function HotspotBody({ hotspot, hotspotId, fields }: { hotspot: HotspotConfig; h
 
 function FieldsBlock({ hotspot, fields }: { hotspot: HotspotConfig; fields: Row[] }) {
   const still = hotspot.clip ? undefined : hotspot.image;
-  const beside = still ? fields.slice(0, FIELDS_BESIDE_STILL) : [];
-  const below = still ? fields.slice(FIELDS_BESIDE_STILL) : fields;
-  const gap = px(40);
+  const gap = px(24);
   return (
     <Container flexDirection="column" marginTop={px(hotspot.clip ? 12 : 16)} flexShrink={0} width="100%">
       <Rule marginTop={0} />
       <Container flexDirection="column" paddingTop={px(4)}>
         {hotspot.clip && (
-          <Container width="100%" alignItems="center" marginBottom={px(16)}>
-            <Clip clip={hotspot.clip} camera={cameraIdOf(hotspot)} width={px(520)} />
+          <Container width="100%" marginBottom={px(16)}>
+            <Clip clip={hotspot.clip} camera={cameraIdOf(hotspot)} />
           </Container>
         )}
         {still && (
-          <Container flexDirection="row" gapColumn={gap}>
-            <Container flexBasis={0} flexGrow={1} padding={px(8)} alignItems="center">
-              <Still src={still} width={px(280)} />
-            </Container>
-            <Container flexBasis={0} flexGrow={1} flexDirection="column">
-              {beside.map((r) => (
-                <Field key={r.field.name} {...r} />
-              ))}
-            </Container>
+          <Container width="100%" alignItems="center" paddingY={px(8)}>
+            <Still src={still} width="80%" />
           </Container>
         )}
-        <Grid columns={2} gapX={gap}>
-          {below.map((r) => (
+        <Grid columns={CARD_COLUMNS} gapX={gap}>
+          {fields.map((r) => (
             <Field key={r.field.name} {...r} />
           ))}
         </Grid>
@@ -900,7 +892,7 @@ export function V5HotspotCard({ destId, index, hotspotId: namedId, onClose }: Vr
   }
 
   return (
-    <CardShell width="46%" height="38%" padding={px(isSecurity ? FS.pad : 24)} onDismiss={onClose}>
+    <CardShell width={CARD.width} maxHeight={CARD.maxHeight} padding={px(isSecurity ? FS.pad : 24)} onDismiss={onClose}>
       <CardHeader
         title={hotspot.popupTitle}
         subtitle={layout.name}
@@ -911,21 +903,15 @@ export function V5HotspotCard({ destId, index, hotspotId: namedId, onClose }: Vr
       {designed && hotspotId ? (
         <HotspotBody hotspot={hotspot} hotspotId={hotspotId} fields={fields} />
       ) : isCentre ? (
-        <Container flexDirection="row" marginTop={px(20)} gapColumn={px(32)} flexGrow={1} minHeight={0} width="100%">
-          <Container flexBasis={0} flexGrow={1} minWidth={0} minHeight={0} flexDirection="column">
-            <Scroll>
-              {hotspot.alert && <AlertBanner alert={hotspot.alert} />}
-              <SecurityCommandView fields={fields} wide />
-            </Scroll>
-          </Container>
-          <Container flexBasis={0} flexGrow={1.45} minWidth={0} minHeight={0} flexDirection="column">
-            <Scroll>
-              <SecurityIncidentCentre flush />
-            </Scroll>
-          </Container>
+        <Container flexDirection="column" marginTop={px(FS.gap)} flexGrow={1} flexShrink={1} minHeight={0} width="100%">
+          <Scroll>
+            {hotspot.alert && <AlertBanner alert={hotspot.alert} />}
+            <SecurityCommandView fields={fields} wide />
+            <SecurityIncidentCentre />
+          </Scroll>
         </Container>
       ) : (
-        <Container marginTop={px(isSecurity ? 16 : 12)} flexDirection="column" flexGrow={1} minHeight={0}>
+        <Container marginTop={px(isSecurity ? 16 : 12)} flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0}>
           <Scroll>
             {hotspot.alert && <AlertBanner alert={hotspot.alert} />}
             {hotspot.journey && (

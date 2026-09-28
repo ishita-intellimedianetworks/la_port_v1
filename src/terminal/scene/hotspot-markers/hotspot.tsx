@@ -6,9 +6,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useCoarsePointer, useIsMobile } from "@/shared/responsive";
 import { NAV_GLASS } from "../../overlay/glass-theme";
-import { markerScale } from "@/shared/runtime/marker-scale";
 
-/** Rings in flight at once, evenly staggered through one cycle. */
 const PING_COUNT = 2;
 
 const BEAD_PX = 24;
@@ -22,26 +20,17 @@ const MAX_SCALE_TOUCH = 4;
 const COLLIDER_MULT = 3.5;
 const COLLIDER_MULT_TOUCH = 5.2;
 
-/** How far a finger may roll between touchdown and lift and still count as a
- *  tap rather than the start of a camera drag (CSS px). */
 const TAP_SLOP_PX = 16;
 
 interface HotspotProps {
   position: [number, number, number];
   rotation?: [number, number, number];
-  /** Tooltip label (the destination name). */
   title: string;
-  /** Click/tap on the marker — opens the centred hotspot info overlay.
-   *  Navigation still never happens from a marker (list/map/panel only). */
   onHotspotClick?: () => void;
   size?: number;
   color?: string;
-  /** Disc + ring colour while hovered (defaults to red). */
   hoverColor?: string;
-  /** Pulse harder than the resting rate — set for the SELECTED marker, so the
-   *  one being discussed is picked out by motion rather than by a second colour. */
   pulse?: boolean;
-  /** false = draw through walls (kept true by default, like the reference). */
   depthTest?: boolean;
 }
 
@@ -60,10 +49,7 @@ export function Hotspot({
   const pingRefs = useRef<(THREE.Mesh | null)[]>([]);
   const sizerRef = useRef<THREE.Group>(null);
   const markerWorld = useRef(new THREE.Vector3());
-  const cameraWorld = useRef(new THREE.Vector3());
   const camera = useThree((s) => s.camera);
-  // Canvas height in CSS pixels — the units BEAD_PX is expressed in, so the
-  // marker is the same size on a laptop and on a 4K monitor.
   const viewportHeight = useThree((s) => s.size.height);
   const coarsePointer = useCoarsePointer();
   const narrowViewport = useIsMobile();
@@ -75,8 +61,6 @@ export function Hotspot({
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const phase = useRef(0);
   const breath = useRef(0);
-  // Touch has no hover — a TAP on the marker shows the name pill for a couple
-  // of seconds instead (auto-hides; a second tap restarts the timer).
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showByTap = () => {
     setHovered(true);
@@ -85,8 +69,6 @@ export function Hotspot({
   };
 
   const tapUnbind = useRef<(() => void) | null>(null);
-  /** When the touch path last opened the card — suppresses the synthesized
-   *  `click` that follows, so one tap never opens twice. */
   const tapHandledAt = useRef(0);
 
   useEffect(() => () => {
@@ -114,11 +96,11 @@ export function Hotspot({
     const cam = camera as THREE.PerspectiveCamera;
     if (sizer && cam.isPerspectiveCamera && viewportHeight > 0) {
       sizer.getWorldPosition(markerWorld.current);
-      const dist = cam.getWorldPosition(cameraWorld.current).distanceTo(markerWorld.current);
+      const dist = cam.position.distanceTo(markerWorld.current);
       const worldPerPx = (2 * Math.tan((cam.fov * Math.PI) / 360) * dist) / viewportHeight;
       const wanted = (beadPx / 2) * worldPerPx;
       const s = Math.min(maxScale, Math.max(MIN_SCALE, wanted / size));
-      sizer.scale.setScalar(s * markerScale.value);
+      sizer.scale.setScalar(s);
     }
 
     const [period, reach, peak, breathRate] = hovered
@@ -132,14 +114,10 @@ export function Hotspot({
       const ring = pingRefs.current[i];
       if (!ring) continue;
       const t = (phase.current + i / PING_COUNT) % 1;
-      // Ease-out on the travel so the ring leaves the bead quickly and drifts
-      // to a stop, and a squared fade so it is gone well before it turns over.
       ring.scale.setScalar(1 + (reach - 1) * (1 - (1 - t) * (1 - t)));
       (ring.material as THREE.MeshBasicMaterial).opacity = peak * (1 - t) * (1 - t);
     }
 
-    // The bead breathes too — a ring leaving a perfectly still dot looks like
-    // an effect played over scenery rather than the marker being alive.
     const core = coreRef.current;
     if (core) {
       breath.current += delta * breathRate;
@@ -150,8 +128,6 @@ export function Hotspot({
   return (
     <group position={position} rotation={rotation}>
       <group ref={sizerRef}>
-        {/* The bead. Unlit on purpose: a shaded sphere goes dark on whichever
-            side faces away from the sun, and half a marker is not a marker. */}
         <mesh name="hotspot_core" ref={coreRef} renderOrder={9996}>
           <sphereGeometry args={[size, 32, 24]} />
           <meshBasicMaterial color={hovered ? hoverColor : color} transparent opacity={0.98} depthTest={depthTest} depthWrite={false} toneMapped={false} />
@@ -185,8 +161,6 @@ export function Hotspot({
           }}
           onPointerOut={() => setHovered(false)}
           onPointerDown={(e) => {
-            // Phone: tap shows the label (no hover there). Swallow the event so
-            // the tap doesn't also register as a scene drag start.
             e.stopPropagation();
             showByTap();
             if (e.pointerType === "mouse") return;
@@ -199,8 +173,6 @@ export function Hotspot({
               tapHandledAt.current = performance.now();
               onHotspotClick?.();
             };
-            // A cancel means the gesture was taken over (a pinch, a scroll) —
-            // unbind without opening anything.
             const onCancel = () => tapUnbind.current?.();
             tapUnbind.current = () => {
               window.removeEventListener("pointerup", onUp);

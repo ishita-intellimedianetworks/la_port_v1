@@ -9,14 +9,11 @@ import { T_FOR_MODE, sunAnglesForT } from "../../scene/environment/sky/palette";
 import type { ResolvedLights } from "@/shared/types";
 import { buildDebugJson } from "./debug-json";
 
-/** Colours the sky derives from its palette on every `t` change. These are the
- *  ones that have to be pushed BACK into the panel, and the only ones. */
 const DERIVED = ["ambientColor", "hemiSkyColor", "hemiGroundColor", "sunColor"] as const;
 
 const EL_MIN = 15;
 const EL_MAX = 85;
 
-/** Leva's setter, addressed by flat leaf key. */
 type Setter = (patch: Record<string, unknown>) => void;
 
 export default function DebugControls({ seed }: { seed: ResolvedLights }) {
@@ -25,8 +22,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
   const setDebugShadows = useLightsStore((s) => s.setDebugShadows);
   const clearDebug = useLightsStore((s) => s.clearDebug);
   const setGrade = useGradeStore((s) => s.set);
-  // The seeds are the ACTIVE MODEL's — every panel default and every
-  // "reset" below means "back to what this site file authored".
   const gradeSeed = useGradeStore((s) => s.seed);
   const resolved = useLightsStore((s) => s.resolved);
   const debug = useLightsStore((s) => s.debug);
@@ -34,8 +29,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
   const setRef = useRef<Setter>(() => {});
   const push = useCallback<Setter>((patch) => setRef.current(patch), []);
 
-  /** One light field. `fromPanel` keeps a programmatic `set()` from counting as
-   *  an edit, which is what would otherwise pin every derived colour on sync. */
   const light =
     <K extends keyof ResolvedLights>(key: K) =>
     (v: ResolvedLights[K], _path: string, ctx?: { fromPanel?: boolean }) => {
@@ -182,8 +175,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
           step: 0.1,
           onChange: light("shadowRadius"),
         },
-        // Lives in ten-thousandths: bias is NORMALISED depth, so the useful
-        // range is this narrow no matter how large the site is.
         bias: {
           value: seed.shadowBias,
           min: -0.005,
@@ -303,15 +294,11 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     }),
 
     export: folder({
-      // Straight to the clipboard, and to the console as well so it survives a
-      // clipboard permission the browser declines.
       "copy JSON": button(() => {
         const json = buildDebugJson();
         console.log("[debug] lighting JSON\n" + json);
         navigator.clipboard?.writeText(json).catch(() => {});
       }),
-      // Drops every pinned field at once; the scene falls straight back to
-      // config plus whatever the sky derives.
       "unpin all": button(() => clearDebug()),
     }),
   }));
@@ -320,8 +307,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     setRef.current = setTyped as unknown as Setter;
   }, [setTyped]);
 
-  // Derived colours flow BACK while they are unpinned, so moving the time of
-  // day visibly re-tints the swatches instead of leaving four stale hexes.
   useEffect(() => {
     if (!resolved) return;
     const patch: Record<string, string> = {};
@@ -331,8 +316,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
     if (Object.keys(patch).length) push(patch);
   }, [resolved, debug, push]);
 
-  // The sun vector is a readout of what actually reached the light, which is
-  // the thing to check when shadows look like they disagree with the sky.
   useEffect(() => {
     if (resolved) push({ "sun vector": fmtVec(resolved.sunDirection) });
   }, [resolved, push]);
@@ -340,8 +323,6 @@ export default function DebugControls({ seed }: { seed: ResolvedLights }) {
   return null;
 }
 
-/** Sun direction as a readable triple — the number to compare against the sky
- *  when the shadows look like they are coming from the wrong side. */
 function fmtVec(v: readonly number[]) {
   return v.map((n) => n.toFixed(2)).join(", ");
 }

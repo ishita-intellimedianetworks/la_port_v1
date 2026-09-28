@@ -22,13 +22,8 @@ import { NAV_GLASS_PANEL } from "../glass-theme";
 import { PanelHeader } from "../destination-panel/panel-header";
 import { useLayoutNavigation } from "../use-layout-navigation";
 
-/** Reading shadow, set once on the card and INHERITED by every glyph in it.
- *  A tight plate plus a wider halo: the offset drop alone left the tone words
- *  - green on pale glass - with no edge. On a translucent panel this is what
- *  carries contrast, not the colour. */
 const CARD_TEXT_SHADOW = "0 1px 2px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.45)";
 
-/** Grid rows the still spans: it is 200px tall, which is four of them. */
 const FIELDS_BESIDE_STILL = 4;
 const TONE_COLOR: Record<Tone, string> = {
   ok: "var(--tone-ok, #30d158)",
@@ -133,9 +128,7 @@ function SectionLabel({ children, className }: { children: ReactNode; className?
 }
 
 interface HotspotDataCardProps {
-  /** Destination id — which is the layout id (L01-L10). */
   destId: string;
-  /** 1-based marker index within that layout's `hotspots[]`. */
   index: number;
   hotspotId?: string;
   onClose: () => void;
@@ -162,8 +155,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
     if (hotspotId === SECURITY_COMMAND_ID) {
       return commandViewFields(hotspot.fields, incidents);
     }
-    // Mirrors the list's own fallback: with several open and none picked, the
-    // newest is the highlighted one, so it is the one the grid describes.
     const mine =
       hotspotId && isFieldHotspot(hotspotId)
         ? incidents.filter(
@@ -202,7 +193,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
 
   if (!hotspot) return null;
 
-  /** The still shown against the card, when this hotspot has one authored. */
   const still = hotspot.image;
 
   return (
@@ -281,8 +271,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
             onClose={onClose}
           />
 
-          {/* Body scrolls if the card would outgrow the viewport — the width does
-              the spreading, the height stays capped. */}
           <div className="ui-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden max-sm:mt-2 short:mt-2">
             {hotspot.alert && <AlertBanner alert={hotspot.alert} />}
             {hotspot.journey && (
@@ -349,8 +337,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
               <SourceIncidents hotspotId={hotspotId} />
             )}
 
-            {/* Two columns so the card spends its width, not its height — the
-                reference's own treatment for its details table. */}
             <div
               className="mt-4 border-t pt-1 short:mt-3"
               style={{ borderColor: "var(--nav-divider)" }}
@@ -358,12 +344,6 @@ export function HotspotDataCard({ destId, index, hotspotId: namedId, onClose }: 
                 hotspotId === SECURITY_INCIDENT_ID || hotspotId === SECURITY_COMMAND_ID
               }
             >
-              {/* ONE GRID, so every row shares two columns. The still is placed
-                  in column 1 for the first four rows and the readings flow round
-                  it - four into column 2 beside it, the rest across both below.
-                  As two grids the under-block's columns started at the card edge
-                  and its own midpoint, neither of which lined up with the column
-                  beside the picture. */}
               <div className="grid grid-cols-2 gap-x-8 max-[560px]:grid-cols-1 max-sm:gap-x-5 short:gap-x-5">
                 {still && (
                   <div
@@ -463,11 +443,8 @@ function StillPreload() {
   );
 }
 
-/** The hotspot whose popup hosts the layer switches: S08, Port Security
- *  Command. Named rather than inferred, the way SECURITY_LAYOUT_ID is. */
 const SECURITY_COMMAND_ID = "S08";
 
-/** The incident centre: S07, Security Incident Management. */
 const SECURITY_INCIDENT_ID = "S07";
 
 function commandViewFields(
@@ -477,8 +454,6 @@ function commandViewFields(
   const counts = incidentCounts(incidents);
   const open = incidents.filter((i) => i.status !== "RESOLVED");
 
-  // Worst open severity per category, so a status line reports the most serious
-  // thing outstanding rather than the most recent.
   const worst = new Map<string, IncidentSeverity>();
   for (const i of open) {
     const category = CATEGORY_BY_HOTSPOT[i.sourceHotspotId];
@@ -493,8 +468,6 @@ function commandViewFields(
     if (!s) return { value: normal, tone: "ok" as Tone };
     const n = open.filter((i) => CATEGORY_BY_HOTSPOT[i.sourceHotspotId] === category).length;
     return {
-      // Ends in the severity word, so it carries the severity SCALE rather than
-      // a tone: the same word must be the same colour here as on an S07 row.
       value: `${n} ${n === 1 ? "event" : "events"} · ${s}`,
       color: SEVERITY_COLOR[s],
     };
@@ -521,7 +494,6 @@ function commandViewFields(
   });
 }
 
-/** For comparing two severities. */
 const SEVERITY_RANK: Record<IncidentSeverity, number> = {
   LOW: 1,
   MEDIUM: 2,
@@ -540,8 +512,6 @@ function SecurityCommandView({
   return (
     <div className="pt-1">
       <SectionLabel className="mt-0">Capabilities</SectionLabel>
-      {/* Two columns, one below 560: six lines in a single column is most of a
-          phone screen before the counters are reached. */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-[7px] max-[560px]:grid-cols-1">
         {capabilities.map(({ field, color }) => (
           <CapabilityLine key={field.name} field={field} color={color} />
@@ -558,7 +528,6 @@ function SecurityCommandView({
   );
 }
 
-/** One capability: its name, and the state it is in. */
 function CapabilityLine({ field, color }: { field: HotspotField; color?: string }) {
   const tone = useSite().toneFor(field.value, field.tone);
   const tint = valueColor(field, tone, color);
@@ -584,7 +553,6 @@ function CapabilityLine({ field, color }: { field: HotspotField; color?: string 
   );
 }
 
-/** One counter: how many are open at that severity. */
 function CounterTile({ field, color }: { field: HotspotField; color?: string }) {
   const tone = useSite().toneFor(field.value, field.tone);
   return (
@@ -607,7 +575,6 @@ function CounterTile({ field, color }: { field: HotspotField; color?: string }) 
     </div>
   );
 }
-
 
 function SourceIncidents({ hotspotId }: { hotspotId: string }) {
   const incidents = useSecurityStore((s) => s.incidents);
@@ -658,8 +625,6 @@ function SecurityIncidentCentre() {
   const setSelected = useSecurityStore((s) => s.setSelectedIncidentId);
 
   const [wantedTab, setTab] = useState<"current" | "past">("current");
-  // Empty means "everything", not "nothing": a filter with no choice made is
-  // not a filter. Both are multi-select, so CRITICAL + HIGH is one question.
   const [severities, setSeverities] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [sort, setSort] = useState<string[]>(["time"]);
@@ -686,13 +651,9 @@ function SecurityIncidentCentre() {
         (severities.length === 0 || severities.includes(i.severity)) &&
         (sources.length === 0 || sources.includes(i.sourceHotspotId)),
     );
-    // Sorted on a COPY: these arrays are store state, and sorting in place
-    // would mutate it behind everyone else reading them.
     return [...filtered].sort((a, b) =>
       bySeverity
-        ? // Severity first, newest first within a severity. Two incidents of
-          // equal weight are then ordered by when they were reported, which is
-          // the only other thing that separates them.
+        ?
           SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
           b.eventTime.localeCompare(a.eventTime)
         : b.eventTime.localeCompare(a.eventTime),
@@ -712,8 +673,6 @@ function SecurityIncidentCentre() {
     return out;
   }, [tab, current, past, sources]);
 
-  // A filter that hides everything is a dead end, so the empty state says which
-  // one to loosen rather than implying there is nothing there.
   const narrowed = severities.length > 0 || sources.length > 0;
 
   return (
@@ -828,7 +787,6 @@ function FilterSelect({
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Escape closes the MENU first, leaving the card open behind it.
       e.stopPropagation();
       setOpen(false);
     };
@@ -840,7 +798,6 @@ function FilterSelect({
     };
   }, [open]);
 
-  // Empty means everything, so an empty selection ticks every row.
   const all = multi && value.length === 0;
   const isOn = (id: string) => all || value.includes(id);
   const selected = items.filter((i) => value.includes(i.id));
@@ -859,20 +816,14 @@ function FilterSelect({
       setOpen(false);
       return;
     }
-    // From "all ticked", the first click means "only this one": that is what
-    // clicking one item out of a full set is asking for.
     if (all) {
       onChange([id]);
       return;
     }
     const next = value.includes(id) ? value.filter((v) => v !== id) : [...value, id];
-    // Emptied, or filled: both are "everything", stored as the empty set so
-    // there is one representation of it rather than two.
     onChange(next.length === 0 || next.length === items.length ? [] : next);
   };
 
-  // Narrowed is what earns the accent; sort and an untouched filter are neutral
-  // chrome. A sort control is never "on", it always has a value.
   const narrowed = multi && value.length > 0;
 
   return (
@@ -907,8 +858,6 @@ function FilterSelect({
             align === "right" ? "right-0" : "left-0",
           )}
           style={{
-            // Opaque, not glass: this list sits over the card's own text, and a
-            // translucent menu leaves both readable at once and neither legible.
             background: "#11151c",
             border: "1.5px solid var(--nav-border)",
             boxShadow: "var(--nav-shadow-panel)",
@@ -933,8 +882,6 @@ function FilterSelect({
                   />
                 )}
                 <span className="min-w-0 flex-1 truncate">{i.label}</span>
-                {/* Always rendered, hidden when off: a check that appears and
-                    disappears reflows every row beside it. */}
                 <Check
                   size={12}
                   className="shrink-0"
@@ -1004,8 +951,6 @@ function Avatar({ actor }: { actor: SecurityActor }) {
       {hovered && (
         <span
           role="tooltip"
-          // Right-anchored: the avatar sits at the row's right edge, so a
-          // centred tooltip would hang off the dialog on the longer names.
           className={cn(
             "nav-body pointer-events-none absolute right-0 z-20 whitespace-nowrap rounded-[7px] px-2 py-1 text-[10.5px] font-medium",
             above ? "bottom-[calc(100%+5px)]" : "top-[calc(100%+5px)]",
@@ -1044,7 +989,6 @@ function formatStamp(value: string): string {
   })}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
 }
 
-/** The date alone, for the heading over a day's records. */
 function formatDay(value: string): string {
   const d = parseDemoTime(value);
   if (!d) return value;
@@ -1055,14 +999,11 @@ function formatDay(value: string): string {
   });
 }
 
-/** Accepts both shapes this layer stores: the authored "YYYY-MM-DD HH:MM:SS"
- *  and the ISO stamp a live action writes. */
 function parseDemoTime(value: string): Date | null {
   const d = new Date(value.includes("T") ? value : value.replace(" ", "T"));
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Highest first, the order the menu reads in. */
 const SEVERITY_ORDER_UI: IncidentSeverity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
 function Chip({
@@ -1100,7 +1041,6 @@ function Chip({
   );
 }
 
-/** Status to the card's tone colours, per §6's visual-state contract. */
 const STATUS_TONE: Record<IncidentStatus, Tone> = {
   ACTIVE: "alert",
   INVESTIGATING: "warn",
@@ -1117,8 +1057,6 @@ function IncidentRow({
 }: {
   incident: SecurityIncident;
   expanded: boolean;
-  /** Marked as the subject without opening. Used by the compact list, where
-   *  what is selected is described by the field grid under it. */
   selected?: boolean;
   compact?: boolean;
   onSelect: () => void;
@@ -1149,8 +1087,6 @@ function IncidentRow({
       className="rounded-[10px] transition-[border-color,background-color] duration-200"
       style={{
         background: "rgba(255,255,255,0.06)",
-        // Selected without being open: the ring is how a compact row says it is
-        // the one the grid below is describing.
         border:
           selected && compact
             ? "1.5px solid rgba(255,255,255,0.45)"
@@ -1188,8 +1124,6 @@ function IncidentRow({
         {owner && <Avatar actor={owner} />}
       </button>
 
-      {/* The compact list keeps the actions, which is what a row is FOR, but
-          drops the detail panel the grid below already shows. */}
       {compact && selected && (
         <div
           className="flex flex-wrap items-center gap-1.5 border-t px-3 pb-2 pt-2"
@@ -1252,8 +1186,6 @@ function IncidentRow({
               <DetailRow label="Location" value={incident.locationLabel} />
               <DetailRow label="Event time" value={formatStamp(incident.eventTime)} />
               <DetailRow label="Assigned team" value={incident.assignedTeam} />
-              {/* Closed records only, and MEASURED from the log's own two
-                  moments rather than stored beside them. */}
               {closedIn && <DetailRow label="Closed in" value={closedIn} />}
             </dl>
 
@@ -1278,8 +1210,6 @@ function IncidentRow({
                   <RowAction label="Resolve" onClick={() => resolve(incident.id)} />
                 </>
               )}
-              {/* The trail first: on a closed record these two are all there is,
-                  and what was done about it is read before where it happened. */}
               <RowAction label={auditLabel(mine.length)} onClick={onShowLog} />
               {canTravel && (
                 <RowAction
@@ -1330,7 +1260,6 @@ function closedDuration(entries: SecurityAuditEntry[]): string | null {
   return h ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`;
 }
 
-/** The trail's button, which says how much is in it before it is opened. */
 function auditLabel(count: number): string {
   return `Audit trail · ${count} ${count === 1 ? "entry" : "entries"}`;
 }
@@ -1342,8 +1271,6 @@ function DetailRow({
 }: {
   label: string;
   value: string;
-  /** Overrides the value's colour. Set for severity, which is a status word
-   *  rather than a reading and carries its level in its colour. */
   color?: string;
 }) {
   return (
@@ -1410,7 +1337,6 @@ function IncidentLogDialog({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Capture + stop, so Escape closes THIS dialog and not the card beneath.
       e.stopPropagation();
       onClose();
     };

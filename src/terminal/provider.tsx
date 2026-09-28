@@ -40,11 +40,8 @@ import {
 } from "./context/ui-context";
 
 interface Props {
-  /** Optional — defaults to the single configured apartment (node-id free). */
   nodeId?: string;
   inlineMode?: boolean;
-  /** Whether this interior is the currently-shown scene. Retained from the
-   *  orchestrated flow; always true for the standalone interior. */
   active?: boolean;
   dollhouseFirstVisit?: boolean;
   floorPatches?: Record<string, Partial<FloorConfig>>;
@@ -91,8 +88,6 @@ export default function TerminalProvider({
   const [loadingDone,      setLoadingDone]      = useState(false);
   const [isMoving,         setIsMoving]         = useState(false);
   const [minimapData,      setMinimapData]      = useState<MinimapData | null>(null);
-  // Default venue: the VILLAGE (floor 0) — the memorial and the rest are
-  // reached through the venues tab.
   const [activeFloorIndex, setActiveFloorIndex] = useState(0);
 
   const fade = useFadeTransition();
@@ -160,8 +155,6 @@ export default function TerminalProvider({
         const key = opts.expectedKey;
         const plan = opts.expectedFloorPlanUrl;
         loadedModelKeyRef.current = null;
-        // Also hold until the NEW floor's minimap has updated (its floor-plan is
-        // set), so the fade-out reveals the new map — not the old one for a beat.
         waitUntil = () =>
           loadedModelKeyRef.current === key &&
           (!plan || minimapDataRef.current?.imageUrl === plan);
@@ -339,8 +332,6 @@ export default function TerminalProvider({
     const totals   = new Array<number>(urls.length).fill(0);
     const received = new Array<number>(urls.length).fill(0);
     const finished = new Array<boolean>(urls.length).fill(false);
-    // Per-file fraction (bytes when content-length is known, 0/1 otherwise),
-    // averaged — a smooth monotonic 0..1 across the whole warm set.
     const report = () => {
       if (cancelled) return;
       const frac =
@@ -366,7 +357,7 @@ export default function TerminalProvider({
           } else {
             await res.arrayBuffer();
           }
-        } catch { /* non-fatal — count the file as settled either way */ }
+        } catch {}
         finished[i] = true;
         report();
       }),
@@ -391,8 +382,6 @@ export default function TerminalProvider({
       requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
       cancelIdleCallback?: (h: number) => void;
     };
-    // Small lead delay so the swap's own reveal/settle isn't competing with a
-    // background parse, then one idle slot per venue.
     const handles: number[] = [];
     const timer = setTimeout(() => {
       for (const u of urls) {

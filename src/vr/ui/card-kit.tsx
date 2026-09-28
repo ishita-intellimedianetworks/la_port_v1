@@ -5,7 +5,7 @@ import { Container, Image as Picture, Video } from "@react-three/uikit";
 import { Pause, Play, TriangleAlert } from "@react-three/uikit-lucide";
 import type { HotspotConfig, HotspotField, Tone } from "@/config/schema";
 import { Glass, HeadLocked, RedClose } from "./primitives";
-import { useStickScroll } from "./stick-scroll";
+import { noDragScroll, useStickScroll } from "./stick-scroll";
 import { VrText } from "./text";
 import { POINTER_ORDER } from "./tokens";
 
@@ -195,6 +195,7 @@ export function Scroll({ children, grow = true }: { children: ReactNode; grow?: 
     <Container
       ref={scrollRef}
       onHoverChange={onScrollHover}
+      onScroll={noDragScroll}
       flexDirection="column"
       flexGrow={grow ? 1 : 0}
       flexShrink={1}

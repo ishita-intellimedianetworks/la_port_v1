@@ -34,13 +34,9 @@ export function textureBytes(tex: THREE.Texture): number {
   return Math.round(w * h * 4 * (tex.generateMipmaps ? 4 / 3 : 1));
 }
 
-/** The three ceilings, in real megabytes. */
 export interface MemoryBudget {
   cpuMB: number;
-  /** Vertex buffers uploaded right now. Drives the unload radius. */
   gpuMB: number;
-  /** Texture memory. Held across zero-ref periods (see the texture LRU in
-   *  ChunkManager) rather than disposed the instant the last chunk leaves. */
   texMB: number;
 }
 
@@ -53,7 +49,6 @@ function looksWeak(name: string): boolean {
   return true;
 }
 
-/** The renderer string off a live context, however the browser exposes it. */
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string {
   const ext = gl.getExtension("WEBGL_debug_renderer_info");
   return ext
@@ -83,8 +78,6 @@ export function weakGpuProbe(): boolean {
       | null;
     if (!gl) return (_probe = true);
     const weak = looksWeak(rendererName(gl));
-    // Hand the context back rather than waiting for GC — a page that has not
-    // built its real renderer yet should not be holding a second one.
     gl.getExtension("WEBGL_lose_context")?.loseContext();
     return (_probe = weak);
   } catch {
@@ -94,8 +87,6 @@ export function weakGpuProbe(): boolean {
 
 let gpuScale = 1;
 
-/** Called from the canvas's `webglcontextlost` handler. Each loss halves the
- *  GPU and texture budgets, to a floor of 1/8. */
 export function degradeGpuBudget(): number {
   gpuScale = Math.max(0.125, gpuScale * 0.5);
   return gpuScale;

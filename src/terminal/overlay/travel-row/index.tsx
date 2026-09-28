@@ -5,8 +5,6 @@ import { ChevronRight } from "lucide-react";
 interface TravelRowProps {
   name: string;
   onSelect: () => void;
-  /** Trailing affordance. Off wherever a LEADING expand chevron already sits
-   *  beside the row — two arrows on one line read as two separate controls. */
   showChevron?: boolean;
 }
 

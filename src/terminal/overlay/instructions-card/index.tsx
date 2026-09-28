@@ -23,7 +23,6 @@ import type { InstructionItemCopy } from "@/config/schema";
 import { InstructionsOverlay } from "@/shared/ui/screens/instructions-overlay";
 
 interface InstructionsCardProps {
-  /** Which view's controls to teach. */
   mode: "dollhouse" | "firstPerson";
   visible: boolean;
   onDismiss: () => void;
@@ -50,7 +49,6 @@ const ICONS: Record<string, LucideIcon> = {
   walk: Footprints,
 };
 
-/** JSON tile → overlay tile (icon name resolved to a rendered glyph). */
 function toItem(item: InstructionItemCopy) {
   const Icon = ICONS[item.icon] ?? MousePointerClick;
   return { icon: <Icon size={18} className={ICON_CLASS} />, text: item.text };
@@ -58,8 +56,6 @@ function toItem(item: InstructionItemCopy) {
 
 export function InstructionsCard({ mode, visible, onDismiss, showFirstPerson }: InstructionsCardProps) {
   const copy = useSite().ui.instructions[mode];
-  // By icon name, not by position, so reordering the tiles in the site file
-  // cannot silently drop the wrong one.
   const items = showFirstPerson
     ? copy.items
     : copy.items?.filter((i) => i.icon !== "firstPerson");

@@ -52,7 +52,6 @@ type Row = { field: HotspotField; color?: string };
 
 const SECURITY_COMMAND_ID = "S08";
 const SECURITY_INCIDENT_ID = "S07";
-const FIELDS_BESIDE_STILL = 4;
 const IDENTITY_FIELDS = new Set([
   "camera_id",
   "zone_id",
@@ -626,7 +625,7 @@ function SecurityCommandView({ fields }: { fields: Row[] }) {
         ))}
       </Grid>
       <SectionLabel>Open incidents</SectionLabel>
-      <Grid columns={4} gapX={px(8)}>
+      <Grid columns={2} gapX={px(8)} gapY={px(8)}>
         {counters.map((r) => (
           <CounterTile key={r.field.name} {...r} />
         ))}
@@ -636,27 +635,18 @@ function SecurityCommandView({ fields }: { fields: Row[] }) {
 }
 
 function FieldsBlock({ still, fields }: { still?: string; fields: Row[] }): ReactNode {
-  const beside = still ? fields.slice(0, FIELDS_BESIDE_STILL) : [];
-  const below = still ? fields.slice(FIELDS_BESIDE_STILL) : fields;
-  const gap = px(32);
+  const gap = px(28);
   return (
     <Container flexDirection="column" marginTop={px(16)} flexShrink={0} width="100%">
       <Rule marginTop={0} />
       <Container flexDirection="column" paddingTop={px(4)}>
         {still && (
-          <Container flexDirection="row" gapColumn={gap}>
-            <Container flexBasis={0} flexGrow={1} alignItems="center">
-              <Still src={still} width={px(250)} />
-            </Container>
-            <Container flexBasis={0} flexGrow={1} flexDirection="column">
-              {beside.map((r) => (
-                <Field key={r.field.name} {...r} />
-              ))}
-            </Container>
+          <Container width="100%" alignItems="center" paddingY={px(8)}>
+            <Still src={still} width="80%" />
           </Container>
         )}
         <Grid columns={2} gapX={gap}>
-          {below.map((r) => (
+          {fields.map((r) => (
             <Field key={r.field.name} {...r} />
           ))}
         </Grid>

@@ -70,7 +70,6 @@ export interface TerminalUi {
   showFurniture: boolean;
   setShowFurniture: (v: boolean) => void;
   isFurnitureToggleReady: boolean;
-  /** True once the non-initial model(s) are downloaded — the loader waits on it. */
   othersCached: boolean;
   fadeVisible: boolean;
   handleFloorSelect: (i: number) => void;

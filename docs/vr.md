@@ -46,8 +46,12 @@ Branch: `feature-vr`.
    - **Info:** that view's instructions again.
    - **Map:** the flat minimap's plan with the player and the floor's
      destinations; see "Map" below.
-   - **Resources:** layouts, then hotspots. Selecting one travels there. Its
-     icon is lucide `Images`, the reference's Layouts ("gallery") glyph.
+   - **Resources:** the flat Resources tree: Security first (v4 / v5), then
+     the layouts. A group's round chevron button opens it in place, showing its
+     hotspots indented beneath; pressing a layout's name travels there (a pin
+     marks the rows that travel), and pressing Security opens it. Selecting a
+     hotspot travels there. Its icon is lucide `Images`, the reference's
+     Layouts ("gallery") glyph.
    - **Hide icons:** puts the bar away, as the ARCHVIZ reference's "Hide bar"
      does. A hidden bar has no button to bring it back, so B or Y (the upper
      face button on either controller) does. A new view (dollhouse or first
@@ -68,7 +72,7 @@ Each view's instructions open by themselves once per session. Info reopens them.
   | left stick | walk where you look, flattened to the floor |
   | left grip, held | run (4x) |
   | right stick left / right | snap turn 30 degrees about the head |
-  | right stick up / down | scroll the card or list the ray is over |
+  | right stick up / down | scroll the card or list the ray last pointed at |
   | trigger | press a hotspot marker, a button or a menu row |
   | either stick left / right (dollhouse) | turn round the terminal's centre, a full 360 degrees, 60 degrees a second |
   | trigger twice (dollhouse) | go to the home position |
@@ -114,7 +118,7 @@ The panels use the flat UI's glass rather than a VR style of their own
   of glass tiles and a glass action button. As in the reference, a control
   (stick, grip, trigger) is named in blue text, and a bar button is shown as
   its own icon in a round chip.
-- **Resources:** the same tiles for rows.
+- **Resources:** the same tiles for rows, with the chevron buttons in the bar's round glass style.
 
 ## Hotspot cards: each route's own 3D card
 
@@ -126,8 +130,8 @@ with the same props the flat `HotspotDataCard` takes.
 | route | VR card | what it carries over from the 3D card |
 |---|---|---|
 | v2, v3 | `src/vr/cards/simple-card.tsx` | header, journey, two-column fields with tone colours and meters |
-| v4 | `src/terminal-v4/vr/hotspot-card.tsx` | the above plus alert banner, still beside the first four fields, poster card, S08 capabilities and counters, S07 incident centre (tabs, severity chips, source and sort menus, day heading, expandable rows with Acknowledge / Escalate / De-escalate / Resolve / audit trail / View location), source incident rows, audit log |
-| v5 | `src/terminal-v5/vr/hotspot-card.tsx` | the v4 set in v5's design (its field sizes, uppercase labels, `CardHeader` on security cards), plus the designed security layouts (clip or still panel beside a hero tile, reading rows and the alerts list; or the hero, identity grid and stat tiles), the live clip with its LIVE badge and play/pause, the S07 command-and-incident view side by side with the detail strip, and the poster with press-to-enlarge |
+| v4 | `src/terminal-v4/vr/hotspot-card.tsx` | the above plus alert banner, still above the fields, poster card, S08 capabilities and counters, S07 incident centre (tabs, severity chips, source and sort menus, day heading, expandable rows with Acknowledge / Escalate / De-escalate / Resolve / audit trail / View location), source incident rows, audit log |
+| v5 | `src/terminal-v5/vr/hotspot-card.tsx` | the v4 set in v5's design (its field sizes, uppercase labels, `CardHeader` on security cards), plus the designed security layouts (clip or still panel above a hero tile, reading rows and the alerts list; or the hero, identity grid and stat tiles), the live clip with its LIVE badge and play/pause, the S07 command view above the incident list and its detail strip, and the poster with press-to-enlarge |
 
 The pieces they share (card glass, header and close button, fields, meters,
 section labels, alert banner, journey, still, clip, poster, chips, pills,
@@ -139,21 +143,32 @@ What differs from the flat card, and why:
 - **No frosted blur.** The card glass is `#090b0f` at 0.82 instead of 0.48
   over a 30 px blur.
 - **Panel size.** Every panel is short and scrolls. v5's 80 vw x 80 vh card is
-  46% x 38% of the head-locked view (S07's two columns each scroll), v4's 620 px
-  card 34% x 36%, v2 / v3's 32% x 36%, the audit log 26% x 32%, the map 42%
+  34% wide and at most 40% tall, v4's 620 px card 34% x 36%, v2 / v3's 32% x 36%, the audit log 26% x 32%, the map 42%
   tall, Resources 40% and the instructions 44%. A poster is at most 46% wide
   (80% enlarged). A card
   as big as the flat one wraps round the edge of a headset's view. Everything
-  past that height scrolls: drag it with the trigger, or push the right stick up
-  or down while the ray is over it (`stick-scroll.ts`).
+  past that height scrolls with the right stick (`stick-scroll.ts`).
+- **One column.** The flat v5 card sets media beside the readings, and S07's
+  command view beside the incident list. At headset size those columns were too
+  narrow and the text piled up, so every card is one column: media on top, then
+  the hero tile, readings and alerts; S07's systems and counters above its
+  incidents. Grids are two columns at most (`CARD_COLUMNS`), the incident
+  detail strip included.
+- **Scrolling is by stick only.** uikit makes every scrollable panel
+  drag-to-scroll with the pointer. With a controller ray every trigger press
+  started a drag: a small wrist movement at 2 m moved the list, presses
+  missed, and the list kept gliding after release. `List` and `Scroll` refuse
+  that drag (`onScroll` returns false), and rows select on press. The stick
+  scrolls the list the ray last pointed at, even after the ray drifts off it,
+  with an eased response (the push squared) and the speed smoothed in over
+  about 80 ms, up to 1500 px a second.
 - **Red close button.** Every card and panel has a red round close button on
   its top-right corner (`RedClose`), in place of the close buttons that were in
   the headers.
 - **Text never overlaps.** uikit keeps text in a row from shrinking below its
   longest word, so a long ID or status pushed into the next column. `VrText`
   sets `minWidth: 0`, so every line wraps inside its own column. A card's
-  whole body scrolls as one, including v5's hero tile and Alerts list and the
-  S07 incident column, so nothing can run past a short card's edge.
+  whole body scrolls as one, so nothing can run past a short card's edge.
 - **Dropdowns open inline.** The source and sort menus push the list down
   instead of floating over it.
 - **The audit log replaces the card** while it is open, rather than stacking a
@@ -235,10 +250,10 @@ VR page streams more gently and hides whatever is not loaded yet.
 
 - `ChunkManager` publishes, every tick, the surface distance to the nearest
   chunk with no geometry on screen yet (`streamReach` in
-  `src/streaming/reach.ts`). Everything nearer is drawn, if only at a low
+  `src/vr/engine/stream.ts`). Everything nearer is drawn, if only at a low
   texture rung, which does not count as missing. It resets to "unknown" when
   the manager is disposed.
-- `VrFog` sets the fog's far edge to that distance, kept between 60% and 100%
+- `VrFog` sets the fog's far edge to that distance, kept between 75% and 100%
   of the view's own fog edge (the phone profile's, see below; 600 m where the
   view authors none), and its near edge to 45% of it. It closes in at 1.5x a
   second when something near is still loading and opens again at 25 m/s as
@@ -265,20 +280,39 @@ chains (a 512 px texture has 10 levels) and are sampled with 8x anisotropy;
 the edge feather is a smooth fade with no dithering and is off in VR; the
 loading reveal's hashed discard ends fully opaque.
 
-**Phone streaming** (`setVrStreaming` in `src/streaming/config.ts`, turned on
+**Phone streaming** (`setVrStreaming` in `src/vr/engine/stream.ts`, turned on
 by `useVrStreaming` in each tree's `vr/index.tsx` while the page is mounted):
 `detectProfile` answers "mobile", so every view resolves the way it does on a
 phone and `ChunkManager` gets the phone budgets:
 
 - the far band pulled in (`MOBILE.farScale`, or the site's `mobileFarScale`),
   and the fog edge with it, starting at 70% of the unload radius
-- texture rungs capped at 512 / 256 / 128 px for near / mid / far
-- far chunks mounted at the far LOD and sharpened only as they come near
-  (`residentTier: far`, `sharpestTier: mid`), within a 240 MB budget
-- 4 chunk mounts per tick, half the texture upgrades
+- a 240 MB resident budget, 4 chunk mounts per tick, half the texture upgrades
 - plus, for VR only: no transmission pass and `adaptiveDpr: false`, so
   `AdaptiveQuality` is not mounted. Three cannot resize the headset's
   framebuffer mid-session.
+
+**VR quality** (`vrStreamConfig` and `VR` in `src/vr/engine/stream.ts`) is set on top
+of the phone profile, the same on every route:
+
+| View | Distance from the head | Geometry | Texture |
+|---|---|---|---|
+| First person (and aerial) | 0-75 m | medium LOD | 256 px |
+| | 75 m to the load edge (about 500 m) | lowest LOD | 128 px |
+| Dollhouse | the whole terminal | lowest LOD | 128 px |
+
+First person sets the bands to 25 / 75 m, caps geometry at `mid`
+(`sharpestTier`) and the rungs at 256 / 256 / 128. The dollhouse caps geometry
+at `far` and every rung at 128. VR also turns off the phone's 15 MB download
+budget (`wireBudgetMB: 0`), which would otherwise pin textures to the cheapest
+rung for the rest of the session.
+
+The kept-resident mode on /v2-/v5 only ever sharpened a loaded chunk, so a piece
+seen at medium stayed medium. VR sets `coarsenResident`, and
+`ChunkManager.shouldCoarsen` then also swaps a chunk down when it is sharper
+than the view's cap (entering the dollhouse) or has left its band by more than
+the site's hysteresis (walking away). Sharpening is still served first each
+tick. The flat pages never set the flag, so they behave as before.
 
 `isMobileDevice()` still reads the real device, so hotspot travel keeps the
 desktop camera poses.
@@ -397,29 +431,70 @@ the stream settles: nothing nearer than 40 m is missing geometry, and the
 chunks still wanting a sharper LOD or rung are down to 4 or 5% of their peak.
 It lifts after at least 0.4 s and at most 6 s.
 
-## Two fixes outside `src/vr`
+## Markers in the headset
+
+`VrMarkers` (`src/vr/markers.tsx`, mounted by the session) handles the tree's
+own markers from outside, without any change to the tree's marker files:
+
+- **Finding them.** Every 0.5 s it walks the scene for the meshes each tree's
+  `hotspot.tsx` names `hotspot_core` and `hotspot_hover_collider`. The core's
+  parent is the group the marker sizes each frame, and that group's parent sits
+  at the hotspot's position, which names it: the nearest of the site's
+  hotspots and security hotspots within 0.5 units.
+- **Smaller.** A marker sizes itself to a constant screen size from the camera's
+  fov and the canvas height. The XR fov is about 100 degrees, so in the headset
+  they came out large. `VrMarkers` hooks `scene.onBeforeRender`, which runs
+  after every `useFrame`, and takes each sizing group to 0.65 of what the
+  marker set, once per frame, then refreshes its world matrix. The hook is
+  removed when the session ends.
+- **Hover label.** The flat name pill is drei `Html`, a DOM element the headset
+  never draws. Each frame `VrMarkers` casts each controller's ray (from the
+  XRFrame, in the rig's reference space) against the colliders. While one is
+  hit it draws a glass pill with the name just above the bead, facing the head,
+  drawn over the scene, and scaled with distance so it reads the same size near
+  or far. It is hidden during the blackout.
+
+## Hooks outside `src/vr`
+
+No file in any tree outside its `vr/` folder carries VR code. The VR page
+mounts the tree's own provider and `SceneGraph`, and everything VR does to
+them happens from `src/vr` and the tree's `vr/` folder.
+
+Outside the trees, the streamer calls into `src/vr/engine/stream.ts` (the VR
+flag, the VR stream quality, the load edge). Every value there is inert until
+a VR page sets it, so the normal routes behave exactly as before:
+
+| File | What it calls |
+|---|---|
+| `src/streaming/config.ts` | `vrStreamingOn()` in `detectProfile`, and `vrStreamConfig(...)` around the ground, aerial and dollhouse resolvers |
+| `src/streaming/chunk-manager.ts` | `publishStreamReach` / `clearStreamReach`, and `shouldCoarsen`, which does nothing unless the config carries `coarsenResident` (only `vrStreamConfig` sets it) |
+| `src/shared/ui/screens/fade-screen/use-fade-transition.ts` | nothing; the poll change below |
 
 - **The fade polls on a timer.** `useFadeTransition` waited for the scene
   (First Person's dressing, Dollhouse's model key, the first Home's stream)
   by polling on `requestAnimationFrame`. A page presenting to a headset gets no
   window animation frames, so in VR that blackout never lowered. It polls every
   16 ms with `setTimeout` now, which the flat pages cannot tell apart.
-- **Markers take a shared scale.** Each tree's `hotspot.tsx` sizes a marker to
-  a constant screen size from the camera's fov and the canvas height. The XR
-  fov is about 100 degrees, so in the headset they came out large. The final
-  scale is multiplied by `markerScale.value`
-  (`src/shared/runtime/marker-scale.ts`), which is 1 everywhere except while a
-  VR session runs, when `VrSession` sets it to 0.65.
+
+Removed from the trees: an unused VR player swap in `scene/index.tsx` and a
+VR-only hide of the dollhouse instructions card in `overlays.tsx` (both read
+`useIsVr()`, whose provider was never mounted, so neither ever ran), the
+`!vr` guard on `AdaptiveQuality` (`vrStreamConfig` already turns
+`adaptiveDpr` off), and the world-position reads in `scene-lights.tsx`,
+`sky-dome.tsx` and `hotspot.tsx`. In the headset those now read
+`camera.position`, the player's eye point, rather than the tracked head that
+`HeadPose` writes into the camera's matrix. They differ only by a room-scale
+step, which neither a sky dome nor the shadow follow's margin shows. `src/vr/player-controller.tsx` and
+`src/vr/vr-mode.tsx` went with them.
 
 ## Known limits
 
 - The dollhouse is the site's aerial dollhouse pose at full scale, not the
   reference's tabletop model. The streamer tiers by camera distance, so a
   scaled model would not stream correctly.
-- The fog's 60% floor and its speeds are first guesses, not yet tuned in a
+- The fog's 75% floor and its speeds are first guesses, not yet tuned in a
   headset.
-- There is no Security button on the VR bar, and markers have no hover label
-  in the headset.
+- There is no Security button on the VR bar.
 - The cards are not yet seen in a headset. The clip and still textures load
   cross-origin from the stream bucket, which serves CORS for the chunks.
 - Stick walking checks the floor with `probeFloorY` at the 3D player's

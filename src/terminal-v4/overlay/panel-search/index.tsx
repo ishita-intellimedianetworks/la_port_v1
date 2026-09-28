@@ -6,7 +6,6 @@ interface PanelSearchProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  /** Named for screen readers — the field carries no visible label. */
   label?: string;
 }
 
@@ -33,8 +32,6 @@ export function PanelSearch({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={label}
-        // Escape clears the box rather than bubbling to the flap's document
-        // handler, which would close the whole panel on the first press.
         onKeyDown={(e) => {
           if (e.key === "Escape" && value) {
             e.stopPropagation();

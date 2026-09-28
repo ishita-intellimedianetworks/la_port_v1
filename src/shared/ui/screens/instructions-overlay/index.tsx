@@ -16,11 +16,8 @@ export interface InstructionsOverlayProps {
   visible: boolean;
   title: string;
   subtitle?: string;
-  /** Flat tile list. Ignored when `groups` is given. */
   instructions?: InstructionItem[];
-  /** Labelled blocks of tiles — used by the long first-person card. */
   groups?: InstructionGroup[];
-  /** Tiles per row on a normal viewport (2 or 3). Defaults to 2. */
   columns?: number;
   actionLabel: string;
   onAction: () => void;
@@ -35,8 +32,6 @@ export interface InstructionsOverlayProps {
 
 const FADE_MS = 900;
 
-// Inner panel/content exit: a gentle shrink + downward drift alongside the
-// opacity fade so the overlay leaves smoothly on Enter rather than blinking out.
 const innerExitStyle = (visible: boolean): React.CSSProperties => ({
   transform: visible ? "translateY(0) scale(1)" : "translateY(14px) scale(0.96)",
   transition: `transform ${FADE_MS}ms cubic-bezier(0.16, 1, 0.3, 1)`,
@@ -53,8 +48,6 @@ const GLASS_BLUR: React.CSSProperties = {
   WebkitBackdropFilter: "var(--ui-glass-backdrop)",
 };
 
-// Tailwind needs whole class names in the source to emit them, so the column
-// count maps to a literal rather than being interpolated.
 const GRID_COLS: Record<number, string> = {
   2: "grid-cols-1 sm:grid-cols-2",
   3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",

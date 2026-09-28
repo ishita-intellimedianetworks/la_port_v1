@@ -74,8 +74,6 @@ function searchCorridor(nodes: ZoneNode[], start: ZoneNode, end: ZoneNode): Zone
       for (let n: ZoneNode | undefined = end; n; n = parent.get(n.id)) out.push(n);
       return out.reverse();
     }
-    // Lazy-deletion heap: a node re-pushed with a better f leaves its stale
-    // entry behind — skip it when it surfaces.
     if (closed.has(cur.id)) continue;
     closed.add(cur.id);
 
@@ -217,8 +215,6 @@ export function findPathsWeighted(
   const startIn = pathfinding.getClosestNode(startPosition, zoneID, groupID, true) as ZoneNode | null;
   const startNode = startIn ?? (pathfinding.getClosestNode(startPosition, zoneID, groupID) as ZoneNode | null);
   if (!startNode) return targetPositions.map(() => null);
-  // Funnel from the player's true position only when it's actually on-mesh;
-  // otherwise from the fallback node's centroid (same as the callers' retry).
   const funnelStart = startIn ? startPosition : startNode.centroid;
 
   const targetNodes = targetPositions.map(

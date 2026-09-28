@@ -3,10 +3,6 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 
-/** `?debug=true` traces every rung of the ladder. The interesting number is
- *  not where it starts - it always starts at `maxDpr` - but where it settles:
- *  a walk down to MIN_DPR means the scene is being rendered below the display
- *  and upscaled, which reads as blur on every edge, geometry included. */
 const TRACE =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("debug") === "true";

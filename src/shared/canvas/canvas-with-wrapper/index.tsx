@@ -29,14 +29,11 @@ const GradeExposure: FunctionComponent = () => {
   const store = useStore();
   const exposure = useGradeStore((s) => s.exposure);
   useEffect(() => {
-    // The loop runs continuously here, so the next frame picks this up.
     store.getState().gl.toneMappingExposure = exposure;
   }, [store, exposure]);
   return null;
 };
 
-/** Render-rate ceiling. Every frame is ~1,900 draw calls whether or not
- *  anything moved, and the loop ran flat out even while standing still. */
 const FPS_CAP = 60;
 const FPS_CAP_LOW_POWER = 30;
 
@@ -68,14 +65,10 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
   initialPosition,
   initialRotation,
 }) => {
-  // Opening pose and FOV come from the active site — every route mounts this
-  // same Canvas.
   const site = useSite();
   const { entry } = sceneDataFor(site);
   const [px, py, pz] = initialPosition ?? entry.position;
   const [rx, ry, rz] = initialRotation ?? entry.rotation;
-  // One sun, shadow map frozen after a single render (see SceneLights). Off on
-  // low-power devices.
   const lowPower = isLowPower();
   const maxDpr = site.scene.stream.render.maxDpr;
   const toneMapping =
@@ -89,19 +82,11 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
     <>
       <div className="w-full h-full">
         <Canvas
-          // Explicit PCFShadowMap — the boolean form picks the deprecated
-          // PCFSoftShadowMap, which warns every frame.
           shadows={lowPower ? false : { type: THREE.PCFShadowMap }}
-          // Cap render resolution: the default is the full device pixel ratio,
-          // up to 3× on phones, which with MSAA is ~4-9× the framebuffer. The
-          // ceiling is the site's `stream.render.maxDpr`, so a bake that can
-          // afford native pixels gets them; low-power clamps below it.
           dpr={lowPower ? [1, Math.min(1.25, maxDpr)] : [1, maxDpr]}
           camera={{
             fov: site.scene.world.fov,
             near: 0.1,
-            // Generous far plane — the models are large and the sky backdrop
-            // must not clip.
             far: 10000,
             position: [px, py, pz],
             rotation: [rx, ry, rz],
@@ -123,8 +108,6 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
           onCreated={({ gl }) => {
             const canvas = gl.domElement;
             const onLost = (e: Event) => {
-              // Halve the streamer's GPU ceiling and keep it halved — a loss is
-              // the only hard evidence about real VRAM this page ever gets.
               const scale = degradeGpuBudget();
               console.error(
                 "[canvas] WebGL context LOST — the render loop has stopped. " +
@@ -135,7 +118,6 @@ const CanvasWithWrapper: FunctionComponent<Props> = ({
                   "there is a page reload.",
                 e,
               );
-              // Without this the browser may decline to restore at all.
               e.preventDefault();
             };
             const onRestored = () => console.warn("[canvas] WebGL context restored");

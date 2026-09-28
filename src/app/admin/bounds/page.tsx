@@ -20,13 +20,11 @@ function modelUrlsFor(id: SiteId) {
   };
 }
 
-/** The navmesh AABB — where map clicks will resolve. Drawn over the aerial. */
 const ZONE = { minX: -1502.324, maxX: -661.783, minZ: -438.324, maxZ: 550.924 };
 
 const PPM_PRESETS = [0.65, 1.31, 2.62, 4];
 const VIEW_W = 1180;
 
-/** A render plus its decoded bitmap, so the calibration canvas can composite it. */
 interface Plan {
   url: string;
   bytes: number;
@@ -63,13 +61,9 @@ export default function BoundsPage() {
   }, [bboxSource, manifestBbox, glbBbox]);
 
   const dims = bbox ? pixelDimsFor(bbox, ppm) : null;
-  // Lazy initialiser, not an effect: the probe touches `document` but never
-  // changes. Nothing renders from it until `bbox` arrives, so no hydration risk.
   const [maxTex] = useState(() => (typeof window === "undefined" ? 16384 : maxTextureSize()));
   const tooBig = !!dims && (dims.w > maxTex || dims.h > maxTex);
 
-  // The rect streamed-model reports via onBounds. Only matters for the legacy
-  // assets.floorPlan path; map.plan stores whatever bbox you rendered to.
   useEffect(() => {
     if (!MANIFEST_URL) return;
     let alive = true;
@@ -146,8 +140,6 @@ export default function BoundsPage() {
     img.src = url;
   }, []);
 
-  // Derived, with an optional override: no state seeded from an effect, and
-  // "reset" is just dropping the override.
   const seed = useCallback((): Placement | null => (
     siteImg && bbox
       ? initialPlacement(siteImg.naturalWidth, siteImg.naturalHeight, bbox, guessMpp)
@@ -292,7 +284,6 @@ export default function BoundsPage() {
           {status && <p className="mt-2 font-mono text-[11px] text-amber-400">{status}</p>}
         </header>
 
-        {/* ── Step 1 ── */}
         <section className={box}>
           <h2 className="mb-3 text-sm font-semibold">1 · Render the model</h2>
 
@@ -432,7 +423,6 @@ GLB renders to what you actually loaded, and <code>map.plan</code> stores those
           )}
         </section>
 
-        {/* ── Step 2 ── */}
         <section className={box}>
           <h2 className="mb-3 text-sm font-semibold">2 · Calibrate the site aerial</h2>
 

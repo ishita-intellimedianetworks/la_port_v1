@@ -20,7 +20,6 @@ function start() {
   }, 1000);
 }
 
-/** Count one occurrence of `label` in the current second. */
 export function tick(label: string) {
   if (!enabled()) return;
   start();

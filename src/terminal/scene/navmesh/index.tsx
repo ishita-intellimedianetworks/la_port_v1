@@ -39,7 +39,6 @@ export interface NavmeshBounds {
 
 interface NavmeshManagerProps {
   pathfinding: Pathfinding;
-  /** Fired once the active floor's zone has been registered. */
   onReady: (floorId: string) => void;
 }
 

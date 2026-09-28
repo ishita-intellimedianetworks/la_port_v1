@@ -10,8 +10,6 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
   const scene = useThree((s) => s.scene);
   const range = fogRange(config);
   const authored = config.fog.color;
-  // Own the Fog we installed, so the frame loop never recolours one that
-  // something else (an interior's HDR environment) put there.
   const ours = useRef<THREE.Fog | null>(null);
 
   useEffect(() => {
@@ -44,7 +42,6 @@ export default function StreamFog({ config }: { config: StreamingConfig }) {
       fog.color.copy(SKY_HORIZON.color);
       return;
     }
-    // Sites with no dome (sky.mode "off") keep the old rule.
     const bg = scene.background;
     if (bg instanceof THREE.Color) fog.color.copy(bg);
   });

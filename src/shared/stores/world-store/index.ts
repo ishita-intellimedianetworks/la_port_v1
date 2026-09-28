@@ -9,8 +9,6 @@ export type WorldBounds = {
 
 export type WorldState = {
   bounds: WorldBounds | null;
-  /** Bumped on every publish, so consumers can react to a re-fit even when the
-   *  numbers happen to be identical. */
   version: number;
   setBounds: (bounds: WorldBounds) => void;
 };

@@ -69,9 +69,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
       ? (site.layoutById[currentLayoutId]?.hotspots ?? [])
       : [];
 
-  // A picked security anchor leaves the rest of the security row drawn, so a
-  // picked operational one brings its own layout's siblings with it. Both
-  // answer the same question: what else belongs to the thing being looked at.
   const pickedLayoutId =
     !ground.on && selectedHotspotId ? (site.hotspotById[selectedHotspotId]?.layoutId ?? null) : null;
   const picked = ground.on
@@ -82,9 +79,6 @@ export function HotspotMarkers({ hsSize }: HotspotMarkersProps) {
           : [selectedHotspotId])
       : own;
 
-  // A layout's children move while the layout is what is being looked at. The
-  // moment one of them is picked it becomes the subject on its own and the rest
-  // settle, so this is gated on nothing being selected.
   const layoutMoves = !ground.on && !selectedHotspotId ? currentLayoutId : null;
 
   const alwaysOn = useMemo(

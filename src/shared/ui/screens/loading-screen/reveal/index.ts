@@ -1,4 +1,3 @@
-// Framework-agnostic Three.js bits.
 export { loadPreviewBin, parsePreviewBin, mergePreviews } from './preview-loader';
 export type { PreviewBin } from './preview-loader';
 

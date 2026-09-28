@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { streamReach } from "@/streaming/reach";
+import { streamReach } from "./engine/stream";
 import { useVrBridge } from "./bridge";
 
 export const VR_FOG = {

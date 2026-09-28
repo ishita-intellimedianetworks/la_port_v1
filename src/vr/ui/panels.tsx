@@ -3,8 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { Container } from "@react-three/uikit";
 import {
-  ArrowLeft,
   Box,
+  ChevronDown,
   ChevronRight,
   EyeOff,
   House,
@@ -37,6 +37,8 @@ const SMALL_ICON = { width: 20, height: 20, color: COLOR.text } as const;
 const TILE_ICON = { width: 20, height: 20, color: COLOR.text } as const;
 
 const HIDE_HINT = "B or Y brings them back";
+
+const RESOURCE = { chevron: 48 } as const;
 
 
 interface BarItem {
@@ -132,57 +134,67 @@ export function ResourcesPanel({
   onClose: () => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const open = groups.find((g) => g.id === openId) ?? null;
-  const back = <ArrowLeft {...SMALL_ICON} />;
+  const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
 
   return (
     <Panel onDismiss={onClose}>
-      <PanelHeader
-        title={open ? open.name : label}
-        subtitle={open ? `${open.hotspots.length} hotspots` : `${groups.length} layouts`}
-        onBack={open ? () => setOpenId(null) : undefined}
-        backIcon={back}
-      />
+      <PanelHeader title={label} subtitle={`${groups.length} groups`} backIcon={null} />
       <Divider />
       <List>
-        {open ? (
-          <>
-            {open.travel && (
-              <Row
-                label={`Go to ${open.name}`}
-                icon={<MapPin {...SMALL_ICON} />}
-                active
-                onSelect={() => {
-                  open.travel?.();
-                  onClose();
-                }}
-              />
-            )}
-            {open.hotspots.map((h) => (
-              <Row
-                key={h.id}
-                label={h.name}
-                meta={h.id}
-                disabled={h.disabled}
-                trailing={<ChevronRight {...SMALL_ICON} />}
-                onSelect={() => {
-                  onHotspot(h.id);
-                  onClose();
-                }}
-              />
-            ))}
-          </>
-        ) : (
-          groups.map((g) => (
-            <Row
-              key={g.id}
-              label={g.name}
-              meta={`${g.hotspots.length} hotspots`}
-              trailing={<ChevronRight {...SMALL_ICON} />}
-              onSelect={() => setOpenId(g.id)}
-            />
-          ))
-        )}
+        {groups.map((g) => {
+          const open = g.id === openId;
+          const travel = g.travel;
+          return (
+            <Container key={g.id} flexDirection="column" gapRow={SPACE.row} width="100%" flexShrink={0}>
+              <Container flexDirection="row" alignItems="center" gapColumn={SPACE.row} width="100%">
+                <IconButton
+                  size={RESOURCE.chevron}
+                  active={open}
+                  disabled={g.hotspots.length === 0}
+                  icon={open ? <ChevronDown {...SMALL_ICON} /> : <ChevronRight {...SMALL_ICON} />}
+                  onSelect={() => toggle(g.id)}
+                />
+                <Container flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Row
+                    label={g.name}
+                    meta={`${g.hotspots.length} hotspots`}
+                    trailing={travel ? <MapPin {...SMALL_ICON} /> : undefined}
+                    onSelect={
+                      travel
+                        ? () => {
+                            travel();
+                            onClose();
+                          }
+                        : () => toggle(g.id)
+                    }
+                  />
+                </Container>
+              </Container>
+              {open && (
+                <Container
+                  flexDirection="column"
+                  gapRow={SPACE.row / 1.5}
+                  paddingLeft={RESOURCE.chevron + SPACE.row}
+                  width="100%"
+                  flexShrink={0}
+                >
+                  {g.hotspots.map((h) => (
+                    <Row
+                      key={h.id}
+                      compact
+                      label={h.name}
+                      disabled={h.disabled}
+                      onSelect={() => {
+                        onHotspot(h.id);
+                        onClose();
+                      }}
+                    />
+                  ))}
+                </Container>
+              )}
+            </Container>
+          );
+        })}
       </List>
     </Panel>
   );

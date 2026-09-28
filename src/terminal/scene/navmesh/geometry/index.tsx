@@ -6,8 +6,6 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { acquireGLTF, releaseGLTF } from "@/shared/runtime";
 
-// Room zone: one named mesh in the navmesh GLB
-// Convention: mesh.name in the GLB matches the LayoutsConfig.id in scene-config
 export interface RoomZone {
   id: string;
   mesh: THREE.Mesh;
@@ -62,15 +60,10 @@ function extractGeo(scene: THREE.Group): {
 interface SingleNavmeshProps {
   floorId: string;
   url: string;
-  /** Fired once with the merged geometry for this floor. */
   onGeometry: (floorId: string, geo: THREE.BufferGeometry) => void;
-  /** Fired once with the first-mesh bbox — used for minimap bounds. */
   onFloorBounds?: (floorId: string, bounds: FloorBounds) => void;
-  /** Fired once with named-mesh room zones for room detection. */
   onRoomZones?: (floorId: string, zones: RoomZone[]) => void;
-  /** Fired after geometry has been delivered to the parent. */
   onLoaded?: () => void;
-  /** Render navmesh as a translucent overlay for debugging. */
   debug?: boolean;
 }
 

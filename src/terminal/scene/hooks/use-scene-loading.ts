@@ -97,8 +97,6 @@ export function useSceneLoading({
         onRevealStartRef.current?.();
         onRevealDoneRef.current?.();
       } else if (!progressDrivenReveal) {
-        // No preview cloud → fall back to the time-based crossfade: animate
-        // uGlobalAlpha 0→1 over 3.5s so the patched mesh materials dither in.
         onRevealStartRef.current?.();
         crossfadeReveal(su, { durationMs: 3500 }).then(() => {
           onRevealDoneRef.current?.();

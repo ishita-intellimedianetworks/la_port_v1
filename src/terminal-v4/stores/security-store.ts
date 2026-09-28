@@ -3,22 +3,14 @@ import type { HotspotConfig, HotspotField } from "@/config/schema";
 import { createSeededStore } from "@/shared/stores/create-store";
 
 export interface SecurityIncident {
-  /** `SEC-DEMO-nnnn`. */
   id: string;
-  /** Which hotspot raised it (S01-S06). */
   sourceHotspotId: string;
-  /** How it was detected, e.g. "AI VIDEO ANALYTICS". */
   source: string;
-  /** The demo device that reported it, e.g. `CAM-DEMO-04`. */
   sourceId?: string;
   type: string;
   severity: IncidentSeverity;
-  /** The demo zone label, e.g. `YARD-DEMO-RZ-02`. */
   locationLabel: string;
-  /** Where VIEW LOCATION travels to: the incident's parent layout. */
   navigationTarget: string;
-  /** A fixed string, not `Date.now()`: a demo that reads a different time on
-   *  every load cannot be rehearsed against a script. */
   eventTime: string;
   status: IncidentStatus;
   acknowledged: boolean;
@@ -33,7 +25,6 @@ export type SecurityCategory =
   | "geofences"
   | "incidents";
 
-/** Display order and labels, as the spec names them. */
 export const SECURITY_CATEGORIES: { key: SecurityCategory; label: string }[] = [
   { key: "access", label: "Access" },
   { key: "cargo", label: "Cargo" },
@@ -44,35 +35,26 @@ export const SECURITY_CATEGORIES: { key: SecurityCategory; label: string }[] = [
 ];
 
 export const CATEGORY_BY_HOTSPOT: Record<string, SecurityCategory> = {
-  S01: "access",     // AI Access Control
-  S02: "cargo",      // Container Security Screening
-  S03: "waterside",  // Waterside Perimeter Monitoring
-  S04: "analytics",  // AI Video Analytics
-  S05: "geofences",  // Restricted Area / Geofence
-  S06: "analytics",  // AI Anomaly / Unattended Object
-  S07: "incidents",  // Security Incident Management
+  S01: "access",
+  S02: "cargo",
+  S03: "waterside",
+  S04: "analytics",
+  S05: "geofences",
+  S06: "analytics",
+  S07: "incidents",
 };
 
 export interface SecurityEventDef {
-  /** Stable key, `<hotspotId>-<n>`, so a fired variant can be marked spent. */
   id: string;
-  /** The hotspot that raises it (S01-S06). */
   hotspotId: string;
-  /** What the button says. */
   label: string;
-  /** One line on what firing it does, for the button's second row. */
   detail: string;
-  /** The incident forwarded to S07, minus the parts decided at trigger time:
-   *  its id is allocated from the running sequence when fired. */
   incident: Omit<SecurityIncident, "id" | "status" | "acknowledged">;
-  /** The source hotspot's readings during the event, by field name. */
   fields: Record<string, string | number | boolean>;
 }
 
-/** The variants one hotspot can raise, for the trigger menu's grouping. */
 export interface SecurityEventGroup {
   hotspotId: string;
-  /** The hotspot's own name, e.g. "AI Access Control". */
   title: string;
   variants: SecurityEventDef[];
 }
@@ -98,7 +80,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 14:38:02",
           assignedTeam: "Security operations",
         },
-        // "changes credential/authorization to DENIED, gate_state to LOCKED"
         fields: {
           driver_credential: "Denied",
           vehicle_authorization: "Denied",
@@ -196,8 +177,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 14:51:47",
           assignedTeam: "Security operations",
         },
-        // "changes seal_status to MISMATCH/TAMPER ALERT and inspection_status
-        //  to SECURITY REVIEW REQUIRED"
         fields: {
           seal_status: "Mismatch / tamper alert",
           inspection_status: "Security review required",
@@ -293,7 +272,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 15:07:19",
           assignedTeam: "Security operations",
         },
-        // "a simulated craft enters the demo zone"
         fields: {
           zone_status: "Alert",
           detected_watercraft: 3,
@@ -396,7 +374,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 14:42:18",
           assignedTeam: "Security operations",
         },
-        // The §4 table's own mid-demo values, put back where they belong.
         fields: {
           detected_class: "Person",
           confidence: 97,
@@ -545,8 +522,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 15:22:05",
           assignedTeam: "Security operations",
         },
-        // "adds one UNKNOWN demo person and changes violations to 1 / status
-        //  to ALERT"
         fields: {
           persons_inside: 5,
           violations: 1,
@@ -598,8 +573,6 @@ export const SECURITY_EVENT_GROUPS: SecurityEventGroup[] = [
           eventTime: "2026-09-15 16:21:08",
           assignedTeam: "Security operations",
         },
-        // The §4 table's own values. Classification stays UNCLASSIFIED OBJECT:
-        // the spec forbids labelling it a weapon or explosive.
         fields: {
           event_type: "Unattended object",
           detection_time: "2026-09-15 16:21:08",
@@ -698,28 +671,18 @@ export const SECURITY_SOURCES: { hotspotId: string; label: string }[] =
 export const isFieldHotspot = (hotspotId: string): boolean =>
   SECURITY_EVENT_GROUPS.some((g) => g.hotspotId === hotspotId);
 
-/** Every variant, flattened, for lookup by id. */
 export const SECURITY_EVENTS: SecurityEventDef[] = SECURITY_EVENT_GROUPS.flatMap(
   (g) => g.variants,
 );
 
 export interface SecurityAuditEntry {
-  /** Monotonic within a session, so entries sort stably even at equal times. */
   seq: number;
-  /** What happened. */
   action: SecurityAuditAction;
-  /** The incident it concerns, when there is one. */
   incidentId?: string;
-  /** The hotspot involved, when there is one. */
   hotspotId?: string;
-  /** What happened, without restating the incident it belongs to: a log read
-   *  under one incident does not need its id on every line. */
   detail: string;
-  /** Who did it. Every line in a real log has an operator against it. */
   actor?: SecurityActor;
-  /** Severity at the moment of the entry, for raise/escalate. */
   severity?: IncidentSeverity;
-  /** Status after the action, for the lifecycle entries. */
   status?: IncidentStatus;
   at: string;
 }
@@ -727,7 +690,6 @@ export interface SecurityAuditEntry {
 export interface SecurityActor {
   name: string;
   initials: string;
-  /** 0-5, indexing the avatar palette in the card. */
   tone: number;
 }
 
@@ -747,12 +709,9 @@ export type SecurityAuditAction =
   | "incident_escalated"
   | "incident_deescalated"
   | "incident_resolved"
-  /** An observation rather than a state change: why the next step was taken.
-   *  Most of what a real log is made of. */
   | "incident_note"
   | "demo_reset";
 
-/** §6's state contract, as the severities the counters group by. */
 export type IncidentSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type IncidentStatus = "ACTIVE" | "INVESTIGATING" | "RESOLVED";
 
@@ -764,44 +723,30 @@ export interface SecurityState {
   managementOpen: boolean;
 
   hotspots: HotspotConfig[];
-  /** The same rows by id, rebuilt on every write so the two never disagree. */
   hotspotById: Record<string, HotspotConfig>;
-  /** The untouched seed, so a demo can be put back to its opening position
-   *  without a reload. See `resetToSeed`. */
   readonly seedHotspots: HotspotConfig[];
   readonly seedHotspotById: Record<string, HotspotConfig>;
 
   incidents: SecurityIncident[];
-  /** Which incident the S07 card has expanded, or null for the list. */
   selectedIncidentId: string | null;
   incidentFields: Record<string, Record<string, HotspotField["value"]>>;
   viewingIncidentId: string | null;
 
   categories: Record<SecurityCategory, boolean>;
 
-  /** Latch the mode and the layout to come back to (null = came from the
-   *  overview, so leaving stands still). */
   setMode: (
     value: boolean,
     returnLayoutId?: string | null,
-    /** The layout whose security anchors the mode opens on. Omitted or null →
-     *  the mode opens straight at management. */
     securityLayoutId?: string | null,
   ) => void;
   setManagementOpen: (value: boolean) => void;
 
-  /** Flip one layer. */
   toggleCategory: (category: SecurityCategory) => void;
   isolateCategory: (category: SecurityCategory) => void;
-  /** Every layer back on. */
   showAllCategories: () => void;
 
-  /** Overwrite some of one hotspot's readings, matched by field `name`. A field
-   *  the patch does not mention keeps its seeded value. */
   setHotspotFields: (hotspotId: string, patch: Record<string, HotspotField["value"]>) => void;
 
-  /** Raise one. Ignored if its id is already queued, so a demo trigger pressed
-   *  twice does not stack duplicates. */
   raiseIncident: (incident: SecurityIncident) => void;
   triggerEvent: (eventId: string) => void;
   firedEventIds: string[];
@@ -809,21 +754,14 @@ export interface SecurityState {
   audit: SecurityAuditEntry[];
 
   history: SecurityIncident[];
-  /** ACTIVE → INVESTIGATING, and flag it acknowledged (§5 step 6). */
   acknowledgeIncident: (id: string) => void;
-  /** Bump severity one step, the spec's ESCALATE action. CRITICAL is the cap. */
   escalateIncident: (id: string) => void;
   deescalateIncident: (id: string) => void;
-  /** → RESOLVED (§5 step 7). Kept in the list, per §6's audit-history note. */
   resolveIncident: (id: string) => void;
   setSelectedIncidentId: (id: string | null) => void;
-  /** Latch the incident whose location is being visited, or null on return. */
   setViewingIncidentId: (id: string | null) => void;
 
-  /** Back to the opening position: seeded readings, no incidents, mode
-   *  untouched. What a presenter needs between run-throughs. */
   resetToSeed: () => void;
-  /** Leave the layer entirely: mode off, nothing remembered, queue empty. */
   reset: () => void;
 }
 
@@ -857,7 +795,6 @@ const OPEN_INCIDENTS: SecurityIncident[] = [
     assignedTeam: "Security operations",
   },
 ];
-/** Shared identity, so a reset never hands out a fresh array. */
 const NO_FIRED: string[] = [];
 interface PastIncidentSpec {
   id: string;
@@ -865,19 +802,13 @@ interface PastIncidentSpec {
   source: string;
   sourceId?: string;
   type: string;
-  /** Severity as first reported. Escalations move it from here. */
   severity: IncidentSeverity;
   locationLabel: string;
   navigationTarget: string;
-  /** The synthetic time the event itself carries, `YYYY-MM-DD HH:MM:SS`. */
   eventTime: string;
   assignedTeam: string;
-  /** What the operator saw first, before the incident was formally raised. */
   trigger: string;
-  /** Who owned it. Used for every step that does not name someone else, so an
-   *  incident reads as one person's work rather than a rota. */
   owner: keyof typeof SECURITY_ACTORS;
-  /** The lifecycle, in order. Each step's `at` is `HH:MM:SS` on the same day. */
   steps: PastStep[];
 }
 
@@ -889,7 +820,6 @@ type PastStep = { at: string; by?: keyof typeof SECURITY_ACTORS } & (
   | { action: "note"; detail: string }
 );
 
-/** The demo's "today". Every past time is on this date. */
 const DEMO_DAY = "2026-09-15";
 
 const PAST_INCIDENTS: PastIncidentSpec[] = [
@@ -1212,8 +1142,6 @@ export const HISTORICAL_INCIDENTS: SecurityIncident[] = PAST_INCIDENTS.map((p) =
     acknowledged: true,
     assignedTeam: p.assignedTeam,
   };
-  // Newest first, matching the live queue, so the two read the same way when
-  // S07 shows them in one list.
 }).reverse();
 
 const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
@@ -1233,8 +1161,6 @@ const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
       action: "incident_raised",
       hotspotId: p.sourceHotspotId,
       incidentId: p.id,
-      // Named by SOURCE, not by id: the log is read under the incident, which
-      // already says which one it is.
       detail: `Incident raised by ${p.source}`,
       severity: p.severity,
       status: "ACTIVE",
@@ -1282,8 +1208,6 @@ const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
           at: iso(step.at),
         });
       } else {
-        // A note is an observation rather than a state change, which is most of
-        // what a real log is made of: it says why the next step was taken.
         out.push({
           action: "incident_note",
           incidentId: p.id,
@@ -1302,11 +1226,8 @@ const SEEDED_AUDIT: SecurityAuditEntry[] = (() => {
 
 const INCIDENT_ID_START = 41;
 
-/** `SEC-DEMO-0041`, `SEC-DEMO-0042`, ... Four digits, as every id in the spec
- *  is written; a run long enough to exceed them simply grows a fifth. */
 const incidentIdFor = (n: number) => `SEC-DEMO-${String(n).padStart(4, "0")}`;
 
-/** Append one line to the log, numbering it from the entry before. */
 function appendAudit(
   log: SecurityAuditEntry[],
   entry: Omit<SecurityAuditEntry, "seq" | "at">,
@@ -1317,7 +1238,6 @@ function appendAudit(
   ];
 }
 
-/** Shared identity, so a reset never hands out a fresh object. */
 const ALL_CATEGORIES: Record<SecurityCategory, boolean> = {
   access: true,
   cargo: true,
@@ -1329,7 +1249,6 @@ const ALL_CATEGORIES: Record<SecurityCategory, boolean> = {
 
 const LIVE_ACTOR = SECURITY_ACTORS.rm;
 
-/** The ladder ESCALATE climbs. */
 const SEVERITY_ORDER: IncidentSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 const byId = (rows: HotspotConfig[]): Record<string, HotspotConfig> =>
@@ -1401,8 +1320,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
           touched = true;
           return { ...f, value: patch[f.name] };
         });
-        // Every named field already held the value asked for: no write, so no
-        // subscriber is told the list changed.
         if (!touched) return;
 
         const next = rows.slice();
@@ -1429,8 +1346,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
         set({ incidentFields: { ...get().incidentFields, [id]: def.fields } });
         state.raiseIncident({ ...def.incident, id, status: "ACTIVE", acknowledged: false });
 
-        // Carries the incident id too, so the per-incident log can show the
-        // trigger that caused it rather than starting at the raise.
         let audit = appendAudit(get().audit, {
           action: "event_triggered",
           hotspotId,
@@ -1451,8 +1366,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
       acknowledgeIncident: (id) =>
         set((s) => {
           const incidents = patchIncident(s.incidents, id, (x) =>
-            // Already acknowledged, or already closed: nothing to do. Returning
-            // the same object keeps the array identity, and the card still.
             x.acknowledged || x.status === "RESOLVED"
               ? x
               : { ...x, acknowledged: true, status: "INVESTIGATING" },
@@ -1474,7 +1387,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
         set((s) => {
           const incidents = patchIncident(s.incidents, id, (x) => {
             const next = SEVERITY_ORDER[SEVERITY_ORDER.indexOf(x.severity) + 1];
-            // A resolved incident does not climb, and CRITICAL is the top.
             return !next || x.status === "RESOLVED" ? x : { ...x, severity: next };
           });
           if (incidents === s.incidents) return {};
@@ -1589,8 +1501,6 @@ export const useSecurityStore = createSeededStore<SecurityState, Site>(
           viewingIncidentId: null,
           categories: ALL_CATEGORIES,
           firedEventIds: NO_FIRED,
-          // Back to the seeded history, not to nothing: an empty log is not a
-          // state this layer is ever meant to be in.
           audit: SEEDED_AUDIT,
           history: HISTORICAL_INCIDENTS,
         }),

@@ -74,9 +74,7 @@ function Field({ field }: { field: HotspotField }) {
 }
 
 interface HotspotDataCardProps {
-  /** Destination id — which is the layout id (L01-L10). */
   destId: string;
-  /** 1-based marker index within that layout's `hotspots[]`. */
   index: number;
   onClose: () => void;
 }
@@ -99,8 +97,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[130] flex items-center justify-center">
-      {/* Click-outside target. The scene behind is left undimmed, as the
-          reference leaves it — the card's frost carries the separation. */}
       <button
         aria-label="Close"
         onClick={onClose}
@@ -120,8 +116,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
           onClose={onClose}
         />
 
-        {/* Body scrolls if the card would outgrow the viewport — the width does
-            the spreading, the height stays capped. */}
         <div className="ui-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden short:mt-2">
           {hotspot.journey && (
             <div
@@ -179,8 +173,6 @@ export function HotspotDataCard({ destId, index, onClose }: HotspotDataCardProps
             </div>
           )}
 
-          {/* Two columns so the card spends its width, not its height — the
-              reference's own treatment for its details table. */}
           <div
             className="mt-4 border-t pt-1 short:mt-3"
             style={{ borderColor: "var(--nav-divider)" }}
