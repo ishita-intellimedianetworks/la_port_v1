@@ -118,7 +118,14 @@ export function VrHud() {
   }
 
   if (menu === "map" && bridge.map) {
-    return <MapPanel map={bridge.map} onClose={() => setMenu(null)} />;
+    return (
+      <MapPanel
+        map={bridge.map}
+        groups={bridge.groups}
+        onHotspot={bridge.goToHotspot}
+        onClose={() => setMenu(null)}
+      />
+    );
   }
 
   if (barHidden) return null;

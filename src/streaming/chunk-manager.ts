@@ -10,7 +10,8 @@ import type { StreamHideRule } from "@/config/schema";
 import { dropBoundsTree, lazyBvhRaycast } from "./bvh-raycast";
 import { geometryBytes, textureBytes, resolveBudget, currentGpuScale, type MemoryBudget } from "./memory";
 import { prefetchUrls } from "@/shared/runtime/prefetch";
-import { clearStreamReach, publishStreamReach } from "@/vr/engine/stream";
+import { clearStreamReach, publishStreamReach, VR_BUDGET, vrStreamingOn } from "@/vr/engine/stream";
+import { simplifiedTriangles, simplifyChunk } from "@/vr/engine/simplify";
 
 interface ChunkState {
   entry: ChunkEntry;
@@ -165,6 +166,8 @@ export class ChunkManager {
   private static readonly MAX_MOUNT_FAILS = 3;
 
   private instSynced = false;
+  private allowed: Set<string> | null = null;
+  private instBudgeted = false;
 
   private mode: "adaptive" | "full";
   private disposed = false;
@@ -408,8 +411,75 @@ export class ChunkManager {
     return this.profile === "desktop" ? Infinity : this.cfg.unloadDist;
   }
 
+  private budgetCost(st: ChunkState): { tris: number; calls: number } {
+    const e = st.entry;
+    let tris = 0;
+    let calls = 0;
+    if (e.lods.length) {
+      const tier = st.current ?? this.resolveTier(e, this.residentBandTier(this.surfaceDist(this._cam, e)));
+      tris += tier ? simplifiedTriangles(e.lods.find((l) => l.tier === tier)?.tris ?? 0, tier) : 0;
+      calls += Math.max(1, e.materials.length);
+    }
+    if (e.inst && this.instances) {
+      for (const [pal, , n] of e.inst) tris += this.instances.entryTriangles(pal) * n;
+    }
+    return { tris, calls };
+  }
+
+  private computeAllowed(): Set<string> | null {
+    const budget = VR_BUDGET;
+    if (!this.cfg.coarsenResident) return null;
+    const items: { id: string; tris: number; calls: number; score: number }[] = [];
+    for (const st of this.states.values()) {
+      const e = st.entry;
+      if (this.hidden.has(e.id) || (!e.lods.length && !e.inst)) continue;
+      const { tris, calls } = this.budgetCost(st);
+      const dist = Math.max(1, Math.hypot(this._cam.x - e.center[0], this._cam.y - e.center[1], this._cam.z - e.center[2]));
+      const angle = e.radius / dist;
+      const keep = this.allowed?.has(e.id) ? ChunkManager.BUDGET_KEEP : 1;
+      items.push({ id: e.id, tris, calls, score: (angle * angle * keep) / Math.max(tris, ChunkManager.BUDGET_MIN_TRIS) });
+    }
+    items.sort((a, b) => b.score - a.score);
+    const allowed = new Set<string>();
+    let tris = 0;
+    let calls = 0;
+    for (const item of items) {
+      if (tris + item.tris > budget.tris || calls + item.calls > budget.calls) continue;
+      tris += item.tris;
+      calls += item.calls;
+      allowed.add(item.id);
+    }
+    return allowed;
+  }
+
+  private static readonly BUDGET_KEEP = 1.3;
+  private static readonly BUDGET_MIN_TRIS = 500;
+
+  private syncInstances() {
+    if (!this.instances) return;
+    const allowed = this.allowed;
+    if (allowed) {
+      this.instances.sync(this.manifest.chunks.filter((c) => c.inst && allowed.has(c.id)));
+      this.instBudgeted = true;
+      return;
+    }
+    if (!this.instSynced || this.instBudgeted) {
+      this.instResident = this.manifest.chunks.filter((c) => c.inst);
+      this.instances.sync(this.instResident);
+      this.instSynced = true;
+      this.instBudgeted = false;
+    }
+  }
+
   private updateResident() {
     this.flushReveals();
+    this.allowed = this.computeAllowed();
+    const allowed = this.allowed;
+    if (allowed) {
+      for (const st of this.states.values()) {
+        if (st.current && !allowed.has(st.entry.id)) this.unmount(st);
+      }
+    }
 
     const radius = this.residentRadius();
     if (radius !== Infinity) {
@@ -423,6 +493,7 @@ export class ChunkManager {
     for (const st of this.states.values()) {
       if (st.current || st.loadingTier) continue;
       if (!st.entry.lods.length) continue;
+      if (allowed && !allowed.has(st.entry.id)) continue;
       if ((this.mountFails.get(st.entry.id) ?? 0) >= ChunkManager.MAX_MOUNT_FAILS) continue;
       const d = this.surfaceDist(this._cam, st.entry);
       if (d > radius) continue;
@@ -461,11 +532,7 @@ export class ChunkManager {
     this.updateTextures();
     this.evictTextures();
 
-    if (this.instances && !this.instSynced) {
-      this.instResident = this.manifest.chunks.filter((c) => c.inst);
-      this.instances.sync(this.instResident);
-      this.instSynced = true;
-    }
+    this.syncInstances();
   }
 
   private shouldCoarsen(current: Tier, entry: ChunkEntry, dist: number): boolean {
@@ -635,9 +702,11 @@ export class ChunkManager {
   }
 
   private publishReach() {
+    if (!vrStreamingOn()) return;
     let reach = Infinity;
     for (const st of this.states.values()) {
       if (this.hidden.has(st.entry.id) || !st.entry.lods.length) continue;
+      if (this.allowed && !this.allowed.has(st.entry.id)) continue;
       if ((this.mountFails.get(st.entry.id) ?? 0) >= ChunkManager.MAX_MOUNT_FAILS) continue;
       if (st.current !== null && st.group !== null) continue;
       const d = this.surfaceDist(this._cam, st.entry);
@@ -791,6 +860,7 @@ export class ChunkManager {
         const lod = st.entry.lods.find((l) => l.tier === tier);
         if (lod) this.learnRatio(lod.bytes, bytes);
       }
+      if (vrStreamingOn()) await simplifyChunk(group, tier);
       if (st.loadingTier !== tier) return;
 
       const textured = this.isTextured(tier, st.entry);

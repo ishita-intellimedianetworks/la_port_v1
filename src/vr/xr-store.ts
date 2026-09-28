@@ -13,6 +13,7 @@ const holder = globalThis as typeof globalThis & {
 export const xrStore: XRStore = (holder.__laPortXrStore ??= createXRStore({
   offerSession: false,
   foveation: 1,
+  frameRate: "low",
   controller: { grabPointer: false, rayPointer: { rayModel: RAY } },
   hand: { grabPointer: false, touchPointer: false, rayPointer: { rayModel: RAY } },
 }));

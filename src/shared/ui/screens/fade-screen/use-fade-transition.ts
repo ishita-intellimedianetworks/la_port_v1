@@ -2,12 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FADE_IN_MS, BLACKOUT_VISIBLE_MS } from "./";
+import { vrStreamingOn } from "@/vr/engine/stream";
 
 const MAX_BLACKOUT_WAIT_MS = 8000;
 
 const SWAP_BUFFER_MS = 120;
 
 const POLL_MS = 16;
+
+interface Poll {
+  id: number;
+  timer: boolean;
+}
+
+function schedulePoll(tick: () => void): Poll {
+  return vrStreamingOn()
+    ? { id: window.setTimeout(tick, POLL_MS), timer: true }
+    : { id: requestAnimationFrame(tick), timer: false };
+}
+
+function cancelPoll(poll: Poll) {
+  if (poll.timer) clearTimeout(poll.id);
+  else cancelAnimationFrame(poll.id);
+}
 
 export interface FadeTransitionAPI {
   visible: boolean;
@@ -22,12 +39,12 @@ export function useFadeTransition(): FadeTransitionAPI {
   const [visible, setVisible] = useState(false);
   const [fadeInMs, setFadeInMs] = useState(FADE_IN_MS);
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef    = useRef<Poll | null>(null);
   const mountedRef = useRef(true);
 
   const clearPending = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current);   timerRef.current = null; }
-    if (pollRef.current)  { clearTimeout(pollRef.current);    pollRef.current = null; }
+    if (pollRef.current)  { cancelPoll(pollRef.current);      pollRef.current = null; }
   }, []);
 
   useEffect(() => {
@@ -65,9 +82,9 @@ export function useFadeTransition(): FadeTransitionAPI {
         lower();
         return;
       }
-      pollRef.current = setTimeout(tick, POLL_MS);
+      pollRef.current = schedulePoll(tick);
     };
-    pollRef.current = setTimeout(tick, POLL_MS);
+    pollRef.current = schedulePoll(tick);
   }, []);
 
   const transition = useCallback((swap?: () => void, waitUntil?: () => boolean, fadeMs: number = FADE_IN_MS) => {

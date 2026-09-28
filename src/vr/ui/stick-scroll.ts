@@ -3,6 +3,8 @@ import { useFrame } from "@react-three/fiber";
 import type { VanillaContainer } from "@react-three/uikit";
 import { useXRInputSourceState } from "@react-three/xr";
 
+type ScrollSignal = { value: [number, number] | undefined };
+
 const STICK = {
   deadzone: 0.12,
   pixelsPerSecond: 1500,
@@ -10,7 +12,13 @@ const STICK = {
   maxDelta: 0.05,
 } as const;
 
+const PRESS = {
+  slopPixels: 14,
+} as const;
+
 let target: RefObject<VanillaContainer | null> | null = null;
+
+const drag = { travelled: 0 };
 
 function claim(ref: RefObject<VanillaContainer | null>) {
   target = ref;
@@ -20,7 +28,32 @@ function release(ref: RefObject<VanillaContainer | null>) {
   if (target === ref) target = null;
 }
 
-export function useStickScroll() {
+function clampAxis(value: number, max: number | undefined): number {
+  return Math.min(Math.max(0, max ?? 0), Math.max(0, value));
+}
+
+function clampScroll(
+  ref: RefObject<VanillaContainer | null>,
+  x: number,
+  y: number,
+  position: ScrollSignal,
+  event: unknown,
+  stick: boolean,
+): boolean | undefined {
+  const container = ref.current;
+  if (!container || event == null) return false;
+  const [maxX, maxY] = container.maxScrollPosition.value;
+  const cx = clampAxis(x, maxX);
+  const cy = clampAxis(y, maxY);
+  const [fromX, fromY] = position.value ?? [0, 0];
+  drag.travelled += Math.abs(cx - fromX) + Math.abs(cy - fromY);
+  if (stick) claim(ref);
+  if (cx === x && cy === y) return undefined;
+  position.value = [cx, cy];
+  return false;
+}
+
+export function useScrollArea() {
   const ref = useRef<VanillaContainer>(null);
   const speed = useRef(0);
   const right = useXRInputSourceState("controller", "right");
@@ -52,7 +85,39 @@ export function useStickScroll() {
     if (h) claim(ref);
   }, []);
 
-  return [ref, onHoverChange] as const;
+  const onScroll = useCallback(
+    (x: number, y: number, position: ScrollSignal, event?: unknown) =>
+      clampScroll(ref, x, y, position, event, true),
+    [],
+  );
+
+  return [ref, onHoverChange, onScroll] as const;
 }
 
-export const noDragScroll = () => false;
+export function useDragScroll() {
+  const ref = useRef<VanillaContainer>(null);
+  const onScroll = useCallback(
+    (x: number, y: number, position: ScrollSignal, event?: unknown) =>
+      clampScroll(ref, x, y, position, event, false),
+    [],
+  );
+  return [ref, onScroll] as const;
+}
+
+export function usePress(onSelect: () => void, disabled = false) {
+  const pressed = useRef(false);
+  const onPointerDown = useCallback(() => {
+    if (disabled) return;
+    pressed.current = true;
+    drag.travelled = 0;
+  }, [disabled]);
+  const onPointerUp = useCallback(() => {
+    const was = pressed.current;
+    pressed.current = false;
+    if (was && !disabled && drag.travelled < PRESS.slopPixels) onSelect();
+  }, [disabled, onSelect]);
+  const onPointerLeave = useCallback(() => {
+    pressed.current = false;
+  }, []);
+  return { onPointerDown, onPointerUp, onPointerLeave };
+}

@@ -111,7 +111,12 @@ export function layoutGroups(
   goToLayout: (id: string) => void,
   security: HotspotConfig[] = [],
 ): VrResourceGroup[] {
-  const entry = (h: HotspotConfig) => ({ id: h.id, name: h.name, disabled: h.enabled === false });
+  const entry = (h: HotspotConfig) => ({
+    id: h.id,
+    name: h.name,
+    disabled: h.enabled === false,
+    position: h.position as [number, number, number],
+  });
   const securityGroup: VrResourceGroup[] = security.length
     ? [
         {
@@ -241,14 +246,27 @@ export function createVrBridge({
     navUi.setHotspotInfo(null);
     transition(() => ctrl.teleportTo([x, surfaceY, z], pin.camera!.rotation));
   };
-  const map: VrMap | null = mapSource?.minimap
+  const travelTo: VrMap["travelTo"] = (x, z) => {
+    const ctrl = ui.playerControllerRef.current;
+    if (!ctrl || !inFirstPerson) return false;
+    const foot = ctrl.getFootPosition();
+    const surfaceY = ctrl.probeFloorY(x, z, foot.y);
+    if (surfaceY == null) return false;
+    const yaw = ctrl.getRotationY();
+    navUi.setHotspotInfo(null);
+    transition(() => ctrl.teleportTo([x, surfaceY, z], [0, yaw, 0]));
+    return true;
+  };
+  const plan = site.scene.map?.plan ?? mapSource?.minimap ?? null;
+  const map: VrMap | null = mapSource && plan
     ? {
-        imageUrl: mapSource.minimap.imageUrl,
-        bounds: mapSource.minimap.bounds,
+        imageUrl: plan.imageUrl,
+        bounds: plan.bounds,
         categories: mapCategories(activeFloor?.dests, mapSource.categories),
         metersPerUnit: mapSource.metersPerUnit,
         currentId: mapSource.currentId,
         teleport: teleportPin,
+        travelTo,
       }
     : null;
 

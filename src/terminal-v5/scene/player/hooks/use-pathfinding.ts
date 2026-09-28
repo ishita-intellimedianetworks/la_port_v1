@@ -104,7 +104,7 @@ export function usePathfinding({
   const previewTo = useCallback(
     (target: NavTargetIn, overrideZone?: string): boolean => {
       const path = computePath(target, overrideZone);
-      // eslint-disable-next-line react-hooks/immutability -- ref mutation (same pattern as navigateToPoint)
+      // eslint-disable-next-line react-hooks/immutability
       state.previewPath.current = path ?? [];
       return !!path;
     },
@@ -112,7 +112,7 @@ export function usePathfinding({
   );
 
   const clearPreview = useCallback(() => {
-    // eslint-disable-next-line react-hooks/immutability -- ref mutation (same pattern as navigateToPoint)
+    // eslint-disable-next-line react-hooks/immutability
     state.previewPath.current = [];
   }, [state.previewPath]);
 

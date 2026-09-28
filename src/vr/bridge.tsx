@@ -8,7 +8,7 @@ type Vec3 = [number, number, number];
 export interface VrResourceGroup {
   id: string;
   name: string;
-  hotspots: { id: string; name: string; disabled?: boolean }[];
+  hotspots: { id: string; name: string; disabled?: boolean; position?: Vec3 }[];
   travel: (() => void) | null;
 }
 
@@ -44,6 +44,7 @@ export interface VrMap {
   metersPerUnit: number;
   currentId: string | null;
   teleport: (pin: VrMapPin) => void;
+  travelTo: (x: number, z: number) => boolean;
 }
 
 export interface VrCardInfo {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { XR, useXR } from "@react-three/xr";
 import * as THREE from "three";
@@ -10,12 +10,23 @@ import { useVrBridge } from "./bridge";
 import { VrFog } from "./fog";
 import { VrHud } from "./hud";
 import { VrMarkers } from "./markers";
+import { VrNoShadows } from "./shadows";
 import { VrRig } from "./rig";
 import { exitVr, xrStore } from "./xr-store";
+import { LoadingRing } from "./loading-ring";
 
 const FADE_PER_SECOND = 4;
 const BEFORE_SCENE = -1;
 const _head = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+
+const SHELL = {
+  renderOrder: 100000,
+  nearMultiple: 2,
+  minRadius: 0.5,
+  labelFrom: 0.95,
+} as const;
 
 const SETTLE = {
   minMs: 400,
@@ -49,6 +60,7 @@ function Blackout() {
   const opacity = useRef(0);
   const wasFading = useRef(false);
   const settle = useRef<(() => boolean) | null>(null);
+  const [label, setLabel] = useState(false);
 
   useFrame((state, delta) => {
     const mesh = shell.current;
@@ -67,15 +79,20 @@ function Blackout() {
       target > opacity.current
         ? Math.min(target, opacity.current + step)
         : Math.max(target, opacity.current - step);
-    state.camera.matrix.decompose(_head, new THREE.Quaternion(), new THREE.Vector3());
+    state.camera.matrix.decompose(_head, _quat, _scale);
     mesh.position.copy(_head);
+    const near = (state.camera as THREE.PerspectiveCamera).near ?? 0.1;
+    mesh.scale.setScalar(Math.max(SHELL.minRadius, near * SHELL.nearMultiple));
     (mesh.material as THREE.MeshBasicMaterial).opacity = opacity.current;
     mesh.visible = opacity.current > 0.001;
+    const showLabel = opacity.current >= SHELL.labelFrom && !!settle.current;
+    if (showLabel !== label) setLabel(showLabel);
   });
 
   return (
-    <mesh ref={shell} renderOrder={100000} raycast={() => null} frustumCulled={false} visible={false}>
-      <sphereGeometry args={[0.25, 16, 12]} />
+    <>
+    <mesh ref={shell} renderOrder={SHELL.renderOrder} raycast={() => null} frustumCulled={false} visible={false}>
+      <sphereGeometry args={[1, 16, 12]} />
       <meshBasicMaterial
         color="black"
         side={THREE.BackSide}
@@ -87,6 +104,8 @@ function Blackout() {
         fog={false}
       />
     </mesh>
+    {label && <LoadingRing />}
+    </>
   );
 }
 
@@ -125,6 +144,7 @@ function InSession() {
       <VrFog />
       <VrHud />
       <VrMarkers />
+      <VrNoShadows />
       <Blackout />
     </>
   );

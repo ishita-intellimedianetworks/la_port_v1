@@ -17,6 +17,13 @@ const VR = {
 
 let active = false;
 
+export interface VrBudget {
+  tris: number;
+  calls: number;
+}
+
+export const VR_BUDGET: VrBudget = { tris: 1_500_000, calls: 700 };
+
 export function setVrStreaming(on: boolean) {
   active = on;
 }

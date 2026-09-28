@@ -5,6 +5,12 @@ export const POINTER_ORDER = {
 
 export const PANEL_DISTANCE = 2;
 
+export const FOLLOW = {
+  startRadians: (30 * Math.PI) / 180,
+  stopRadians: (3 * Math.PI) / 180,
+  ratePerSecond: 4,
+} as const;
+
 export const RENDER_ORDER = 1000;
 
 export const ROW_HEIGHT = 56;

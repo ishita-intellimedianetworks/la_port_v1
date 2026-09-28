@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useState, type ComponentProps, type ReactNode } from "react";
-import { Container, Fullscreen, VanillaFullscreen } from "@react-three/uikit";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Container } from "@react-three/uikit";
 import { X } from "@react-three/uikit-lucide";
-import { noDragScroll, useStickScroll } from "./stick-scroll";
+import * as THREE from "three";
+import { usePress, useScrollArea } from "./stick-scroll";
 import { VrText } from "./text";
 import {
   BAR_BUTTON,
   COLOR,
+  FOLLOW,
   OPACITY,
   PANEL_DISTANCE,
   POINTER_ORDER,
@@ -18,26 +21,95 @@ import {
   TEXT,
 } from "./tokens";
 
-const guarded = new WeakSet<VanillaFullscreen>();
+const _head = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+const _euler = new THREE.Euler(0, 0, 0, "YXZ");
+const _size = new THREE.Vector2();
 
-export function HeadLocked(props: ComponentProps<typeof Fullscreen>) {
-  const ref = useCallback((node: VanillaFullscreen | null) => {
-    if (!node || guarded.has(node)) return;
-    guarded.add(node);
-    const update = node.update.bind(node);
-    node.update = (delta: number) => {
-      if (node.parent?.parent == null) return;
-      update(delta);
-    };
-  }, []);
+interface ViewSize {
+  x: number;
+  y: number;
+  pixel: number;
+}
+
+function wrapAngle(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+function measureView(camera: THREE.Camera, gl: THREE.WebGLRenderer): ViewSize | null {
+  const lens = camera as THREE.PerspectiveCamera;
+  if (!lens.isPerspectiveCamera) return null;
+  const height = 2 * Math.tan((Math.PI * lens.fov) / 360) * PANEL_DISTANCE;
+  const pixels = gl.getSize(_size).y;
+  if (pixels <= 0) return null;
+  return { x: height * lens.aspect, y: height, pixel: height / pixels };
+}
+
+function useViewSize(): ViewSize | null {
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
+  const [size, setSize] = useState<ViewSize | null>(() => measureView(camera, gl));
+  useFrame(() => {
+    const next = measureView(camera, gl);
+    if (!next) return;
+    setSize((prev) =>
+      prev && Math.abs(prev.x - next.x) < 1e-3 && Math.abs(prev.y - next.y) < 1e-3 && Math.abs(prev.pixel - next.pixel) < 1e-7
+        ? prev
+        : next,
+    );
+  });
+  return size;
+}
+
+function useLazyFollow(yawOffset: number) {
+  const group = useRef<THREE.Group>(null);
+  const yaw = useRef<number | null>(null);
+  const turning = useRef(false);
+
+  useFrame((state, delta) => {
+    const g = group.current;
+    if (!g) return;
+    state.camera.matrixWorld.decompose(_head, _quat, _scale);
+    const head = _euler.setFromQuaternion(_quat, "YXZ").y;
+    if (yaw.current === null) yaw.current = head;
+    const off = wrapAngle(head - yaw.current);
+    if (Math.abs(off) > FOLLOW.startRadians) turning.current = true;
+    if (turning.current) {
+      yaw.current = wrapAngle(yaw.current + off * Math.min(1, delta * FOLLOW.ratePerSecond));
+      if (Math.abs(wrapAngle(head - yaw.current)) < FOLLOW.stopRadians) turning.current = false;
+    }
+    const y = yaw.current + yawOffset;
+    g.position.set(_head.x - Math.sin(y) * PANEL_DISTANCE, _head.y, _head.z - Math.cos(y) * PANEL_DISTANCE);
+    g.rotation.set(0, y, 0);
+    g.visible = true;
+  });
+
+  return group;
+}
+
+export function HeadLocked({
+  children,
+  yawOffset = 0,
+  ...props
+}: ComponentProps<typeof Container> & { yawOffset?: number }) {
+  const size = useViewSize();
+  const group = useLazyFollow(yawOffset);
+  if (!size) return null;
   return (
-    <Fullscreen
-      ref={ref}
-      distanceToCamera={PANEL_DISTANCE}
-      depthTest={false}
-      renderOrder={RENDER_ORDER}
-      {...props}
-    />
+    <group ref={group} visible={false}>
+      <Container
+        sizeX={size.x}
+        sizeY={size.y}
+        pixelSize={size.pixel}
+        depthTest={false}
+        renderOrder={RENDER_ORDER}
+        pointerEvents="listener"
+        {...props}
+      >
+        {children}
+      </Container>
+    </group>
   );
 }
 
@@ -64,6 +136,7 @@ export function Glass({
     height: "100%",
     pointerEvents: "none",
     borderRadius: radius,
+    zIndexOffset: -1,
   } as const;
   return (
     <>
@@ -75,11 +148,23 @@ export function Glass({
   );
 }
 
-const CLOSE = {
-  size: 36,
-  inset: -14,
-  fill: "#e5484d",
-  hover: "#f2555a",
+const TIP = {
+  width: 320,
+  gap: 12,
+  padX: 16,
+  padY: 8,
+  text: 18,
+  fill: 0.85,
+  ring: 0.35,
+  ringLit: 0.75,
+  ringWidth: 2.5,
+} as const;
+
+export const CLOSE = {
+  size: 32,
+  inset: 12,
+  fill: "#ff2b2b",
+  hover: "#ff5c5c",
   icon: 18,
 } as const;
 
@@ -92,12 +177,11 @@ export function RedClose({ onClose }: { onClose: () => void }) {
       positionRight={CLOSE.inset}
       width={CLOSE.size}
       height={CLOSE.size}
+      flexDirection="row"
       alignItems="center"
       justifyContent="center"
       borderRadius={RADIUS.dot}
       backgroundColor={hovered ? CLOSE.hover : CLOSE.fill}
-      borderWidth={1.5}
-      borderColor="rgba(255, 255, 255, 0.55)"
       cursor="pointer"
       transformScaleX={hovered ? 1.08 : 1}
       transformScaleY={hovered ? 1.08 : 1}
@@ -107,7 +191,7 @@ export function RedClose({ onClose }: { onClose: () => void }) {
         onClose();
       }}
     >
-      <X width={CLOSE.icon} height={CLOSE.icon} color={COLOR.text} />
+      <X pointerEvents="none" width={CLOSE.icon} height={CLOSE.icon} color="#ffffff" />
     </Container>
   );
 }
@@ -149,19 +233,19 @@ export function Panel({
 
 export function IconButton({
   icon,
+  label,
   size = BAR_BUTTON,
   active = false,
   tone = "default",
   disabled = false,
-  onHover,
   onSelect,
 }: {
   icon: ReactNode;
+  label?: string;
   size?: number;
   active?: boolean;
   tone?: "default" | "danger";
   disabled?: boolean;
-  onHover?: (hovered: boolean) => void;
   onSelect: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -173,35 +257,50 @@ export function IconButton({
       width={size}
       height={size}
       flexShrink={0}
+      flexDirection="row"
       alignItems="center"
       justifyContent="center"
       borderRadius={RADIUS.dot}
       opacity={disabled ? OPACITY.disabled : 1}
       cursor={disabled ? "default" : "pointer"}
-      transformScaleX={lit ? 1.06 : 1}
-      transformScaleY={lit ? 1.06 : 1}
-      onHoverChange={(h: boolean) => {
-        setHovered(h);
-        onHover?.(h);
-      }}
+      onHoverChange={(h: boolean) => setHovered(h)}
       onPointerDown={disabled ? undefined : onSelect}
     >
       <Glass
         radius={RADIUS.dot}
         fill={fill}
         fillOpacity={fillOpacity}
-        borderOpacity={active ? OPACITY.activeBorder : OPACITY.chipBorder}
+        borderOpacity={lit ? TIP.ringLit : active ? OPACITY.activeBorder : OPACITY.chipBorder}
+        borderWidth={lit ? TIP.ringWidth : 1.5}
       />
-      <Container
-        pointerEvents="none"
-        width="100%"
-        height="100%"
-        alignItems="center"
-        justifyContent="center"
-        opacity={active || lit ? 1 : OPACITY.icon}
-      >
+      <Container pointerEvents="none" flexDirection="row" alignItems="center" justifyContent="center">
         {icon}
       </Container>
+      {lit && label && (
+        <Container
+          positionType="absolute"
+          positionBottom={size + TIP.gap}
+          positionLeft={(size - TIP.width) / 2}
+          width={TIP.width}
+          flexDirection="row"
+          justifyContent="center"
+          pointerEvents="none"
+        >
+          <Container
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="center"
+            paddingX={TIP.padX}
+            paddingY={TIP.padY}
+            borderRadius={RADIUS.dot}
+          >
+            <Glass radius={RADIUS.dot} fill={COLOR.glass} fillOpacity={TIP.fill} borderOpacity={TIP.ring} />
+            <VrText fontSize={TIP.text} fontWeight="semi-bold" color={COLOR.text}>
+              {label}
+            </VrText>
+          </Container>
+        </Container>
+      )}
     </Container>
   );
 }
@@ -226,6 +325,7 @@ export function Row({
   onSelect: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const press = usePress(onSelect, disabled);
   const lit = hovered && !disabled;
   return (
     <Container
@@ -241,7 +341,7 @@ export function Row({
       opacity={disabled ? OPACITY.disabled : 1}
       cursor={disabled ? "default" : "pointer"}
       onHoverChange={(h: boolean) => setHovered(h)}
-      onPointerDown={disabled ? undefined : onSelect}
+      {...press}
     >
       <Glass
         radius={RADIUS.row}
@@ -368,7 +468,7 @@ export function PanelHeader({
   backIcon: ReactNode;
 }) {
   return (
-    <Container flexDirection="row" alignItems="center" gapColumn={14} flexShrink={0} paddingRight={20}>
+    <Container flexDirection="row" alignItems="center" gapColumn={14} flexShrink={0} paddingRight={CLOSE.size + CLOSE.inset}>
       {onBack && <IconButton size={44} icon={backIcon} onSelect={onBack} />}
       <Container flexDirection="column" flexGrow={1} flexShrink={1} gapRow={4}>
         <VrText fontSize={TEXT.title} fontWeight="semi-bold" color={COLOR.text}>
@@ -385,12 +485,12 @@ export function PanelHeader({
 }
 
 export function List({ children, wrap = false }: { children: ReactNode; wrap?: boolean }) {
-  const [scrollRef, onScrollHover] = useStickScroll();
+  const [scrollRef, onScrollHover, onScrollDrag] = useScrollArea();
   return (
     <Container
       ref={scrollRef}
       onHoverChange={onScrollHover}
-      onScroll={noDragScroll}
+      onScroll={onScrollDrag}
       flexDirection={wrap ? "row" : "column"}
       flexWrap={wrap ? "wrap" : "no-wrap"}
       justifyContent={wrap ? "space-between" : "flex-start"}

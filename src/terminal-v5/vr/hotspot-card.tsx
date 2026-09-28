@@ -308,11 +308,9 @@ function IncidentLine({ incident, active, onSelect }: { incident: SecurityIncide
           {incident.sourceId || incident.source}
         </VrText>
       </Container>
-      <Container width={px(76)} paddingY={px(3)} borderRadius={px(6)} alignItems="center" flexShrink={0} backgroundColor={rgba(sev, 0.18)}>
-        <VrText fontSize={px(FS.label)} fontWeight="bold" letterSpacing={0.8} color={sev}>
-          {incident.severity}
-        </VrText>
-      </Container>
+      <Pill color={sev} width={px(84)} radius={px(6)} size={FS.label} tracking={0.8}>
+        {incident.severity}
+      </Pill>
     </PressRow>
   );
 }

@@ -4,8 +4,8 @@ import { Children, useEffect, useState, type ReactNode } from "react";
 import { Container, Image as Picture, Video } from "@react-three/uikit";
 import { Pause, Play, TriangleAlert } from "@react-three/uikit-lucide";
 import type { HotspotConfig, HotspotField, Tone } from "@/config/schema";
-import { Glass, HeadLocked, RedClose } from "./primitives";
-import { noDragScroll, useStickScroll } from "./stick-scroll";
+import { CLOSE, Glass, HeadLocked, RedClose } from "./primitives";
+import { usePress, useScrollArea } from "./stick-scroll";
 import { VrText } from "./text";
 import { POINTER_ORDER } from "./tokens";
 
@@ -159,7 +159,7 @@ export function CardHeader({
   subtitleSize?: number;
 }) {
   return (
-    <Container flexDirection="row" alignItems="flex-start" gapColumn={px(10)} flexShrink={0} paddingRight={px(18)}>
+    <Container flexDirection="row" alignItems="flex-start" gapColumn={px(10)} flexShrink={0} paddingRight={CLOSE.size}>
       <Container flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
         <Container minHeight={px(30)} alignItems="center" flexDirection="row">
           <VrText fontSize={px(titleSize)} fontWeight="bold" color={INK.text} letterSpacing={-0.2}>
@@ -190,12 +190,12 @@ export function Rule({ marginTop = px(16) }: { marginTop?: number }) {
 }
 
 export function Scroll({ children, grow = true }: { children: ReactNode; grow?: boolean }) {
-  const [scrollRef, onScrollHover] = useStickScroll();
+  const [scrollRef, onScrollHover, onScrollDrag] = useScrollArea();
   return (
     <Container
       ref={scrollRef}
       onHoverChange={onScrollHover}
-      onScroll={noDragScroll}
+      onScroll={onScrollDrag}
       flexDirection="column"
       flexGrow={grow ? 1 : 0}
       flexShrink={1}
@@ -605,19 +605,43 @@ export function PosterCard({
   );
 }
 
+const PILL = { size: 11, tracking: 0.7, padX: 8, padY: 4 } as const;
+
 export function Pill({
   children,
   color,
   radius = px(5),
+  width,
+  size = PILL.size,
+  tracking = PILL.tracking,
 }: {
   children: string;
   color: string;
   radius?: number;
+  width?: number;
+  size?: number;
+  tracking?: number;
 }) {
   return (
-    <Container paddingX={px(8)} paddingY={px(3)} borderRadius={radius} flexShrink={0}>
+    <Container
+      width={width}
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="center"
+      paddingX={px(PILL.padX)}
+      paddingY={px(PILL.padY)}
+      borderRadius={radius}
+      flexShrink={0}
+    >
       <Surface radius={radius} fill={color} fillOpacity={0.18} />
-      <VrText fontSize={px(11)} fontWeight="bold" letterSpacing={0.7} color={color}>
+      <VrText
+        fontSize={px(size)}
+        fontWeight="bold"
+        letterSpacing={tracking}
+        marginRight={-tracking}
+        textAlign="center"
+        color={color}
+      >
         {children}
       </VrText>
     </Container>
@@ -644,6 +668,7 @@ export function ChipButton({
   onSelect: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const press = usePress(onSelect, disabled);
   return (
     <Container
       flexDirection="row"
@@ -656,7 +681,7 @@ export function ChipButton({
       opacity={disabled ? 0.45 : 1}
       cursor={disabled ? "default" : "pointer"}
       onHoverChange={(h: boolean) => setHovered(h)}
-      onPointerDown={disabled ? undefined : onSelect}
+      {...press}
     >
       <Surface
         radius={999}
@@ -669,7 +694,15 @@ export function ChipButton({
         {label}
       </VrText>
       {count !== undefined && (
-        <Container paddingX={px(6)} borderRadius={999}>
+        <Container
+          minWidth={px(20)}
+          paddingX={px(6)}
+          paddingY={px(1)}
+          borderRadius={999}
+          flexDirection="row"
+          alignItems="center"
+          justifyContent="center"
+        >
           <Surface radius={999} fill={INK.white} fillOpacity={on ? 0.22 : 0.08} />
           <VrText fontSize={px(11)} fontWeight="bold" color={on ? INK.white : INK.text}>
             {String(count)}
@@ -694,6 +727,9 @@ export function ActionButton({
   const [hovered, setHovered] = useState(false);
   return (
     <Container
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="center"
       paddingX={px(12)}
       paddingY={px(7)}
       borderRadius={px(8)}
@@ -718,7 +754,7 @@ export function ActionButton({
 
 export function Avatar({ initials, color }: { initials: string; color: string }) {
   return (
-    <Container width={px(20)} height={px(20)} borderRadius={999} alignItems="center" justifyContent="center" flexShrink={0}>
+    <Container width={px(20)} height={px(20)} borderRadius={999} flexDirection="row" alignItems="center" justifyContent="center" flexShrink={0}>
       <Surface radius={999} fill={color} fillOpacity={0.26} border={color} borderOpacity={0.55} borderWidth={1} />
       <VrText fontSize={px(9)} fontWeight="semi-bold" color={color}>
         {initials}
@@ -767,6 +803,7 @@ export function PressRow({
   onSelect: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const press = usePress(onSelect);
   return (
     <Container
       flexDirection="row"
@@ -779,7 +816,7 @@ export function PressRow({
       flexShrink={0}
       cursor="pointer"
       onHoverChange={(h: boolean) => setHovered(h)}
-      onPointerDown={onSelect}
+      {...press}
     >
       <Surface
         radius={radius}

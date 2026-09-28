@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ChunkEntry } from "./types";
+import { simplifyGeometries, VR_SIMPLIFY } from "@/vr/engine/simplify";
+import { vrStreamingOn } from "@/vr/engine/stream";
 
 export class InstanceLayer {
   private group = new THREE.Group();
@@ -56,6 +58,12 @@ export class InstanceLayer {
       }
       this.byEntry[entry] = idxs;
       entry++;
+    }
+    if (vrStreamingOn()) {
+      await simplifyGeometries(
+        this.prims.map((p) => p.geometry),
+        VR_SIMPLIFY.palette,
+      );
     }
     this.scene.add(this.group);
     this.loaded = true;
@@ -147,6 +155,15 @@ export class InstanceLayer {
     this.byEntry = [];
     this.scene.remove(this.group);
     this.loaded = false;
+  }
+
+  entryTriangles(entry: number): number {
+    let tris = 0;
+    for (const pi of this.byEntry[entry] ?? []) {
+      const g = this.prims[pi].geometry;
+      tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    }
+    return tris;
   }
 
   stats() {
