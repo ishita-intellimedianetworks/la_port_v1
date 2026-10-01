@@ -14,6 +14,13 @@ own `TerminalProvider` and `SceneGraph` unchanged. It does NOT mount the flat
 
 Branch: `feature-vr`.
 
+**A headset opening `/vN` is sent to `/vN/vr`.** `src/proxy.ts` (Next 16's
+renamed middleware) matches only `/v2` to `/v5` and redirects when the user
+agent is a headset browser: Meta Quest (`OculusBrowser`, `Quest`), Pico,
+Wolvic, Firefox Reality, Samsung Internet for Gear VR (`Mobile VR`). The query
+string is kept. Adding `?flat` keeps the flat page in a headset. Vision Pro
+Safari reports a desktop Mac user agent, so it is not redirected.
+
 ## Sequence
 
 1. **Page.** It shows the 3D loader and nothing else: no bottom bar, flap,
